@@ -1,0 +1,136 @@
+name: 创建发行版
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发行版本号 (例如: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      prerelease:
+        description: '是否为预发布版本'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: '是否为草稿版本'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  create-release:
+    runs-on: windows-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install nuitka
+
+    - name: 创建必要目录
+      run: |
+        New-Item -ItemType Directory -Force -Path "OnlineFix"
+        New-Item -ItemType Directory -Force -Path "Mods"
+        "OnlineFix64.dll" | Out-File -FilePath "OnlineFix/dlllist.txt" -Encoding UTF8
+
+    - name: 使用 Nuitka 打包 (目录版)
+      run: |
+        python -c "
+        import sys
+        sys.path.append('.')
+        from build_nuitka import NuitkaBuilder
+        builder = NuitkaBuilder()
+        builder.build_directory()
+        "
+
+    - name: 创建发布包
+      run: |
+        New-Item -ItemType Directory -Force -Path "release"
+
+        # 创建 Nuitka 目录版压缩包
+        if (Test-Path "Builds/Nuitka/Directory") {
+          Compress-Archive -Path "Builds/Nuitka/Directory/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip"
+        }
+
+        # 创建源代码包
+        $sourceFiles = @("src", "OnlineFix", "main.py", "requirements.txt", "README.md", "LICENSE", "build_manager.py", "install_dependencies.py")
+        Compress-Archive -Path $sourceFiles -DestinationPath "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+        
+    - name: 创建发行版
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        name: Nmodm ${{ github.event.inputs.version }}
+        body: |
+          # Nmodm ${{ github.event.inputs.version }} 发行版
+
+          ## 🎉 新版本发布
+
+          这是 Nmodm - Modern ME3 Mod Manager 的 ${{ github.event.inputs.version }} 版本。
+
+          ## 📦 下载选项
+
+          ### 主要版本 (推荐)
+          - **Nmodm-v${{ github.event.inputs.version }}.zip** - Nuitka 目录版本，高性能优化
+
+          ### 开发者版本
+          - **Nmodm-Source-v${{ github.event.inputs.version }}.zip** - 源代码包，需要 Python 环境
+
+          ## 🚀 主要功能
+
+          - ✨ 现代化无边框 GUI 界面
+          - 📦 智能 Mod 管理系统
+          - 🔧 完整的 ME3 配置和启动
+          - 🌐 多镜像下载支持
+          - 🏷️ Mod 备注和分类功能
+          - 💾 外部 Mod 支持
+          - 🎨 多主题界面
+
+          ## 📋 系统要求
+
+          - Windows 10/11 (64位)
+          - 《艾尔登法环：夜之王朝》游戏
+
+          ## 🔧 使用方法
+
+          ### 主要版本
+          1. 下载 `Nmodm-v${{ github.event.inputs.version }}.zip`
+          2. 解压到任意目录
+          3. 运行 `Nmodm.exe`
+          4. 按照软件内指引配置游戏路径和 Mod
+
+          ### 源代码版本
+          1. 下载并解压源代码包
+          2. 安装 Python 3.11+
+          3. 运行 `python install_dependencies.py`
+          4. 运行 `python main.py`
+
+          ## ⚠️ 重要提示
+
+          - 使用前请备份游戏存档
+          - 部分杀毒软件可能误报，请添加信任
+          - 确保拥有游戏的合法副本
+
+          ## 🐛 问题反馈
+
+          如果遇到问题，请在 [Issues](https://github.com/QykXczj/Nmodm/issues) 页面反馈。
+
+          ## 🙏 致谢
+
+          感谢所有用户的支持和反馈！
+        draft: ${{ github.event.inputs.draft }}
+        prerelease: ${{ github.event.inputs.prerelease }}
+        files: |
+          release/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
