@@ -18,6 +18,10 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   create-release:
     runs-on: windows-latest
@@ -144,62 +148,62 @@ jobs:
         tag_name: ${{ github.event.inputs.version }}
         name: Nmodm ${{ github.event.inputs.version }}
         body: |
-          # Nmodm ${{ github.event.inputs.version }} 发行版
+          # Nmodm ${{ github.event.inputs.version }} Release
 
-          ## 🎉 新版本发布
+          ## New Version Release
 
-          这是 Nmodm - Modern ME3 Mod Manager 的 ${{ github.event.inputs.version }} 版本。
+          This is Nmodm - Modern ME3 Mod Manager version ${{ github.event.inputs.version }}.
 
-          ## 📦 下载选项
+          ## Download Options
 
-          ### 主要版本 (推荐)
-          - **Nmodm-v${{ github.event.inputs.version }}.zip** - Nuitka 目录版本，高性能优化
+          ### Main Version (Recommended)
+          - **Nmodm-v${{ github.event.inputs.version }}.zip** - Nuitka directory build, high performance
 
-          ### 开发者版本
-          - **Nmodm-Source-v${{ github.event.inputs.version }}.zip** - 源代码包，需要 Python 环境
+          ### Developer Version
+          - **Nmodm-Source-v${{ github.event.inputs.version }}.zip** - Source code package, requires Python environment
 
-          ## 🚀 主要功能
+          ## Main Features
 
-          - ✨ 现代化无边框 GUI 界面
-          - 📦 智能 Mod 管理系统
-          - 🔧 完整的 ME3 配置和启动
-          - 🌐 多镜像下载支持
-          - 🏷️ Mod 备注和分类功能
-          - 💾 外部 Mod 支持
-          - 🎨 多主题界面
+          - Modern frameless GUI interface
+          - Intelligent Mod management system
+          - Complete ME3 configuration and launch
+          - Multi-mirror download support
+          - Mod annotation and classification
+          - External Mod support
+          - Multi-theme interface
 
-          ## 📋 系统要求
+          ## System Requirements
 
-          - Windows 10/11 (64位)
-          - 《艾尔登法环：夜之王朝》游戏
+          - Windows 10/11 (64-bit)
+          - Elden Ring Nightreign game
 
-          ## 🔧 使用方法
+          ## Usage Instructions
 
-          ### 主要版本
-          1. 下载 `Nmodm-v${{ github.event.inputs.version }}.zip`
-          2. 解压到任意目录
-          3. 运行 `Nmodm.exe`
-          4. 按照软件内指引配置游戏路径和 Mod
+          ### Main Version
+          1. Download `Nmodm-v${{ github.event.inputs.version }}.zip`
+          2. Extract to any directory
+          3. Run `Nmodm.exe`
+          4. Follow the in-app guide to configure game path and mods
 
-          ### 源代码版本
-          1. 下载并解压源代码包
-          2. 安装 Python 3.11+
-          3. 运行 `python install_dependencies.py`
-          4. 运行 `python main.py`
+          ### Source Code Version
+          1. Download and extract source code package
+          2. Install Python 3.11+
+          3. Run `python install_dependencies.py`
+          4. Run `python main.py`
 
-          ## ⚠️ 重要提示
+          ## Important Notes
 
-          - 使用前请备份游戏存档
-          - 部分杀毒软件可能误报，请添加信任
-          - 确保拥有游戏的合法副本
+          - Please backup game saves before use
+          - Some antivirus software may report false positives, please add to trust list
+          - Ensure you own a legal copy of the game
 
-          ## 🐛 问题反馈
+          ## Bug Reports
 
-          如果遇到问题，请在 [Issues](https://github.com/QykXczj/Nmodm/issues) 页面反馈。
+          If you encounter issues, please report them on the [Issues](https://github.com/QykXczj/Nmodm/issues) page.
 
-          ## 🙏 致谢
+          ## Acknowledgments
 
-          感谢所有用户的支持和反馈！
+          Thanks to all users for their support and feedback!
         draft: ${{ github.event.inputs.draft }}
         prerelease: ${{ github.event.inputs.prerelease }}
         files: |
