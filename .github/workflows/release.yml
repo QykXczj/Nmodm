@@ -20,7 +20,7 @@ on:
 
 jobs:
   create-release:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - name: 检出代码
@@ -39,61 +39,106 @@ jobs:
 
     - name: 创建必要目录
       run: |
-        New-Item -ItemType Directory -Force -Path "OnlineFix"
-        New-Item -ItemType Directory -Force -Path "Mods"
-        "OnlineFix64.dll" | Out-File -FilePath "OnlineFix/dlllist.txt" -Encoding UTF8
+        mkdir -p OnlineFix
+        mkdir -p Mods
+        echo "OnlineFix64.dll" > OnlineFix/dlllist.txt
 
     - name: 使用 Nuitka 打包 (目录版)
       run: |
-        # 直接调用 NuitkaBuilder 进行目录版打包，使用UTF-8编码
+        # 创建简化的构建脚本避免编码问题
         python -c "
         import sys
         import os
-        sys.path.insert(0, os.getcwd())
-        with open('build_nuitka.py', 'r', encoding='utf-8') as f:
-            exec(f.read())
-        builder = NuitkaBuilder()
-        if not builder.check_environment():
+        import subprocess
+        import shutil
+        from pathlib import Path
+
+        # 设置环境变量避免编码问题
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+        # 简化的 Nuitka 构建
+        project_root = Path('.')
+        builds_dir = project_root / 'Builds'
+        dist_dir = builds_dir / 'Nuitka'
+
+        # 确保目录存在
+        builds_dir.mkdir(exist_ok=True)
+        dist_dir.mkdir(exist_ok=True)
+
+        # 清理旧文件
+        if dist_dir.exists():
+            shutil.rmtree(dist_dir)
+            dist_dir.mkdir(exist_ok=True)
+
+        # Nuitka 命令
+        cmd = [
+            sys.executable, '-m', 'nuitka',
+            '--assume-yes-for-downloads',
+            '--enable-plugin=pyside6',
+            '--disable-console',
+            '--standalone',
+            '--output-dir=' + str(dist_dir),
+            '--output-filename=Nmodm_nuitka_standalone',
+            '--include-data-file=zwnr.png=zwnr.png',
+            '--include-data-dir=OnlineFix=OnlineFix',
+            '--include-data-dir=src=src',
+            'main.py'
+        ]
+
+        print('Starting Nuitka build...')
+        result = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            print('Nuitka build completed successfully')
+
+            # 重命名输出目录
+            main_dist = dist_dir / 'main.dist'
+            target_dir = dist_dir / 'Nmodm_nuitka_standalone'
+            if main_dist.exists() and not target_dir.exists():
+                main_dist.rename(target_dir)
+                print('Output directory renamed to Nmodm_nuitka_standalone')
+        else:
+            print('Nuitka build failed:')
+            print(result.stderr)
             sys.exit(1)
-        if not builder.build(onefile=False, clean=True):
-            sys.exit(1)
-        print('Nuitka directory build completed successfully')
         "
 
     - name: 创建发布包
       run: |
-        New-Item -ItemType Directory -Force -Path "release"
+        mkdir -p release
 
         # 查找 Nuitka 构建输出目录
-        $nuitkaDir = $null
-        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
-          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
-        } elseif (Test-Path "Builds/Nuitka/main.dist") {
-          $nuitkaDir = "Builds/Nuitka/main.dist"
-        }
+        if [ -d "Builds/Nuitka/Nmodm_nuitka_standalone" ]; then
+          nuitkaDir="Builds/Nuitka/Nmodm_nuitka_standalone"
+        elif [ -d "Builds/Nuitka/main.dist" ]; then
+          nuitkaDir="Builds/Nuitka/main.dist"
+        else
+          nuitkaDir=""
+        fi
 
-        if ($nuitkaDir) {
-          Write-Host "Found Nuitka build directory: $nuitkaDir"
-          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip"
-          Write-Host "Main release package created: Nmodm-v${{ github.event.inputs.version }}.zip"
-        } else {
-          Write-Host "Nuitka build output not found"
-          Get-ChildItem "Builds" -Recurse | Write-Host
+        if [ -n "$nuitkaDir" ]; then
+          echo "Found Nuitka build directory: $nuitkaDir"
+          cd "$nuitkaDir" && zip -r "../../release/Nmodm-v${{ github.event.inputs.version }}.zip" . && cd -
+          echo "Main release package created: Nmodm-v${{ github.event.inputs.version }}.zip"
+        else
+          echo "Nuitka build output not found"
+          find Builds -type f -ls
           exit 1
-        }
+        fi
 
         # 创建源代码包
-        $sourceFiles = @("src", "OnlineFix", "main.py", "requirements.txt", "README.md", "LICENSE", "build_manager.py", "install_dependencies.py")
-        $existingFiles = @()
-        foreach ($file in $sourceFiles) {
-          if (Test-Path $file) {
-            $existingFiles += $file
-          }
-        }
-        if ($existingFiles.Count -gt 0) {
-          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip"
-          Write-Host "Source code package created: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
-        }
+        sourceFiles="src OnlineFix main.py requirements.txt README.md LICENSE build_manager.py install_dependencies.py"
+        existingFiles=""
+        for file in $sourceFiles; do
+          if [ -e "$file" ]; then
+            existingFiles="$existingFiles $file"
+          fi
+        done
+
+        if [ -n "$existingFiles" ]; then
+          zip -r "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip" $existingFiles
+          echo "Source code package created: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+        fi
         
     - name: 创建发行版
       uses: softprops/action-gh-release@v1
