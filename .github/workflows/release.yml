@@ -45,18 +45,19 @@ jobs:
 
     - name: 使用 Nuitka 打包 (目录版)
       run: |
-        # 直接调用 NuitkaBuilder 进行目录版打包
+        # 直接调用 NuitkaBuilder 进行目录版打包，使用UTF-8编码
         python -c "
         import sys
         import os
         sys.path.insert(0, os.getcwd())
-        exec(open('build_nuitka.py').read())
+        with open('build_nuitka.py', 'r', encoding='utf-8') as f:
+            exec(f.read())
         builder = NuitkaBuilder()
         if not builder.check_environment():
             sys.exit(1)
         if not builder.build(onefile=False, clean=True):
             sys.exit(1)
-        print('✅ Nuitka 目录版打包完成')
+        print('Nuitka directory build completed successfully')
         "
 
     - name: 创建发布包
@@ -72,11 +73,11 @@ jobs:
         }
 
         if ($nuitkaDir) {
-          Write-Host "找到 Nuitka 构建目录: $nuitkaDir"
+          Write-Host "Found Nuitka build directory: $nuitkaDir"
           Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip"
-          Write-Host "✅ 创建主发布包: Nmodm-v${{ github.event.inputs.version }}.zip"
+          Write-Host "Main release package created: Nmodm-v${{ github.event.inputs.version }}.zip"
         } else {
-          Write-Host "❌ 未找到 Nuitka 构建输出"
+          Write-Host "Nuitka build output not found"
           Get-ChildItem "Builds" -Recurse | Write-Host
           exit 1
         }
@@ -91,7 +92,7 @@ jobs:
         }
         if ($existingFiles.Count -gt 0) {
           Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip"
-          Write-Host "✅ 创建源代码包: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+          Write-Host "Source code package created: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
         }
         
     - name: 创建发行版
