@@ -11,9 +11,10 @@ from .ui.main_window import MainWindow
 from .ui.sidebar import Sidebar
 from .ui.pages.home_page import HomePage
 from .ui.pages.config_page import ConfigPage
-from .ui.pages.me3_page import ME3Page
+from .ui.pages.me3_page import ToolDownloadPage
 from .ui.pages.mods_page import ModsPage
 from .ui.pages.about_page import AboutPage
+from .ui.pages.bin_merge_page import BinMergePage
 from .config.config_manager import ConfigManager
 from .utils.download_manager import DownloadManager
 
@@ -39,7 +40,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("1.0.1")
+        self.app.setApplicationVersion("2.0.0")
         self.app.setOrganizationName("Nmodm Team")
         
         # 设置应用程序字体
@@ -62,98 +63,83 @@ class NmodmApp:
     
     def setup_main_content(self):
         """设置主要内容"""
-        # 创建主布局
-        main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        # 创建内容容器
+        content_widget = QWidget()
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
         
         # 创建侧边栏
         self.sidebar = Sidebar()
-        main_layout.addWidget(self.sidebar)
+        self.sidebar.page_changed.connect(self.switch_page)
         
         # 创建页面堆栈
         self.page_stack = QStackedWidget()
-        main_layout.addWidget(self.page_stack)
+        self.page_stack.setStyleSheet("""
+            QStackedWidget {
+                background-color: #181825;
+                border-radius: 0px 0px 10px 0px;
+            }
+        """)
         
         # 创建页面
-        self.pages = {}
         self.create_pages()
         
-        # 设置主窗口内容
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        self.main_window.setCentralWidget(central_widget)
+        # 添加到布局
+        content_layout.addWidget(self.sidebar)
+        content_layout.addWidget(self.page_stack, 1)
         
-        # 连接信号
-        self.sidebar.page_changed.connect(self.switch_page)
+        content_widget.setLayout(content_layout)
         
-        # 设置默认页面
-        self.sidebar.set_current_page("home")
+        # 设置为主窗口的内容区域
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(content_widget)
+        
+        self.main_window.content_area.setLayout(main_layout)
     
     def create_pages(self):
         """创建所有页面"""
         # 首页
-        home_page = HomePage()
-        home_page.config_manager = self.config_manager
-        home_page.download_manager = self.download_manager
-        self.add_page("home", home_page)
+        self.home_page = HomePage()
+        self.home_page.navigate_to.connect(self.navigate_to_page)
+        self.page_stack.addWidget(self.home_page)
         
         # 配置页面
-        config_page = ConfigPage()
-        config_page.config_manager = self.config_manager
-        self.add_page("config", config_page)
+        self.config_page = ConfigPage()
+        self.config_page.status_updated.connect(self.update_home_status)
+        self.page_stack.addWidget(self.config_page)
         
-        # ME3页面
-        me3_page = ME3Page()
-        me3_page.download_manager = self.download_manager
-        self.add_page("me3", me3_page)
+        # 工具下载页面
+        self.me3_page = ToolDownloadPage()
+        self.me3_page.status_updated.connect(self.update_home_status)
+        self.page_stack.addWidget(self.me3_page)
         
-        # Mod配置页面
-        mods_page = ModsPage()
-        mods_page.config_manager = self.config_manager
-        self.add_page("mods", mods_page)
-        
+        # Mod页面
+        self.mods_page = ModsPage()
+        self.mods_page.config_changed.connect(self.update_home_status)
+        self.page_stack.addWidget(self.mods_page)
+
+        # BIN合并页面
+        self.bin_merge_page = BinMergePage()
+        self.page_stack.addWidget(self.bin_merge_page)
+
         # 关于页面
-        about_page = AboutPage()
-        self.add_page("about", about_page)
+        self.about_page = AboutPage()
+        self.page_stack.addWidget(self.about_page)
         
-        # 连接页面间的信号
-        self.connect_page_signals()
-    
-    def add_page(self, page_id, page):
-        """添加页面"""
-        index = self.page_stack.addWidget(page)
-        self.pages[page_id] = (index, page)
-    
-    def connect_page_signals(self):
-        """连接页面间的信号"""
-        # 获取页面实例
-        _, home_page = self.pages["home"]
-        _, config_page = self.pages["config"]
-        _, me3_page = self.pages["me3"]
-        _, mods_page = self.pages["mods"]
+        # 页面映射
+        self.pages = {
+            "home": (0, self.home_page),
+            "config": (1, self.config_page),
+            "me3": (2, self.me3_page),
+            "mods": (3, self.mods_page),
+            "bin_merge": (4, self.bin_merge_page),
+            "about": (5, self.about_page)
+        }
         
-        # 连接配置变化信号
-        config_page.config_changed.connect(home_page.update_status)
-        me3_page.me3_status_changed.connect(home_page.update_status)
-        mods_page.config_changed.connect(home_page.update_status)
-        
-        # 连接导航信号
-        home_page.navigate_to_config.connect(lambda: self.navigate_to_page("config"))
-        home_page.navigate_to_me3.connect(lambda: self.navigate_to_page("me3"))
-        home_page.navigate_to_mods.connect(lambda: self.navigate_to_page("mods"))
-    
-    def setup_status_timer(self):
-        """设置状态检查定时器"""
-        self.status_timer = QTimer()
-        self.status_timer.timeout.connect(self.update_status)
-        self.status_timer.start(5000)  # 每5秒检查一次
-    
-    def update_status(self):
-        """更新状态"""
-        if "home" in self.pages:
-            _, home_page = self.pages["home"]
-            home_page.update_status()
+        # 默认显示首页
+        self.page_stack.setCurrentIndex(0)
     
     def switch_page(self, page_id):
         """切换页面"""
@@ -164,11 +150,33 @@ class NmodmApp:
     def navigate_to_page(self, page_id):
         """导航到指定页面"""
         self.sidebar.set_current_page(page_id)
+        self.switch_page(page_id)
+    
+    def setup_status_timer(self):
+        """设置状态检查定时器"""
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self.update_home_status)
+        self.status_timer.start(5000)  # 每5秒检查一次状态
+        
+        # 立即执行一次状态更新
+        QTimer.singleShot(100, self.update_home_status)
+    
+    def update_home_status(self):
+        """更新首页状态显示"""
+        try:
+            # 更新首页状态
+            self.home_page.refresh_status()
+        except Exception as e:
+            print(f"更新状态失败: {e}")
     
     def run(self):
         """运行应用程序"""
         self.main_window.show()
         return self.app.exec()
+    
+    def quit(self):
+        """退出应用程序"""
+        self.app.quit()
 
 
 def create_app():

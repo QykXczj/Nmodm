@@ -53,7 +53,7 @@ class AboutPage(BasePage):
         layout.setSpacing(10)
         
         # 应用名称和版本
-        app_name = QLabel("Nmodm v1.0.1")
+        app_name = QLabel("Nmodm v2.0.0")
         app_name.setStyleSheet("""
             QLabel {
                 color: #89b4fa;
@@ -135,11 +135,13 @@ class AboutPage(BasePage):
         
         features_content = """• 游戏路径配置和验证
 • OnlineFix破解文件管理
-• ME3工具自动下载和更新
+• ME3工具和ERModsMerger自动下载
+• BIN文件合并功能，支持多个regulation.bin合并
+• 智能配置检查和自动修正
 • 多镜像源支持，解决网络访问问题
 • 现代化无边框UI设计
 • 模块化架构，易于扩展
-• Mod配置管理（开发中）"""
+• Mod配置管理"""
         
         features_text.setText(features_content)
         layout.addWidget(features_text)

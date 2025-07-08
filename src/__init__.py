@@ -1,6 +1,2 @@
-"""
-Nmodm 源代码包
-"""
-
-__version__ = "1.0.0"
-__author__ = "Nmodm Team"
+# Nmodm - 现代化游戏管理工具
+# 基于PySide6的现代化GUI应用程序
