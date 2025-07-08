@@ -51,77 +51,80 @@ def main():
     ]
     
     # 打包工具
-    build_packages = [
+    packaging_tools = [
         "pyinstaller",
         "nuitka",
+        "imageio",  # Nuitka图标处理需要
     ]
     
-    # 检查基础依赖
-    print("\n🔍 检查基础依赖...")
-    missing_base = []
-    for package in base_packages:
-        if check_package(package):
-            print(f"✅ {package}: 已安装")
+    all_packages = base_packages + packaging_tools
+    
+    print("📋 需要安装的包:")
+    for pkg in all_packages:
+        print(f"  • {pkg}")
+    
+    print("\n🔍 检查已安装的包...")
+    installed = []
+    missing = []
+    
+    for pkg in all_packages:
+        # 特殊处理包名映射
+        check_name = pkg
+        if pkg == "pyinstaller":
+            check_name = "PyInstaller"
+        elif pkg == "PySide6":
+            check_name = "PySide6"
+        
+        if check_package(check_name):
+            print(f"✅ {pkg} - 已安装")
+            installed.append(pkg)
         else:
-            print(f"❌ {package}: 未安装")
-            missing_base.append(package)
+            print(f"❌ {pkg} - 未安装")
+            missing.append(pkg)
     
-    # 检查打包工具
-    print("\n🔍 检查打包工具...")
-    missing_build = []
-    for package in build_packages:
-        if check_package(package):
-            print(f"✅ {package}: 已安装")
-        else:
-            print(f"❌ {package}: 未安装")
-            missing_build.append(package)
-    
-    # 安装缺失的依赖
-    all_missing = missing_base + missing_build
-    
-    if not all_missing:
+    if not missing:
         print("\n🎉 所有依赖都已安装！")
-        return
+        return True
     
-    print(f"\n📋 需要安装 {len(all_missing)} 个包:")
-    for package in all_missing:
-        print(f"  - {package}")
+    print(f"\n📦 需要安装 {len(missing)} 个包:")
+    for pkg in missing:
+        print(f"  • {pkg}")
     
-    # 询问用户是否安装
-    response = input("\n是否现在安装这些依赖? (y/n): ").lower().strip()
-    if response not in ['y', 'yes', '是']:
-        print("👋 安装已取消")
-        return
-    
-    # 升级pip
-    print("\n🔧 升级 pip...")
+    # 询问是否安装
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-        print("✅ pip 升级成功")
-    except subprocess.CalledProcessError:
-        print("⚠️ pip 升级失败，继续安装依赖...")
-    
-    # 安装依赖
-    print("\n📦 开始安装依赖...")
-    success_count = 0
-    
-    for package in all_missing:
-        if install_package(package):
-            success_count += 1
-    
-    # 总结
-    print(f"\n📊 安装完成:")
-    print(f"✅ 成功: {success_count}/{len(all_missing)}")
-    print(f"❌ 失败: {len(all_missing) - success_count}/{len(all_missing)}")
-    
-    if success_count == len(all_missing):
-        print("\n🎉 所有依赖安装成功！")
-        print("现在可以运行以下命令:")
-        print("  python main.py              # 运行应用")
-        print("  python build_manager.py     # 打包应用")
-    else:
-        print("\n⚠️ 部分依赖安装失败，请检查错误信息")
+        choice = input("\n是否现在安装缺失的包? (Y/n): ").strip().lower()
+        if choice in ['', 'y', 'yes']:
+            print("\n🚀 开始安装...")
+            
+            success_count = 0
+            for pkg in missing:
+                if install_package(pkg):
+                    success_count += 1
+                print()  # 空行分隔
+            
+            print(f"📊 安装结果: {success_count}/{len(missing)} 成功")
+            
+            if success_count == len(missing):
+                print("🎉 所有依赖安装完成！")
+                print("\n💡 现在可以运行打包脚本:")
+                print("  python build_manager.py")
+                return True
+            else:
+                print("⚠️ 部分依赖安装失败，请手动安装")
+                failed = [pkg for i, pkg in enumerate(missing) if i >= success_count]
+                print("失败的包:")
+                for pkg in failed:
+                    print(f"  pip install {pkg}")
+                return False
+        else:
+            print("👋 取消安装")
+            return False
+            
+    except KeyboardInterrupt:
+        print("\n👋 用户取消安装")
+        return False
 
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    sys.exit(0 if success else 1)

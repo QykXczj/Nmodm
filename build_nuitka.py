@@ -15,12 +15,13 @@ from typing import Optional, List
 
 class NuitkaBuilder:
     """Nuitka打包器"""
-    
+
     def __init__(self):
         self.project_root = Path(__file__).parent
         self.src_dir = self.project_root / "src"
         self.builds_dir = self.project_root / "Builds"
         self.dist_dir = self.builds_dir / "Nuitka"
+        self.version = "2.0.0"  # 应用版本号
         self.build_dir = self.project_root / "build"
         
     def check_environment(self) -> bool:
@@ -133,14 +134,14 @@ class NuitkaBuilder:
         if icon_file.exists():
             data_files.append(f"--include-data-file={icon_file}=zwnr.png")
         
-        # 添加OnlineFix目录
+        # 添加OnlineFix目录（静态资源）
         onlinefix_dir = self.project_root / "OnlineFix"
         if onlinefix_dir.exists():
             for file_path in onlinefix_dir.rglob("*"):
                 if file_path.is_file():
                     rel_path = file_path.relative_to(self.project_root)
                     data_files.append(f"--include-data-file={file_path}={rel_path}")
-        
+
         # 添加src目录
         if self.src_dir.exists():
             for file_path in self.src_dir.rglob("*.py"):
@@ -172,6 +173,7 @@ class NuitkaBuilder:
             "--include-module=src.ui.pages.config_page",
             "--include-module=src.ui.pages.me3_page",
             "--include-module=src.ui.pages.mods_page",
+            "--include-module=src.ui.pages.bin_merge_page",
             "--include-module=src.ui.pages.about_page",
 
             # 标准库模块
