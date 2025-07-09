@@ -53,7 +53,7 @@ class AboutPage(BasePage):
         layout.setSpacing(10)
         
         # 应用名称和版本
-        app_name = QLabel("Nmodm v2.0.0")
+        app_name = QLabel("Nmodm v2.0.2")
         app_name.setStyleSheet("""
             QLabel {
                 color: #89b4fa;

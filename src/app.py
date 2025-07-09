@@ -9,14 +9,7 @@ from PySide6.QtGui import QFont
 
 from .ui.main_window import MainWindow
 from .ui.sidebar import Sidebar
-from .ui.pages.home_page import HomePage
-from .ui.pages.config_page import ConfigPage
-from .ui.pages.me3_page import ToolDownloadPage
-from .ui.pages.mods_page import ModsPage
-from .ui.pages.about_page import AboutPage
-from .ui.pages.bin_merge_page import BinMergePage
 from .config.config_manager import ConfigManager
-from .utils.download_manager import DownloadManager
 
 
 class NmodmApp:
@@ -25,22 +18,43 @@ class NmodmApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.setup_app()
-        
-        # 管理器
-        self.config_manager = ConfigManager()
-        self.download_manager = DownloadManager()
-        
+
+        # 管理器（延迟初始化）
+        self.config_manager = None
+        self.download_manager = None
+
+        # 页面缓存（延迟加载）
+        self._pages_cache = {}
+
         # 创建主窗口
         self.main_window = MainWindow()
         self.setup_main_content()
-        
-        # 初始化状态检查
-        self.setup_status_timer()
-    
+
+        # 延迟初始化其他组件
+        QTimer.singleShot(100, self.delayed_initialization)
+
+    def delayed_initialization(self):
+        """延迟初始化非关键组件"""
+        # 初始化管理器
+        if self.config_manager is None:
+            self.config_manager = ConfigManager()
+
+        # 延迟初始化下载管理器
+        QTimer.singleShot(200, self.init_download_manager)
+
+        # 延迟状态检查
+        QTimer.singleShot(500, self.setup_status_timer)
+
+    def init_download_manager(self):
+        """初始化下载管理器"""
+        if self.download_manager is None:
+            from .utils.download_manager import DownloadManager
+            self.download_manager = DownloadManager()
+
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("2.0.0")
+        self.app.setApplicationVersion("2.0.2")
         self.app.setOrganizationName("Nmodm Team")
         
         # 设置应用程序字体
@@ -82,8 +96,8 @@ class NmodmApp:
             }
         """)
         
-        # 创建页面
-        self.create_pages()
+        # 只创建首页，其他页面延迟加载
+        self.create_initial_page()
         
         # 添加到布局
         content_layout.addWidget(self.sidebar)
@@ -98,54 +112,100 @@ class NmodmApp:
         
         self.main_window.content_area.setLayout(main_layout)
     
-    def create_pages(self):
-        """创建所有页面"""
+    def create_initial_page(self):
+        """只创建首页，其他页面延迟加载"""
+        from .ui.pages.home_page import HomePage
+
         # 首页
         self.home_page = HomePage()
         self.home_page.navigate_to.connect(self.navigate_to_page)
         self.page_stack.addWidget(self.home_page)
-        
-        # 配置页面
-        self.config_page = ConfigPage()
-        self.config_page.status_updated.connect(self.update_home_status)
-        self.page_stack.addWidget(self.config_page)
-        
-        # 工具下载页面
-        self.me3_page = ToolDownloadPage()
-        self.me3_page.status_updated.connect(self.update_home_status)
-        self.page_stack.addWidget(self.me3_page)
-        
-        # Mod页面
-        self.mods_page = ModsPage()
-        self.mods_page.config_changed.connect(self.update_home_status)
-        self.page_stack.addWidget(self.mods_page)
 
-        # BIN合并页面
-        self.bin_merge_page = BinMergePage()
-        self.page_stack.addWidget(self.bin_merge_page)
-
-        # 关于页面
-        self.about_page = AboutPage()
-        self.page_stack.addWidget(self.about_page)
-        
-        # 页面映射
+        # 页面映射（延迟加载）
         self.pages = {
             "home": (0, self.home_page),
-            "config": (1, self.config_page),
-            "me3": (2, self.me3_page),
-            "mods": (3, self.mods_page),
-            "bin_merge": (4, self.bin_merge_page),
-            "about": (5, self.about_page)
+            "config": (1, None),
+            "me3": (2, None),
+            "mods": (3, None),
+            "bin_merge": (4, None),
+            "about": (5, None)
         }
+
+    def get_or_create_page(self, page_name):
+        """获取或创建页面（延迟加载）"""
+        if page_name not in self.pages:
+            return None
+
+        index, page = self.pages[page_name]
+
+        # 如果页面还未创建，则创建它
+        if page is None:
+            page = self._create_page(page_name)
+            if page:
+                # 添加到页面堆栈
+                if self.page_stack.count() <= index:
+                    # 确保有足够的位置
+                    while self.page_stack.count() <= index:
+                        placeholder = QWidget()
+                        self.page_stack.addWidget(placeholder)
+
+                # 替换占位符
+                old_widget = self.page_stack.widget(index)
+                self.page_stack.removeWidget(old_widget)
+                self.page_stack.insertWidget(index, page)
+
+                # 更新映射
+                self.pages[page_name] = (index, page)
+
+        return page
+
+    def _create_page(self, page_name):
+        """创建具体的页面"""
+        try:
+            if page_name == "config":
+                from .ui.pages.config_page import ConfigPage
+                page = ConfigPage()
+                page.status_updated.connect(self.update_home_status)
+                return page
+
+            elif page_name == "me3":
+                from .ui.pages.me3_page import ToolDownloadPage
+                page = ToolDownloadPage()
+                page.status_updated.connect(self.update_home_status)
+                return page
+
+            elif page_name == "mods":
+                from .ui.pages.mods_page import ModsPage
+                page = ModsPage()
+                page.config_changed.connect(self.update_home_status)
+                return page
+
+            elif page_name == "bin_merge":
+                from .ui.pages.bin_merge_page import BinMergePage
+                page = BinMergePage()
+                return page
+
+            elif page_name == "about":
+                from .ui.pages.about_page import AboutPage
+                page = AboutPage()
+                return page
+
+        except Exception as e:
+            print(f"创建页面 {page_name} 失败: {e}")
+
+        return None
         
         # 默认显示首页
         self.page_stack.setCurrentIndex(0)
     
     def switch_page(self, page_id):
-        """切换页面"""
+        """切换页面（延迟加载）"""
         if page_id in self.pages:
-            index, page = self.pages[page_id]
-            self.page_stack.setCurrentIndex(index)
+            # 获取或创建页面
+            page = self.get_or_create_page(page_id)
+            if page:
+                index, _ = self.pages[page_id]
+                self.page_stack.setCurrentIndex(index)
     
     def navigate_to_page(self, page_id):
         """导航到指定页面"""
@@ -164,8 +224,13 @@ class NmodmApp:
     def update_home_status(self):
         """更新首页状态显示"""
         try:
+            # 确保管理器已初始化
+            if self.config_manager is None:
+                self.config_manager = ConfigManager()
+
             # 更新首页状态
-            self.home_page.refresh_status()
+            if hasattr(self, 'home_page') and self.home_page:
+                self.home_page.refresh_status()
         except Exception as e:
             print(f"更新状态失败: {e}")
     

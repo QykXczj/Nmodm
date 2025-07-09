@@ -43,7 +43,11 @@ class TitleBar(QWidget):
         self.icon_label = QLabel()
         self.icon_label.setFixedSize(24, 24)
         self.icon_label.setStyleSheet("QLabel { margin-right: 8px; }")
-        
+
+        # 延迟加载图标
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(200, self.load_icon)
+
         self.title_label = QLabel("Nmodm - 游戏管理工具")
         self.title_label.setStyleSheet("""
             QLabel {
@@ -116,7 +120,20 @@ class TitleBar(QWidget):
         
         container.setLayout(layout)
         return container
-    
+
+    def load_icon(self):
+        """延迟加载应用图标"""
+        try:
+            import os
+            icon_path = os.path.join(os.path.dirname(__file__), "..", "..", "zwnr.png")
+            if os.path.exists(icon_path):
+                pixmap = QPixmap(icon_path)
+                if not pixmap.isNull():
+                    scaled_pixmap = pixmap.scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    self.icon_label.setPixmap(scaled_pixmap)
+        except Exception as e:
+            print(f"加载图标失败: {e}")
+
     def mousePressEvent(self, event):
         """鼠标按下事件"""
         if event.button() == Qt.LeftButton:

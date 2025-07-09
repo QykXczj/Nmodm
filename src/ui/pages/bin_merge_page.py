@@ -87,47 +87,96 @@ class BinMergeWorker(QThread):
                 self.finished.emit(False, "ERModsMerger.exe不存在，请先下载ERModsMerger")
                 return
 
-            # 使用start命令执行合并
+            # 使用新终端执行合并
             try:
-                # 使用start命令启动ERModsMerger
+                # 方法1：使用PowerShell在新窗口中执行
+                powershell_cmd = f'''
+                Start-Process -FilePath "{erm_exe}" -ArgumentList "/merge" -WorkingDirectory "{self.erm_dir}" -Wait -WindowStyle Normal
+                '''
+
                 process = subprocess.Popen(
-                    ["start", "/wait", str(erm_exe), "/merge"],
+                    ["powershell", "-Command", powershell_cmd],
                     cwd=str(self.erm_dir),
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
                 )
 
                 # 等待进程完成
-                stdout, stderr = process.communicate(timeout=300)  # 5分钟超时
+                process.wait(timeout=300)  # 5分钟超时
 
                 if self._is_cancelled:
-                    return
-
-                if process.returncode != 0:
-                    error_msg = stderr or "合并过程中发生未知错误"
-                    self.finished.emit(False, f"合并失败: {error_msg}")
                     return
 
             except subprocess.TimeoutExpired:
                 self.finished.emit(False, "合并超时，请检查bin文件是否有效")
                 return
+            except Exception as e:
+                # 如果PowerShell失败，尝试使用批处理文件
+                try:
+                    self.progress.emit("PowerShell执行失败，尝试使用批处理文件...")
+
+                    # 创建批处理文件来执行合并命令
+                    batch_file = self.erm_dir / "merge_temp.bat"
+                    with open(batch_file, 'w', encoding='utf-8') as f:
+                        f.write(f'@echo off\n')
+                        f.write(f'cd /d "{self.erm_dir}"\n')
+                        f.write(f'"{erm_exe}" /merge\n')
+                        f.write(f'pause\n')  # 让用户看到结果
+
+                    # 使用start命令在新终端中执行批处理文件
+                    process = subprocess.Popen(
+                        ["start", "/wait", "cmd", "/c", str(batch_file)],
+                        cwd=str(self.erm_dir),
+                        shell=True
+                    )
+
+                    # 等待进程完成
+                    process.wait(timeout=300)  # 5分钟超时
+
+                    # 清理临时批处理文件
+                    try:
+                        batch_file.unlink()
+                    except:
+                        pass
+
+                except Exception as e2:
+                    self.finished.emit(False, f"执行合并命令失败: {str(e2)}")
+                    return
 
             # 4. 检查合并是否成功
             self.progress.emit("正在检查合并结果...")
             merged_mods_dir = self.erm_dir / "MergedMods"
             merged_regulation_bin = merged_mods_dir / "regulation.bin"
 
-            if not merged_mods_dir.exists():
-                self.finished.emit(False, "MergedMods文件夹不存在，合并失败")
-                return
+            # 等待一段时间让合并完成
+            import time
+            max_wait = 30  # 最多等待30秒
+            check_interval = 1  # 每秒检查一次
 
-            if not merged_regulation_bin.exists():
-                self.finished.emit(False, "MergedMods中未生成regulation.bin文件，合并失败")
-                return
+            for i in range(max_wait):
+                if self._is_cancelled:
+                    return
 
-            self.progress.emit("✅ 检测到合并成功生成的regulation.bin文件")
+                if merged_regulation_bin.exists():
+                    # 检查文件大小，确保不是空文件
+                    file_size = merged_regulation_bin.stat().st_size
+                    if file_size > 1024:  # 至少1KB
+                        self.progress.emit(f"✅ 检测到合并成功生成的regulation.bin文件 ({file_size:,} 字节)")
+                        break
+
+                time.sleep(check_interval)
+                if i % 5 == 0:  # 每5秒更新一次进度
+                    self.progress.emit(f"等待合并完成... ({i+1}/{max_wait}s)")
+            else:
+                # 超时或文件不存在
+                if not merged_mods_dir.exists():
+                    self.finished.emit(False, "MergedMods文件夹不存在，合并失败")
+                    return
+                elif not merged_regulation_bin.exists():
+                    self.finished.emit(False, "MergedMods中未生成regulation.bin文件，合并失败")
+                    return
+                else:
+                    self.finished.emit(False, "生成的regulation.bin文件异常，合并可能失败")
+                    return
 
             # 5. 复制MergedMods到Mods文件夹并重命名
             self.progress.emit("正在复制合并结果...")
@@ -383,6 +432,38 @@ class BinMergePage(BasePage):
         """)
         self.start_merge_btn.clicked.connect(self.start_merge)
 
+        # 安装.NET8按钮
+        self.install_dotnet_btn = QPushButton("安装.NET8")
+        self.install_dotnet_btn.setFixedHeight(40)
+        self.install_dotnet_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #89b4fa;
+                border: none;
+                border-radius: 8px;
+                color: #1e1e2e;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }
+            QPushButton:hover {
+                background-color: #74c7ec;
+            }
+            QPushButton:pressed {
+                background-color: #64a8d8;
+            }
+        """)
+        self.install_dotnet_btn.clicked.connect(self.install_dotnet)
+
+        # 说明文字
+        dotnet_info_label = QLabel("合并前请先安装.NET8")
+        dotnet_info_label.setStyleSheet("""
+            QLabel {
+                color: #fab387;
+                font-size: 12px;
+                margin-left: 10px;
+            }
+        """)
+
         # 取消合并按钮
         self.cancel_merge_btn = QPushButton("取消合并")
         self.cancel_merge_btn.setFixedHeight(40)
@@ -408,6 +489,8 @@ class BinMergePage(BasePage):
 
         button_layout.addWidget(self.start_merge_btn)
         button_layout.addWidget(self.cancel_merge_btn)
+        button_layout.addWidget(self.install_dotnet_btn)
+        button_layout.addWidget(dotnet_info_label)
         button_layout.addStretch()
 
         layout.addLayout(button_layout)
@@ -762,6 +845,16 @@ class BinMergePage(BasePage):
         except Exception as e:
             self.log(f"❌ 检查config.json配置失败: {str(e)}")
             return False
+
+    def install_dotnet(self):
+        """安装.NET8运行时"""
+        try:
+            import webbrowser
+            dotnet_url = "https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/runtime-desktop-8.0.6-windows-x64-installer"
+            webbrowser.open(dotnet_url)
+            self.log("已打开.NET8下载页面，请下载并安装.NET8运行时")
+        except Exception as e:
+            self.log(f"打开.NET8下载页面失败: {str(e)}")
 
     def showEvent(self, event):
         """页面显示时检查状态"""

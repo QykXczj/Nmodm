@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QTextEdit, QComboBox)
 from PySide6.QtCore import Qt, Signal
 from .base_page import BasePage
-from ...utils.download_manager import DownloadManager
 
 
 class VersionInfoCard(QFrame):
@@ -138,12 +137,29 @@ class ToolDownloadPage(BasePage):
 
     def __init__(self, parent=None):
         super().__init__("工具下载", parent)
-        self.download_manager = DownloadManager()
+        self.download_manager = None  # 延迟初始化
         self.me3_download_worker = None
         self.erm_download_worker = None
         self.setup_content()
+
+        # 延迟初始化下载管理器和状态检查
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, self.delayed_init)
+
+    def delayed_init(self):
+        """延迟初始化"""
+        if self.download_manager is None:
+            from ...utils.download_manager import DownloadManager
+            self.download_manager = DownloadManager()
         self.check_current_status()
-    
+
+    def get_download_manager(self):
+        """获取下载管理器（确保已初始化）"""
+        if self.download_manager is None:
+            from ...utils.download_manager import DownloadManager
+            self.download_manager = DownloadManager()
+        return self.download_manager
+
     def setup_content(self):
         """设置页面内容"""
         # 页面描述
@@ -594,8 +610,9 @@ class ToolDownloadPage(BasePage):
     def check_current_status(self):
         """检查当前状态"""
         # 检查ME3工具状态
-        is_me3_installed = self.download_manager.is_me3_installed()
-        me3_current_version = self.download_manager.get_current_version()
+        dm = self.get_download_manager()
+        is_me3_installed = dm.is_me3_installed()
+        me3_current_version = dm.get_current_version()
 
         if is_me3_installed:
             self.me3_version_card.update_info(
@@ -611,8 +628,8 @@ class ToolDownloadPage(BasePage):
             self.me3_download_btn.setText("下载ME3工具")
 
         # 检查ERModsMerger状态
-        is_erm_installed = self.download_manager.is_erm_installed()
-        erm_current_version = self.download_manager.get_erm_current_version()
+        is_erm_installed = dm.is_erm_installed()
+        erm_current_version = dm.get_erm_current_version()
 
         if is_erm_installed:
             self.erm_version_card.update_info(
@@ -639,13 +656,14 @@ class ToolDownloadPage(BasePage):
         self.me3_status_label.setText("正在检查最新版本...")
 
         try:
-            release_info = self.download_manager.get_latest_release_info()
+            dm = self.get_download_manager()
+            release_info = dm.get_latest_release_info()
             if release_info:
                 latest_version = release_info.get('tag_name', '未知')
                 self.me3_version_card.update_info(latest_version=latest_version)
 
                 # 检查是否需要更新
-                current_version = self.download_manager.get_current_version()
+                current_version = dm.get_current_version()
                 if current_version and current_version != latest_version:
                     self.me3_download_btn.setText("更新ME3工具")
                     self.me3_status_label.setText(f"发现新版本: {latest_version}")
@@ -664,13 +682,14 @@ class ToolDownloadPage(BasePage):
         self.erm_status_label.setText("正在检查最新版本...")
 
         try:
-            release_info = self.download_manager.get_erm_latest_release_info()
+            dm = self.get_download_manager()
+            release_info = dm.get_erm_latest_release_info()
             if release_info:
                 latest_version = release_info.get('tag_name', '未知')
                 self.erm_version_card.update_info(latest_version=latest_version)
 
                 # 检查是否需要更新
-                current_version = self.download_manager.get_erm_current_version()
+                current_version = dm.get_erm_current_version()
                 if current_version and current_version != latest_version:
                     self.erm_download_btn.setText("更新ERModsMerger")
                     self.erm_status_label.setText(f"发现新版本: {latest_version}")
@@ -690,7 +709,7 @@ class ToolDownloadPage(BasePage):
             self.me3_status_label.setText("下载正在进行中，请稍候")
             return
 
-        self.me3_download_worker = self.download_manager.download_me3()
+        self.me3_download_worker = self.get_download_manager().download_me3()
         if not self.me3_download_worker:
             self.me3_status_label.setText("无法创建下载任务，请检查网络连接")
             return
@@ -717,7 +736,7 @@ class ToolDownloadPage(BasePage):
             self.erm_status_label.setText("下载正在进行中，请稍候")
             return
 
-        self.erm_download_worker = self.download_manager.download_erm()
+        self.erm_download_worker = self.get_download_manager().download_erm()
         if not self.erm_download_worker:
             self.erm_status_label.setText("无法创建下载任务，请检查网络连接")
             return
@@ -852,7 +871,7 @@ class ToolDownloadPage(BasePage):
 
     def load_mirrors(self):
         """加载镜像列表到下拉框"""
-        mirrors = self.download_manager.get_mirrors()
+        mirrors = self.get_download_manager().get_mirrors()
 
         # 加载ME3镜像
         if hasattr(self, 'me3_mirror_combo'):
