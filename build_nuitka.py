@@ -21,7 +21,7 @@ class NuitkaBuilder:
         self.src_dir = self.project_root / "src"
         self.builds_dir = self.project_root / "Builds"
         self.dist_dir = self.builds_dir / "Nuitka"
-        self.version = "2.0.0"  # 应用版本号
+        self.version = "2.0.3"  # 应用版本号
         self.build_dir = self.project_root / "build"
         
     def check_environment(self) -> bool:
