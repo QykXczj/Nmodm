@@ -89,20 +89,24 @@ class ModConfigManager:
                         # DLL型mod：扫描文件夹内的所有DLL文件
                         dll_files = self._scan_dll_files(item)
                         for dll_file in dll_files:
-                            # DLL型mod的路径格式：文件夹名/dll文件名
-                            dll_path = f"{item.name}/{dll_file}"
-                            natives.append(dll_path)
+                            # dll_file已经包含完整的相对路径
+                            natives.append(dll_file)
                     elif mod_type == "mixed":
                         # 混合型mod：既作为mod包又包含DLL文件
                         packages.append(item.name)
                         dll_files = self._scan_dll_files(item)
                         for dll_file in dll_files:
-                            # 混合型mod的DLL路径格式：文件夹名/dll文件名
-                            dll_path = f"{item.name}/{dll_file}"
-                            natives.append(dll_path)
+                            # dll_file已经包含完整的相对路径
+                            natives.append(dll_file)
                 elif item.is_file() and item.suffix.lower() == ".dll":
                     # 直接在Mods目录下的DLL文件（保持兼容性）
-                    natives.append(item.name)
+                    # 排除非mod DLL文件
+                    excluded_dlls = {
+                        'libzstd.dll',
+                        'oo2core_9_win64.dll'
+                    }
+                    if item.name.lower() not in excluded_dlls:
+                        natives.append(item.name)
 
         # 添加外部mod包
         for mod_name, mod_path in self.external_packages.items():
@@ -153,8 +157,14 @@ class ModConfigManager:
                     has_mod_files = True
                     break
 
-            # 检查是否包含DLL文件
-            dll_files = list(mod_path.glob("*.dll"))
+            # 检查是否包含DLL文件（排除非mod DLL）
+            excluded_dlls = {
+                'libzstd.dll',
+                'oo2core_9_win64.dll'
+            }
+
+            dll_files = [dll for dll in mod_path.glob("*.dll")
+                        if dll.name.lower() not in excluded_dlls]
             if dll_files:
                 has_dll = True
 
@@ -162,7 +172,8 @@ class ModConfigManager:
             if not has_dll:
                 for subdir in mod_path.iterdir():
                     if subdir.is_dir():
-                        dll_files = list(subdir.glob("*.dll"))
+                        dll_files = [dll for dll in subdir.glob("*.dll")
+                                   if dll.name.lower() not in excluded_dlls]
                         if dll_files:
                             has_dll = True
                             break
@@ -188,20 +199,32 @@ class ModConfigManager:
             mod_path: mod文件夹路径
 
         Returns:
-            List[str]: DLL文件名列表
+            List[str]: DLL文件相对路径列表（相对于mod文件夹）
         """
         dll_files = []
+
+        # 排除的非mod DLL文件
+        excluded_dlls = {
+            'libzstd.dll',
+            'oo2core_9_win64.dll'
+        }
 
         try:
             # 扫描根目录的DLL文件
             for dll_file in mod_path.glob("*.dll"):
-                dll_files.append(dll_file.name)
+                if dll_file.name.lower() not in excluded_dlls:
+                    # 对于根目录的DLL，使用 mod文件夹名/dll文件名 格式
+                    dll_path = f"{mod_path.name}/{dll_file.name}"
+                    dll_files.append(dll_path)
 
             # 扫描子目录的DLL文件（深度限制为1层）
             for subdir in mod_path.iterdir():
                 if subdir.is_dir():
                     for dll_file in subdir.glob("*.dll"):
-                        dll_files.append(dll_file.name)
+                        if dll_file.name.lower() not in excluded_dlls:
+                            # 对于子目录的DLL，使用 mod文件夹名/子目录名/dll文件名 格式
+                            dll_path = f"{mod_path.name}/{subdir.name}/{dll_file.name}"
+                            dll_files.append(dll_path)
         except (OSError, PermissionError):
             pass
 
@@ -398,13 +421,8 @@ class ModConfigManager:
         if is_external and clean_path in self.external_natives:
             actual_path = self.external_natives[clean_path]
         else:
-            # 对于内部DLL型mod，需要构建完整的相对路径
-            if "/" in clean_path:
-                # DLL型mod格式：文件夹名/dll文件名
-                actual_path = clean_path
-            else:
-                # 直接在Mods目录下的DLL文件
-                actual_path = clean_path
+            # 对于内部DLL，使用传入的路径（已经包含正确的相对路径）
+            actual_path = clean_path
 
         native = ModNative(path=actual_path, optional=optional, enabled=enabled, is_external=is_external)
         self.natives.append(native)

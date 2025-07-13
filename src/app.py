@@ -54,7 +54,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("2.0.2")
+        self.app.setApplicationVersion("2.0.3")
         self.app.setOrganizationName("Nmodm Team")
         
         # 设置应用程序字体
