@@ -86,6 +86,7 @@ class NuitkaBuilder:
             self.project_root / "main.py",
             self.project_root / "zwnr.png",
             self.project_root / "OnlineFix",
+            self.project_root / "ESL",
             self.src_dir,
         ]
         
@@ -128,66 +129,37 @@ class NuitkaBuilder:
     def get_data_files(self) -> List[str]:
         """获取数据文件列表"""
         data_files = []
-        
+
         # 添加图标文件
         icon_file = self.project_root / "zwnr.png"
         if icon_file.exists():
             data_files.append(f"--include-data-file={icon_file}=zwnr.png")
-        
-        # 添加OnlineFix目录（静态资源）
+
+        # 添加OnlineFix目录 - 逐个文件添加以确保包含所有文件
         onlinefix_dir = self.project_root / "OnlineFix"
         if onlinefix_dir.exists():
+            # 递归添加OnlineFix目录中的所有文件
             for file_path in onlinefix_dir.rglob("*"):
                 if file_path.is_file():
                     rel_path = file_path.relative_to(self.project_root)
                     data_files.append(f"--include-data-file={file_path}={rel_path}")
 
-        # 添加src目录
-        if self.src_dir.exists():
-            for file_path in self.src_dir.rglob("*.py"):
-                rel_path = file_path.relative_to(self.project_root)
-                data_files.append(f"--include-data-file={file_path}={rel_path}")
-        
+        # 添加ESL目录 - 逐个文件添加以确保包含所有文件
+        esl_dir = self.project_root / "ESL"
+        if esl_dir.exists():
+            # 递归添加ESL目录中的所有文件
+            for file_path in esl_dir.rglob("*"):
+                if file_path.is_file():
+                    rel_path = file_path.relative_to(self.project_root)
+                    data_files.append(f"--include-data-file={file_path}={rel_path}")
+
         return data_files
     
     def get_include_modules(self) -> List[str]:
         """获取需要包含的模块"""
         modules = [
-            # PySide6相关模块
-            "--include-module=PySide6.QtCore",
-            "--include-module=PySide6.QtGui",
-            "--include-module=PySide6.QtWidgets",
-            "--include-module=PySide6.QtNetwork",
-            
-            # 项目核心模块
-            "--include-module=src.app",
-            "--include-module=src.config.config_manager",
-            "--include-module=src.config.mod_config_manager",
-            "--include-module=src.ui.main_window",
-            "--include-module=src.ui.sidebar",
-            "--include-module=src.utils.download_manager",
-            
-            # UI页面模块
-            "--include-module=src.ui.pages.base_page",
-            "--include-module=src.ui.pages.home_page",
-            "--include-module=src.ui.pages.config_page",
-            "--include-module=src.ui.pages.me3_page",
-            "--include-module=src.ui.pages.mods_page",
-            "--include-module=src.ui.pages.bin_merge_page",
-            "--include-module=src.ui.pages.about_page",
-
-            # 标准库模块
-            "--include-module=json",
-            "--include-module=toml",
-            "--include-module=pathlib",
-            "--include-module=subprocess",
-            "--include-module=threading",
-            "--include-module=requests",
-            "--include-module=tempfile",
-            "--include-module=zipfile",
-            "--include-module=shutil",
-            "--include-module=configparser",
-            "--include-module=urllib.parse",
+            # 让Nuitka自动发现依赖，只指定关键模块
+            "--include-package=src",
             "--include-module=urllib.request",
             "--include-module=dataclasses",
             "--include-module=typing",
@@ -251,23 +223,13 @@ class NuitkaBuilder:
         include_modules = self.get_include_modules()
         cmd.extend(include_modules)
         
-        # 添加排除模块
+        # 添加排除模块（简化列表）
         exclude_modules = [
             "--nofollow-import-to=tkinter",
             "--nofollow-import-to=matplotlib",
             "--nofollow-import-to=numpy",
-            "--nofollow-import-to=pandas",
-            "--nofollow-import-to=scipy",
-            "--nofollow-import-to=PIL",
-            "--nofollow-import-to=cv2",
-            "--nofollow-import-to=jupyter",
-            "--nofollow-import-to=IPython",
-            "--nofollow-import-to=notebook",
-            "--nofollow-import-to=sphinx",
             "--nofollow-import-to=pytest",
             "--nofollow-import-to=setuptools",
-            "--nofollow-import-to=wheel",
-            "--nofollow-import-to=pip",
         ]
         cmd.extend(exclude_modules)
         
@@ -277,10 +239,10 @@ class NuitkaBuilder:
         # 执行Nuitka
         start_time = time.time()
         try:
-            print(f"执行命令: {' '.join(cmd[:10])}... (命令过长，已截断)")
+            print(f"执行命令: {' '.join(cmd[:5])}... (共{len(cmd)}个参数)")
             print("⏳ 编译中，这可能需要几分钟时间...")
-            
-            result = subprocess.run(cmd, cwd=self.project_root, 
+
+            result = subprocess.run(cmd, cwd=self.project_root,
                                   capture_output=True, text=True)
             
             if result.returncode == 0:
@@ -345,10 +307,10 @@ class NuitkaBuilder:
             exe_path = self.dist_dir / "Nmodm_nuitka_onefile.exe"
         else:
             exe_dir = self.dist_dir / "Nmodm_nuitka_standalone"
-            exe_path = exe_dir / "main.exe"
+            exe_path = exe_dir / "Nmodm_nuitka_standalone.exe"
             if not exe_path.exists():
                 # 尝试其他可能的名称
-                for possible_name in ["Nmodm.exe", "main.exe"]:
+                for possible_name in ["main.exe", "Nmodm.exe"]:
                     test_path = exe_dir / possible_name
                     if test_path.exists():
                         exe_path = test_path

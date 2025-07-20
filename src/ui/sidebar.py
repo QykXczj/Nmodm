@@ -10,46 +10,118 @@ from PySide6.QtGui import QFont
 
 class SidebarButton(QPushButton):
     """侧边栏按钮"""
-    
+
     def __init__(self, text, icon_text="", parent=None):
         super().__init__(parent)
         self.setText(text)
         self.icon_text = icon_text
         self.is_active = False
-        
+        self.is_hovered = False
+
         self.setFixedHeight(50)
         self.setCheckable(True)
+
+        # 启用鼠标跟踪和悬停事件
+        self.setAttribute(Qt.WA_Hover, True)
+        self.setMouseTracking(True)
+
         self.setup_style()
     
     def setup_style(self):
-        """设置按钮样式"""
-        self.setStyleSheet("""
-            SidebarButton {
-                background-color: transparent;
-                border: none;
-                color: #bac2de;
-                text-align: left;
-                padding: 12px 20px;
-                font-size: 14px;
-                font-weight: 500;
-                border-radius: 8px;
-                margin: 2px 8px;
-            }
-            SidebarButton:hover {
-                background-color: #313244;
-                color: #cdd6f4;
-            }
-            SidebarButton:checked {
-                background-color: #89b4fa;
-                color: #1e1e2e;
-                font-weight: bold;
-            }
-        """)
+        """设置按钮基础样式"""
+        self.update_style()
+
+    def update_style(self):
+        """更新按钮样式"""
+        if self.is_active:
+            if self.is_hovered:
+                # 选中状态的悬停样式
+                style = """
+                    SidebarButton {
+                        background-color: #74c7ec;
+                        border: none;
+                        color: #1e1e2e;
+                        text-align: left;
+                        padding: 12px 20px;
+                        font-size: 14px;
+                        font-weight: bold;
+                        border-radius: 8px;
+                        margin: 2px 8px;
+                    }
+                """
+            else:
+                # 选中状态的正常样式
+                style = """
+                    SidebarButton {
+                        background-color: #89b4fa;
+                        border: none;
+                        color: #1e1e2e;
+                        text-align: left;
+                        padding: 12px 20px;
+                        font-size: 14px;
+                        font-weight: bold;
+                        border-radius: 8px;
+                        margin: 2px 8px;
+                    }
+                """
+        else:
+            if self.is_hovered:
+                # 未选中状态的悬停样式
+                style = """
+                    SidebarButton {
+                        background-color: #313244;
+                        border: none;
+                        color: #cdd6f4;
+                        text-align: left;
+                        padding: 12px 20px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        border-radius: 8px;
+                        margin: 2px 8px;
+                    }
+                """
+            else:
+                # 未选中状态的正常样式
+                style = """
+                    SidebarButton {
+                        background-color: transparent;
+                        border: none;
+                        color: #bac2de;
+                        text-align: left;
+                        padding: 12px 20px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        border-radius: 8px;
+                        margin: 2px 8px;
+                    }
+                """
+
+        self.setStyleSheet(style)
     
     def set_active(self, active):
         """设置激活状态"""
         self.is_active = active
         self.setChecked(active)
+        self.update_style()
+
+    def enterEvent(self, event):
+        """鼠标进入事件"""
+        super().enterEvent(event)
+        self.is_hovered = True
+        self.update_style()
+
+    def leaveEvent(self, event):
+        """鼠标离开事件"""
+        super().leaveEvent(event)
+        self.is_hovered = False
+        self.update_style()
+
+    def mouseMoveEvent(self, event):
+        """鼠标移动事件 - 确保悬停状态正确"""
+        super().mouseMoveEvent(event)
+        if not self.is_hovered:
+            self.is_hovered = True
+            self.update_style()
 
 
 class Sidebar(QWidget):
@@ -152,6 +224,7 @@ class Sidebar(QWidget):
             ("me3", "📥", "工具下载"),
             ("mods", "🔧", "Mod配置"),
             ("bin_merge", "🔗", "BIN合并"),
+            ("lan_gaming", "🌐", "局域网联机"),
             ("about", "ℹ️", "关于")
         ]
         
@@ -174,7 +247,7 @@ class Sidebar(QWidget):
         footer_layout.setContentsMargins(20, 10, 20, 0)
         
         # 版本信息
-        version_label = QLabel("v2.0.3")
+        version_label = QLabel("v2.0.4")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;

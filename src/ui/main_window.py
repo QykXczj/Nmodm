@@ -57,10 +57,10 @@ class TitleBar(QWidget):
                 padding-left: 8px;
             }
         """)
-        
+
         # 窗口控制按钮
         self.control_buttons = self.create_control_buttons()
-        
+
         # 添加到布局
         layout.addWidget(self.icon_label)
         layout.addWidget(self.title_label)
@@ -152,6 +152,11 @@ class TitleBar(QWidget):
         """鼠标释放事件"""
         self.pressing = False
 
+    def set_lan_mode(self, is_lan_mode: bool):
+        """设置局域网模式状态"""
+        # 标题栏不再显示指示器，只更新窗口标题
+        pass
+
 
 class MainWindow(QMainWindow):
     """主窗口类"""
@@ -160,9 +165,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.is_maximized = False
         self.normal_geometry = None
-        
+
+        # 局域网模式状态
+        self.is_lan_mode = False
+        self.base_title = "Nmodm v2.0.4"
+
         self.setup_window()
         self.setup_ui()
+        self.setup_status_bar()
         
     def setup_window(self):
         """设置窗口属性"""
@@ -257,3 +267,76 @@ class MainWindow(QMainWindow):
             self.width() - self.size_grip.width(),
             self.height() - self.size_grip.height()
         )
+
+    def set_lan_mode(self, is_lan_mode: bool):
+        """设置局域网模式状态"""
+        self.is_lan_mode = is_lan_mode
+        self.update_window_title()
+        self.update_lan_status_bar()
+
+        # 如果有标题栏，更新标题栏状态
+        if hasattr(self, 'title_bar'):
+            self.title_bar.set_lan_mode(is_lan_mode)
+
+    def update_window_title(self):
+        """更新窗口标题"""
+        if self.is_lan_mode:
+            title = f"🌐 【局域网联机模式】 {self.base_title}"
+        else:
+            title = self.base_title
+
+        self.setWindowTitle(title)
+
+        # 如果有标题栏，也更新标题栏显示
+        if hasattr(self, 'title_bar') and hasattr(self.title_bar, 'title_label'):
+            self.title_bar.title_label.setText(title)
+
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        try:
+            print("🚪 主窗口关闭，清理局域网模式状态...")
+            from src.utils.lan_mode_detector import cleanup_lan_mode_on_exit
+            cleanup_lan_mode_on_exit()
+        except Exception as e:
+            print(f"清理局域网模式状态失败: {e}")
+
+        super().closeEvent(event)
+
+    def setup_status_bar(self):
+        """设置状态栏"""
+        self.status_bar = self.statusBar()
+        self.status_bar.setStyleSheet("""
+            QStatusBar {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border-top: 1px solid #313244;
+                font-size: 12px;
+            }
+        """)
+
+        # 局域网模式指示器（初始隐藏）
+        self.lan_status_widget = None
+
+    def update_lan_status_bar(self):
+        """更新状态栏的局域网模式指示"""
+        if self.is_lan_mode:
+            if not self.lan_status_widget:
+                from PySide6.QtWidgets import QLabel
+                self.lan_status_widget = QLabel("🌐 当前处于局域网联机模式 - 可与局域网内玩家联机游戏")
+                self.lan_status_widget.setStyleSheet("""
+                    QLabel {
+                        background-color: #a6e3a1;
+                        color: #1e1e2e;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                        font-size: 13px;
+                        margin: 2px;
+                    }
+                """)
+                self.status_bar.addPermanentWidget(self.lan_status_widget)
+        else:
+            if self.lan_status_widget:
+                self.status_bar.removeWidget(self.lan_status_widget)
+                self.lan_status_widget.deleteLater()
+                self.lan_status_widget = None

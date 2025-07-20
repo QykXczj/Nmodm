@@ -28,10 +28,18 @@ class NmodmApp:
 
         # 创建主窗口
         self.main_window = MainWindow()
+
+        # 设置局域网模式状态
+        self.main_window.set_lan_mode(self.lan_detector.is_lan_mode)
+
         self.setup_main_content()
 
         # 延迟初始化其他组件
         QTimer.singleShot(100, self.delayed_initialization)
+
+        # 如果是局域网模式，延迟显示提示
+        if self.lan_detector.is_lan_mode:
+            QTimer.singleShot(1000, self.show_lan_mode_notification)
 
     def delayed_initialization(self):
         """延迟初始化非关键组件"""
@@ -54,9 +62,13 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("2.0.3")
+        self.app.setApplicationVersion("2.0.4")
         self.app.setOrganizationName("Nmodm Team")
-        
+
+        # 初始化局域网模式检测器
+        from src.utils.lan_mode_detector import get_lan_mode_detector
+        self.lan_detector = get_lan_mode_detector()
+
         # 设置应用程序字体
         font = QFont("Microsoft YaHei UI", 9)
         self.app.setFont(font)
@@ -128,7 +140,8 @@ class NmodmApp:
             "me3": (2, None),
             "mods": (3, None),
             "bin_merge": (4, None),
-            "about": (5, None)
+            "lan_gaming": (5, None),
+            "about": (6, None)
         }
 
     def get_or_create_page(self, page_name):
@@ -185,6 +198,11 @@ class NmodmApp:
                 page = BinMergePage()
                 return page
 
+            elif page_name == "lan_gaming":
+                from .ui.pages.lan_gaming_page import LanGamingPage
+                page = LanGamingPage()
+                return page
+
             elif page_name == "about":
                 from .ui.pages.about_page import AboutPage
                 page = AboutPage()
@@ -239,8 +257,85 @@ class NmodmApp:
         self.main_window.show()
         return self.app.exec()
     
+    def show_lan_mode_notification(self):
+        """显示局域网模式通知"""
+        try:
+            # 获取检测器状态信息
+            status_info = self.lan_detector.get_status_info()
+            detection_method = status_info.get('detection_method', 'unknown')
+
+            # 根据检测方法显示不同的消息
+            if detection_method == 'dll_injection':
+                print("🌐 【局域网联机模式】已激活 - 检测到steamclient DLL注入")
+            elif detection_method == 'parent_process':
+                print("🌐 【局域网联机模式】已激活 - 通过steamclient_loader启动")
+            else:
+                print("🌐 【局域网联机模式】已激活 - 现在可以与局域网内的其他玩家一起游戏")
+
+            # 显示醒目的启动通知
+            self._show_lan_mode_popup()
+
+        except Exception as e:
+            print(f"显示局域网模式通知失败: {e}")
+
+    def _show_lan_mode_popup(self):
+        """显示局域网模式弹窗通知"""
+        try:
+            from PySide6.QtWidgets import QMessageBox
+            from PySide6.QtCore import Qt
+
+            # 创建消息框
+            msg_box = QMessageBox(self.main_window)
+            msg_box.setWindowTitle("🌐 局域网联机模式")
+            msg_box.setText("🎉 局域网联机模式已激活！")
+            msg_box.setInformativeText(
+                "现在您可以与局域网内的其他玩家一起游戏。\n\n"
+                "✅ steamclient已成功注入\n"
+                "✅ 局域网联机功能已启用\n"
+                "✅ 可以开始联机游戏了"
+            )
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setStandardButtons(QMessageBox.Ok)
+
+            # 设置样式
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #1e1e2e;
+                    color: #cdd6f4;
+                }
+                QMessageBox QLabel {
+                    color: #cdd6f4;
+                    font-size: 14px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #89b4fa;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #74c7ec;
+                }
+            """)
+
+            # 显示消息框
+            msg_box.exec()
+
+        except Exception as e:
+            print(f"显示局域网模式弹窗失败: {e}")
+
     def quit(self):
         """退出应用程序"""
+        # 清理局域网模式状态
+        try:
+            print("🧹 程序退出，清理局域网模式状态...")
+            from src.utils.lan_mode_detector import cleanup_lan_mode_on_exit
+            cleanup_lan_mode_on_exit()
+        except Exception as e:
+            print(f"清理局域网模式状态失败: {e}")
+
         self.app.quit()
 
 
