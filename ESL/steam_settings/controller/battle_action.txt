@@ -1,0 +1,12 @@
+general_menu=START
+general_option=BACK
+general_cam_aspect=LBUMPER
+battle_posture=RBUMPER
+general_jump=A
+battle_taunt=B
+battle_attack=X
+battle_subattack=Y
+general_move=LJOY=joystick_move
+battle_sidestep=DRTRIGGER
+general_cam_adjust=RSTICK
+general_camera=RJOY=joystick_move
