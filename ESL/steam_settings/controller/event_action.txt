@@ -1,0 +1,7 @@
+event_skip=START
+general_cam_aspect=LBUMPER
+event_posture=RBUMPER
+event_mess_next=A
+event_mess_display=B
+event_mess_skip=X,Y
+general_camera=RJOY=joystick_move

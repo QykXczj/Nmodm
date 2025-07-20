@@ -1,0 +1,13 @@
+general_menu=START
+general_option=BACK
+general_cam_aspect=LBUMPER
+general_posture=RBUMPER
+general_jump=A
+general_talk=B
+general_tackle=X
+general_dig=Y
+general_move=LJOY=joystick_move
+general_map=DLTRIGGER
+battle_sidestep=DRTRIGGER
+general_cam_adjust=RSTICK
+general_camera=RJOY=joystick_move

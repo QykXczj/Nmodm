@@ -1,0 +1,14 @@
+menu_start=START
+menu_select=BACK
+menu_page_left=LBUMPER
+menu_page_right=RBUMPER
+menu_decide=A
+menu_cancel=B
+menu_map_spot=X
+menu_sound_stop=Y
+menu_move=LJOY=joystick_move
+menu_scale=RJOY=joystick_move
+menu_up=DUP
+menu_down=DDOWN
+menu_right=DRIGHT
+menu_left=DLEFT

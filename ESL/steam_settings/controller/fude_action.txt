@@ -1,0 +1,6 @@
+fude_posture=RBUMPER
+fude_paint_quick=A,B
+fude_paint=X
+fude_paint_bold=Y
+fude_move=LJOY=joystick_move
+general_camera=RJOY=joystick_move

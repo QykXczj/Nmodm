@@ -1,0 +1,9 @@
+general_menu=START
+fishing_desc=LBUMPER
+fishing_posture=RBUMPER
+fishing_qte_down=A
+fishing_qte_right=B
+fishing_qte_left=X
+fishing_qte_up=Y
+fishing_rod=LJOY=joystick_move
+general_camera=RJOY=joystick_move
