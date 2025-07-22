@@ -62,7 +62,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("2.0.4")
+        self.app.setApplicationVersion("3.0.0")
         self.app.setOrganizationName("Nmodm Team")
 
         # 初始化局域网模式检测器
@@ -125,23 +125,24 @@ class NmodmApp:
         self.main_window.content_area.setLayout(main_layout)
     
     def create_initial_page(self):
-        """只创建首页，其他页面延迟加载"""
-        from .ui.pages.home_page import HomePage
+        """只创建欢迎页面，其他页面延迟加载"""
+        from .ui.pages.welcome_page import WelcomePage
 
-        # 首页
-        self.home_page = HomePage()
-        self.home_page.navigate_to.connect(self.navigate_to_page)
-        self.page_stack.addWidget(self.home_page)
+        # 欢迎页面
+        self.welcome_page = WelcomePage()
+        self.page_stack.addWidget(self.welcome_page)
 
         # 页面映射（延迟加载）
         self.pages = {
-            "home": (0, self.home_page),
-            "config": (1, None),
-            "me3": (2, None),
-            "mods": (3, None),
-            "bin_merge": (4, None),
-            "lan_gaming": (5, None),
-            "about": (6, None)
+            "welcome": (0, self.welcome_page),
+            "home": (1, None),
+            "config": (2, None),
+            "me3": (3, None),
+            "mods": (4, None),
+            "bin_merge": (5, None),
+            "lan_gaming": (6, None),
+            "virtual_lan": (7, None),
+            "about": (8, None)
         }
 
     def get_or_create_page(self, page_name):
@@ -175,7 +176,13 @@ class NmodmApp:
     def _create_page(self, page_name):
         """创建具体的页面"""
         try:
-            if page_name == "config":
+            if page_name == "home":
+                from .ui.pages.home_page import HomePage
+                page = HomePage()
+                page.navigate_to.connect(self.navigate_to_page)
+                return page
+
+            elif page_name == "config":
                 from .ui.pages.config_page import ConfigPage
                 page = ConfigPage()
                 page.status_updated.connect(self.update_home_status)
@@ -201,6 +208,11 @@ class NmodmApp:
             elif page_name == "lan_gaming":
                 from .ui.pages.lan_gaming_page import LanGamingPage
                 page = LanGamingPage()
+                return page
+
+            elif page_name == "virtual_lan":
+                from .ui.pages.virtual_lan_page import VirtualLanPage
+                page = VirtualLanPage()
                 return page
 
             elif page_name == "about":
@@ -279,52 +291,18 @@ class NmodmApp:
             print(f"显示局域网模式通知失败: {e}")
 
     def _show_lan_mode_popup(self):
-        """显示局域网模式弹窗通知"""
+        """显示局域网模式通知（控制台输出）"""
         try:
-            from PySide6.QtWidgets import QMessageBox
-            from PySide6.QtCore import Qt
-
-            # 创建消息框
-            msg_box = QMessageBox(self.main_window)
-            msg_box.setWindowTitle("🌐 局域网联机模式")
-            msg_box.setText("🎉 局域网联机模式已激活！")
-            msg_box.setInformativeText(
-                "现在您可以与局域网内的其他玩家一起游戏。\n\n"
-                "✅ steamclient已成功注入\n"
-                "✅ 局域网联机功能已启用\n"
-                "✅ 可以开始联机游戏了"
-            )
-            msg_box.setIcon(QMessageBox.Information)
-            msg_box.setStandardButtons(QMessageBox.Ok)
-
-            # 设置样式
-            msg_box.setStyleSheet("""
-                QMessageBox {
-                    background-color: #1e1e2e;
-                    color: #cdd6f4;
-                }
-                QMessageBox QLabel {
-                    color: #cdd6f4;
-                    font-size: 14px;
-                }
-                QMessageBox QPushButton {
-                    background-color: #89b4fa;
-                    color: #1e1e2e;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-weight: bold;
-                }
-                QMessageBox QPushButton:hover {
-                    background-color: #74c7ec;
-                }
-            """)
-
-            # 显示消息框
-            msg_box.exec()
+            print("🎉 局域网联机模式已激活！")
+            print("=" * 50)
+            print("现在您可以与局域网内的其他玩家一起游戏。")
+            print("✅ steamclient已成功注入")
+            print("✅ 局域网联机功能已启用")
+            print("✅ 可以开始联机游戏了")
+            print("=" * 50)
 
         except Exception as e:
-            print(f"显示局域网模式弹窗失败: {e}")
+            print(f"显示局域网模式通知失败: {e}")
 
     def quit(self):
         """退出应用程序"""

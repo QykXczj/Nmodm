@@ -20,8 +20,8 @@ class AboutPage(BasePage):
         # 应用信息
         self.create_app_info()
         
-        # 功能介绍
-        self.create_features_info()
+        # 更新说明
+        self.create_update_info()
         
         # 版权信息
         self.create_copyright_info()
@@ -53,7 +53,7 @@ class AboutPage(BasePage):
         layout.setSpacing(10)
         
         # 应用名称和版本
-        app_name = QLabel("Nmodm v2.0.4")
+        app_name = QLabel("Nmodm v3.0.0")
         app_name.setStyleSheet("""
             QLabel {
                 color: #89b4fa;
@@ -94,9 +94,9 @@ class AboutPage(BasePage):
         section.setLayout(layout)
         self.add_content(section)
     
-    def create_features_info(self):
-        """创建功能介绍区域"""
-        section = QGroupBox("主要功能")
+    def create_update_info(self):
+        """创建更新说明区域"""
+        section = QGroupBox("v3.0.0 更新说明")
         section.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -111,41 +111,53 @@ class AboutPage(BasePage):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 8px 0 8px;
-                color: #89b4fa;
+                color: #a6e3a1;
             }
         """)
-        
+
         layout = QVBoxLayout()
         layout.setSpacing(10)
-        
-        features_text = QTextEdit()
-        features_text.setFixedHeight(150)
-        features_text.setReadOnly(True)
-        features_text.setStyleSheet("""
+
+        update_text = QTextEdit()
+        update_text.setFixedHeight(200)
+        update_text.setReadOnly(True)
+        update_text.setStyleSheet("""
             QTextEdit {
                 background-color: #1e1e2e;
                 border: 1px solid #313244;
                 border-radius: 6px;
                 color: #bac2de;
                 font-size: 13px;
-                padding: 10px;
-                line-height: 1.4;
+                padding: 12px;
+                line-height: 1.5;
             }
         """)
-        
-        features_content = """• 游戏路径配置和验证
-• OnlineFix破解文件管理
-• ME3工具和ERModsMerger自动下载
-• BIN文件合并功能，支持多个regulation.bin合并
-• 智能配置检查和自动修正
-• 多镜像源支持，解决网络访问问题
-• 现代化无边框UI设计
-• 模块化架构，易于扩展
-• Mod配置管理"""
-        
-        features_text.setText(features_content)
-        layout.addWidget(features_text)
-        
+
+        update_content = """🎨 用户界面优化
+• 功能介绍卡片简化，移除边框和悬停效果
+• QQ群号可点击复制到剪切板，提供复制成功提示
+• 界面更加简洁美观，减少视觉干扰
+
+⚡ 性能大幅提升
+• 彻底解决工具下载页面卡顿问题
+• 状态检查和更新检查改为异步后台执行
+• 页面切换立即响应，不再阻塞UI线程
+• 网络请求失败不影响基本功能使用
+
+🔧 技术架构改进
+• 双线程架构：状态检查和更新检查分离
+• 完善的错误处理和状态提示机制
+• 修复EasyTier工具状态显示问题
+• 改进线程管理和资源释放
+
+✨ 用户体验提升
+• 操作反馈更加及时明确
+• 错误信息具体清晰，便于理解
+• 不同状态用颜色区分，视觉层次清晰"""
+
+        update_text.setText(update_content)
+        layout.addWidget(update_text)
+
         section.setLayout(layout)
         self.add_content(section)
     

@@ -6,6 +6,7 @@ import os
 import json
 import zipfile
 import requests
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
 from PySide6.QtCore import QObject, Signal, QThread
@@ -66,6 +67,9 @@ class DownloadWorker(QThread):
 class DownloadManager(QObject):
     """下载管理器"""
 
+    # 信号定义
+    easytier_install_finished = Signal(bool, str)  # EasyTier安装完成信号(成功, 消息)
+
     # GitHub加速镜像地址
     DEFAULT_PROXY_URLS = [
         "https://gh-proxy.com/",
@@ -78,13 +82,16 @@ class DownloadManager(QObject):
         self.root_dir = Path(__file__).parent.parent.parent
         self.me3_dir = self.root_dir / "me3p"
         self.erm_dir = self.root_dir / "ERM"
+        self.esr_dir = self.root_dir / "ESR"  # EasyTier目录
         self.version_file = self.me3_dir / "version.json"
         self.erm_version_file = self.erm_dir / "version.json"
+        self.esr_version_file = self.esr_dir / "version.json"  # EasyTier版本文件
         self.config_file = self.me3_dir / "mirrors.json"
 
         # 确保目录存在
         self.me3_dir.mkdir(exist_ok=True)
         self.erm_dir.mkdir(exist_ok=True)
+        self.esr_dir.mkdir(exist_ok=True)  # 确保ESR目录存在
 
         # 加载镜像配置
         self.PROXY_URLS = self.load_mirrors()
@@ -531,4 +538,210 @@ class DownloadManager(QObject):
 
         except Exception as e:
             print(f"检查config.json配置失败: {e}")
+            return False
+
+    # ==================== EasyTier 相关方法 ====================
+
+    def get_latest_easytier_version(self) -> Optional[str]:
+        """获取EasyTier最新版本"""
+        try:
+            url = "https://api.github.com/repos/EasyTier/EasyTier/releases/latest"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            return data.get('tag_name', '').lstrip('v')
+        except Exception as e:
+            print(f"获取EasyTier版本失败: {e}")
+            return None
+
+    def get_current_easytier_version(self) -> Optional[str]:
+        """获取当前安装的EasyTier版本"""
+        try:
+            if self.esr_version_file.exists():
+                with open(self.esr_version_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get('version')
+            return None
+        except Exception as e:
+            print(f"读取EasyTier版本失败: {e}")
+            return None
+
+    def save_easytier_version(self, version: str):
+        """保存EasyTier版本信息"""
+        try:
+            version_data = {
+                'version': version,
+                'download_time': json.dumps(datetime.now(), default=str)
+            }
+            with open(self.esr_version_file, 'w', encoding='utf-8') as f:
+                json.dump(version_data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"保存EasyTier版本信息失败: {e}")
+
+    def check_easytier_update(self) -> tuple[bool, Optional[str], Optional[str]]:
+        """检查EasyTier更新"""
+        try:
+            latest_version = self.get_latest_easytier_version()
+            current_version = self.get_current_easytier_version()
+
+            if not latest_version:
+                return False, None, "无法获取最新版本信息"
+
+            if not current_version:
+                return True, latest_version, "未安装EasyTier"
+
+            # 简单的版本比较
+            if latest_version != current_version:
+                return True, latest_version, f"发现新版本 {latest_version}"
+
+            return False, current_version, "已是最新版本"
+        except Exception as e:
+            return False, None, f"检查更新失败: {e}"
+
+    def get_easytier_download_url(self, version: str) -> Optional[str]:
+        """获取EasyTier下载链接"""
+        try:
+            # EasyTier Windows x86_64 下载链接格式
+            filename = f"easytier-windows-x86_64-v{version}.zip"
+            base_url = f"https://github.com/EasyTier/EasyTier/releases/download/v{version}/{filename}"
+            return base_url
+        except Exception as e:
+            print(f"构建EasyTier下载链接失败: {e}")
+            return None
+
+    def download_easytier(self, version: str = None, selected_mirror: str = None) -> bool:
+        """下载EasyTier"""
+        try:
+            # 如果没有指定版本，获取最新版本
+            if not version:
+                version = self.get_latest_easytier_version()
+                if not version:
+                    print("无法获取EasyTier最新版本")
+                    return False
+
+            download_url = self.get_easytier_download_url(version)
+            if not download_url:
+                return False
+
+            # 如果指定了镜像，优先使用指定的镜像
+            if selected_mirror:
+                mirrors_to_try = [selected_mirror] + [m for m in self.PROXY_URLS if m != selected_mirror] + [""]
+            else:
+                mirrors_to_try = [""] + self.PROXY_URLS
+
+            # 尝试使用镜像下载
+            for proxy in mirrors_to_try:
+                try:
+                    url = f"{proxy}{download_url}" if proxy else download_url
+                    mirror_name = self._get_mirror_display_name(proxy)
+                    print(f"尝试从 {mirror_name} 下载EasyTier...")
+
+                    # 下载文件
+                    filename = f"easytier-windows-x86_64-v{version}.zip"
+                    save_path = self.esr_dir / filename
+
+                    # 创建下载工作线程
+                    self.easytier_download_worker = DownloadWorker(url, str(save_path))
+                    self.easytier_download_worker.finished.connect(
+                        lambda success, msg: self._on_easytier_download_finished(success, msg, version, save_path)
+                    )
+                    self.easytier_download_worker.start()
+
+                    return True  # 下载已开始
+
+                except Exception as e:
+                    mirror_name = self._get_mirror_display_name(proxy)
+                    print(f"从 {mirror_name} 下载失败: {e}")
+                    continue
+
+            print("所有下载源都失败")
+            return False
+
+        except Exception as e:
+            print(f"下载EasyTier失败: {e}")
+            return False
+
+    def _get_mirror_display_name(self, mirror_url: str) -> str:
+        """获取镜像显示名称"""
+        if not mirror_url:
+            return "GitHub官方"
+        elif "gh-proxy.com" in mirror_url:
+            return "gh-proxy.com"
+        elif "ghproxy.net" in mirror_url:
+            return "ghproxy.net"
+        elif "ghfast.top" in mirror_url:
+            return "ghfast.top"
+        else:
+            return mirror_url.replace("https://", "").replace("http://", "").rstrip("/")
+
+    def _on_easytier_download_finished(self, success: bool, message: str, version: str, zip_path: Path):
+        """EasyTier下载完成回调"""
+        if success:
+            print("EasyTier下载完成，开始解压...")
+            if self._extract_easytier(zip_path, version):
+                self.save_easytier_version(version)
+                print(f"EasyTier v{version} 安装完成")
+                # 发送安装完成信号
+                if hasattr(self, 'easytier_install_finished'):
+                    self.easytier_install_finished.emit(True, f"EasyTier v{version} 安装完成")
+            else:
+                print("EasyTier解压失败")
+                if hasattr(self, 'easytier_install_finished'):
+                    self.easytier_install_finished.emit(False, "EasyTier解压失败")
+        else:
+            print(f"EasyTier下载失败: {message}")
+            if hasattr(self, 'easytier_install_finished'):
+                self.easytier_install_finished.emit(False, f"下载失败: {message}")
+
+    def _extract_easytier(self, zip_path: Path, version: str) -> bool:
+        """解压EasyTier"""
+        try:
+            import zipfile
+            import shutil
+
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # 解压到ESR目录
+                zip_ref.extractall(self.esr_dir)
+
+            # 删除zip文件
+            zip_path.unlink()
+
+            # 查找解压后的文件夹（通常是easytier-windows-x86_64）
+            extracted_folders = [d for d in self.esr_dir.iterdir() if d.is_dir() and d.name.startswith('easytier-')]
+
+            if extracted_folders:
+                extracted_folder = extracted_folders[0]
+                print(f"找到解压文件夹: {extracted_folder.name}")
+
+                # 将文件从子文件夹移动到ESR根目录
+                for file_path in extracted_folder.iterdir():
+                    if file_path.is_file():
+                        target_path = self.esr_dir / file_path.name
+                        # 如果目标文件已存在，先删除
+                        if target_path.exists():
+                            target_path.unlink()
+                        shutil.move(str(file_path), str(target_path))
+                        print(f"移动文件: {file_path.name}")
+
+                # 删除空的子文件夹
+                extracted_folder.rmdir()
+                print(f"删除空文件夹: {extracted_folder.name}")
+
+            # 验证关键文件是否存在
+            easytier_core = self.esr_dir / "easytier-core.exe"
+            easytier_cli = self.esr_dir / "easytier-cli.exe"
+
+            if easytier_core.exists() and easytier_cli.exists():
+                print("EasyTier核心文件验证成功")
+                return True
+            else:
+                print("EasyTier核心文件验证失败")
+                print(f"查找路径: {self.esr_dir}")
+                print(f"easytier-core.exe 存在: {easytier_core.exists()}")
+                print(f"easytier-cli.exe 存在: {easytier_cli.exists()}")
+                return False
+
+        except Exception as e:
+            print(f"解压EasyTier失败: {e}")
             return False

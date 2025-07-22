@@ -1,5 +1,5 @@
 """
-局域网联机页面
+局域网配置页面
 提供局域网联机配置和启动功能
 """
 import os
@@ -14,10 +14,10 @@ from .base_page import BasePage
 
 
 class LanGamingPage(BasePage):
-    """局域网联机页面"""
+    """局域网配置页面"""
 
     def __init__(self, parent=None):
-        super().__init__("🌐 局域网联机", parent)
+        super().__init__("🌐 局域网配置", parent)
         
         # 获取项目根目录
         if getattr(sys, 'frozen', False):
@@ -32,6 +32,9 @@ class LanGamingPage(BasePage):
         
         self.setup_content()
         self.load_current_settings()
+
+        # 检测局域网模式并更新UI
+        self.check_and_update_lan_mode()
 
     def setup_content(self):
         """设置页面内容"""
@@ -63,7 +66,7 @@ class LanGamingPage(BasePage):
 
     def setup_basic_config(self, parent_layout):
         """设置基础配置区域"""
-        config_group = QGroupBox("🔧 局域网联机基础配置")
+        config_group = QGroupBox("🔧 局域网配置")
         config_group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -194,8 +197,8 @@ class LanGamingPage(BasePage):
 
     def setup_launch_section(self, parent_layout):
         """设置启动区域"""
-        launch_group = QGroupBox("🚀 进入局域网联机模式")
-        launch_group.setStyleSheet("""
+        self.launch_group = QGroupBox("🚀 进入局域网联机模式")
+        self.launch_group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
                 font-size: 16px;
@@ -230,8 +233,8 @@ class LanGamingPage(BasePage):
         """)
 
         # 启动按钮
-        launch_btn = QPushButton("🌐 启动局域网联机模式")
-        launch_btn.setStyleSheet("""
+        self.launch_btn = QPushButton("🌐 启动局域网联机模式")
+        self.launch_btn.setStyleSheet("""
             QPushButton {
                 background-color: #89b4fa;
                 color: #1e1e2e;
@@ -245,13 +248,53 @@ class LanGamingPage(BasePage):
                 background-color: #74c7ec;
             }
         """)
-        launch_btn.clicked.connect(self.launch_lan_mode)
+        self.launch_btn.clicked.connect(self.launch_lan_mode)
+
+        # 退出局域网模式按钮
+        self.exit_lan_btn = QPushButton("🚪 退出局域网联机模式")
+        self.exit_lan_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f38ba8;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 15px 30px;
+            }
+            QPushButton:hover {
+                background-color: #eba0ac;
+            }
+        """)
+        self.exit_lan_btn.clicked.connect(self.exit_lan_mode)
+        self.exit_lan_btn.setVisible(False)  # 默认隐藏
+
+        # DLL状态检查按钮
+        self.check_dll_btn = QPushButton("🔍 检查DLL状态")
+        self.check_dll_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
+        self.check_dll_btn.clicked.connect(self.check_dll_status)
+        self.check_dll_btn.setVisible(False)  # 默认隐藏，只在局域网模式下显示
 
         launch_layout.addWidget(self.status_label)
-        launch_layout.addWidget(launch_btn)
+        launch_layout.addWidget(self.launch_btn)
+        launch_layout.addWidget(self.exit_lan_btn)
+        launch_layout.addWidget(self.check_dll_btn)
         
-        launch_group.setLayout(launch_layout)
-        parent_layout.addWidget(launch_group)
+        self.launch_group.setLayout(launch_layout)
+        parent_layout.addWidget(self.launch_group)
 
     def setup_help_section(self, parent_layout):
         """设置说明区域"""
@@ -469,6 +512,249 @@ class LanGamingPage(BasePage):
                 main_window.close()
         except Exception as e:
             print(f"关闭窗口失败: {e}")
+
+    def check_and_update_lan_mode(self):
+        """检测局域网模式并更新UI"""
+        try:
+            from src.utils.lan_mode_detector import get_lan_mode_detector
+            detector = get_lan_mode_detector()
+
+            if detector.is_lan_mode:
+                # 当前处于局域网模式
+                self.update_ui_for_lan_mode(True)
+                self.update_status("🌐 当前处于局域网联机模式", "success")
+            else:
+                # 当前处于正常模式
+                self.update_ui_for_lan_mode(False)
+
+        except Exception as e:
+            print(f"检测局域网模式失败: {e}")
+
+    def update_ui_for_lan_mode(self, is_lan_mode: bool):
+        """根据局域网模式更新UI"""
+        if is_lan_mode:
+            # 局域网模式：隐藏启动按钮，显示退出按钮和DLL检查按钮
+            self.launch_btn.setVisible(False)
+            self.exit_lan_btn.setVisible(True)
+            self.check_dll_btn.setVisible(True)
+
+            # 更新组标题
+            if hasattr(self, 'launch_group'):
+                self.launch_group.setTitle("🌐 局域网联机模式管理")
+        else:
+            # 正常模式：显示启动按钮，隐藏退出按钮和DLL检查按钮
+            self.launch_btn.setVisible(True)
+            self.exit_lan_btn.setVisible(False)
+            self.check_dll_btn.setVisible(False)
+
+            # 更新组标题
+            if hasattr(self, 'launch_group'):
+                self.launch_group.setTitle("🚀 进入局域网联机模式")
+
+    def exit_lan_mode(self):
+        """退出局域网联机模式"""
+        try:
+            print("🚪 用户请求退出局域网联机模式")
+            print("⚠️ 安全提示: 由于DLL注入，Steam和Nmodm需要重启以确保系统安全")
+            self.update_status("正在安全退出局域网联机模式...", "info")
+
+            # 执行安全退出流程
+            self._perform_safe_exit()
+
+        except Exception as e:
+            print(f"退出局域网联机模式失败: {e}")
+            self.update_status(f"退出失败: {e}", "error")
+
+    def _perform_safe_exit(self):
+        """执行安全退出流程"""
+        try:
+            from PySide6.QtCore import QTimer
+            from src.utils.dll_manager import get_dll_manager
+
+            # 获取DLL管理器
+            dll_manager = get_dll_manager()
+
+            # 显示安全提示
+            print("🛡️ 安全退出流程说明:")
+            print("1. 卸载steamclient DLL")
+            print("2. 重启Steam程序")
+            print("3. 清理状态文件")
+            print("4. 重启Nmodm程序")
+            print("此流程确保DLL注入完全清除，保证系统安全")
+
+            # 步骤1: 显示安全提示
+            self.update_status("步骤1/4: 准备安全退出...", "info")
+
+            # 延迟执行安全退出步骤
+            QTimer.singleShot(1000, lambda: self._safe_exit_step_1(dll_manager))
+
+        except Exception as e:
+            print(f"安全退出流程失败: {e}")
+            self.update_status(f"安全退出失败: {e}", "error")
+
+    def _safe_exit_step_1(self, dll_manager):
+        """安全退出步骤1: 卸载DLL"""
+        try:
+            from PySide6.QtCore import QTimer
+
+            self.update_status("步骤2/4: 卸载steamclient DLL...", "info")
+            print("🔄 正在卸载steamclient DLL以确保安全...")
+
+            # 卸载DLL
+            dll_success = dll_manager.force_unload_steamclient()
+
+            if dll_success:
+                print("✅ DLL卸载成功，系统安全性已恢复")
+            else:
+                print("⚠️ DLL卸载部分成功，重启将完全清除")
+
+            # 继续下一步
+            QTimer.singleShot(1500, lambda: self._safe_exit_step_2(dll_manager))
+
+        except Exception as e:
+            print(f"DLL卸载失败: {e}")
+            self.update_status(f"DLL卸载失败: {e}", "error")
+
+    def _safe_exit_step_2(self, dll_manager):
+        """安全退出步骤2: 重启Steam"""
+        try:
+            from PySide6.QtCore import QTimer
+
+            self.update_status("步骤3/4: 重启Steam程序...", "info")
+            print("🔄 正在重启Steam以清除DLL注入...")
+
+            # 重启Steam进程
+            process_success = dll_manager.restart_steam_processes()
+
+            if process_success:
+                print("✅ Steam重启成功，DLL注入已清除")
+            else:
+                print("⚠️ Steam重启部分成功，建议手动重启Steam")
+
+            # 继续下一步
+            QTimer.singleShot(2000, lambda: self._safe_exit_step_3())
+
+        except Exception as e:
+            print(f"Steam重启失败: {e}")
+            self.update_status(f"Steam重启失败: {e}", "error")
+
+    def _safe_exit_step_3(self):
+        """安全退出步骤3: 清理状态文件"""
+        try:
+            from PySide6.QtCore import QTimer
+
+            self.update_status("步骤4/4: 清理状态文件...", "info")
+            print("🧹 正在清理局域网模式状态文件...")
+
+            # 清理局域网模式状态
+            self._set_lan_mode_status(False)
+
+            print("✅ 状态文件清理成功，下次启动将恢复正常模式")
+
+            # 最后一步：重启Nmodm
+            QTimer.singleShot(1000, self._safe_exit_final)
+
+        except Exception as e:
+            print(f"状态文件清理失败: {e}")
+            self.update_status(f"状态文件清理失败: {e}", "error")
+
+    def _safe_exit_final(self):
+        """安全退出最后步骤：重启Nmodm"""
+        try:
+            from src.utils.dll_manager import get_dll_manager
+
+            self.update_status("✅ 安全退出完成，正在重启Nmodm...", "success")
+            print("🔄 正在重启Nmodm以确保完全清除DLL注入...")
+
+            # 获取DLL管理器并重启应用程序
+            dll_manager = get_dll_manager()
+            restart_success = dll_manager.restart_nmodm_application()
+
+            if restart_success:
+                print("✅ 新的Nmodm实例已启动")
+                print("🛡️ 安全退出完成，系统已恢复到安全状态")
+                print("📋 新实例将自动恢复正常模式")
+
+                # 立即关闭当前程序，因为新实例已经启动
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(1000, self._close_application)
+            else:
+                print("⚠️ Nmodm重启失败，请手动重启程序")
+                # 重启失败时延迟关闭，给用户时间看到错误信息
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(3000, self._close_application)
+
+        except Exception as e:
+            print(f"安全退出失败: {e}")
+            self.update_status(f"安全退出失败: {e}", "error")
+            # 如果重启失败，仍然关闭当前程序
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(2000, self._close_application)
+
+    def check_dll_status(self):
+        """检查DLL状态"""
+        try:
+            from src.utils.dll_manager import get_dll_manager
+
+            self.update_status("正在检查DLL状态...", "info")
+
+            dll_manager = get_dll_manager()
+            status = dll_manager.get_cleanup_status()
+
+            # 输出状态报告到控制台
+            print("🔍 DLL状态检查报告")
+            print("=" * 50)
+
+            # DLL加载状态
+            print("📋 DLL加载状态:")
+            if status['steamclient_dll_loaded']:
+                print("  ✅ steamclient.dll: 已加载")
+            else:
+                print("  ❌ steamclient.dll: 未加载")
+
+            if status['steamclient64_dll_loaded']:
+                print("  ✅ steamclient64.dll: 已加载")
+            else:
+                print("  ❌ steamclient64.dll: 未加载")
+
+            # 加载的DLL列表
+            if status['loaded_steamclient_dlls']:
+                print(f"\n📁 已加载的steamclient DLL ({len(status['loaded_steamclient_dlls'])}个):")
+                for dll_path in status['loaded_steamclient_dlls']:
+                    print(f"  • {dll_path}")
+            else:
+                print("\n✅ 未发现已加载的steamclient DLL")
+
+            # Steam进程
+            if status['steam_processes']:
+                print(f"\n🔄 Steam相关进程 ({len(status['steam_processes'])}个):")
+                for proc in status['steam_processes']:
+                    print(f"  • {proc['name']} (PID: {proc['pid']})")
+            else:
+                print("\n✅ 未发现Steam相关进程")
+
+            print("=" * 50)
+
+            # 更新状态
+            if status['steamclient_dll_loaded'] or status['steamclient64_dll_loaded']:
+                self.update_status("🌐 检测到steamclient DLL已加载", "success")
+            else:
+                self.update_status("✅ 未检测到steamclient DLL", "info")
+
+        except Exception as e:
+            print(f"检查DLL状态失败: {e}")
+            self.update_status(f"检查DLL状态失败: {e}", "error")
+
+    def _close_application(self):
+        """关闭整个应用程序"""
+        try:
+            # 获取主窗口并关闭
+            main_window = self.window()
+            if main_window:
+                print("🚪 退出局域网联机模式，关闭应用程序...")
+                main_window.close()
+        except Exception as e:
+            print(f"关闭应用程序失败: {e}")
 
     def update_status(self, message, status_type="info"):
         """更新状态显示"""

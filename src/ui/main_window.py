@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
 
         # 局域网模式状态
         self.is_lan_mode = False
-        self.base_title = "Nmodm v2.0.4"
+        self.base_title = "Nmodm v3.0.0"
 
         self.setup_window()
         self.setup_ui()
@@ -300,7 +300,77 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"清理局域网模式状态失败: {e}")
 
+        # 清理EasyTier进程
+        try:
+            print("🔌 清理EasyTier进程...")
+            self._cleanup_easytier()
+        except Exception as e:
+            print(f"清理EasyTier进程失败: {e}")
+
         super().closeEvent(event)
+
+    def _cleanup_easytier(self):
+        """清理EasyTier进程"""
+        try:
+            # 直接查找并终止所有EasyTier进程
+            import psutil
+            easytier_processes = []
+
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'] == 'easytier-core.exe':
+                        easytier_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    # 进程可能已经结束或无权限访问，跳过
+                    continue
+                except Exception:
+                    continue
+
+            if easytier_processes:
+                print(f"发现 {len(easytier_processes)} 个EasyTier进程，正在终止...")
+                for proc in easytier_processes:
+                    try:
+                        print(f"终止EasyTier进程 PID: {proc.pid}")
+                        proc.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        # 进程已经结束或无权限，这是正常的
+                        pass
+                    except Exception as e:
+                        print(f"终止进程 {proc.pid} 失败: {e}")
+                        try:
+                            proc.kill()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                        except:
+                            pass
+
+                # 等待一下确保进程停止
+                import time
+                time.sleep(1)
+
+                # 检查是否还有残留进程
+                remaining = []
+                for proc in psutil.process_iter(['pid', 'name']):
+                    try:
+                        if proc.info['name'] == 'easytier-core.exe':
+                            remaining.append(proc)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                    except:
+                        continue
+
+                if remaining:
+                    print(f"强制终止 {len(remaining)} 个残留EasyTier进程...")
+                    for proc in remaining:
+                        try:
+                            proc.kill()
+                        except:
+                            pass
+            else:
+                print("未发现运行中的EasyTier进程")
+
+        except Exception as e:
+            print(f"清理EasyTier进程时出错: {e}")
 
     def setup_status_bar(self):
         """设置状态栏"""

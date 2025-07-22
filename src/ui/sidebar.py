@@ -42,11 +42,11 @@ class SidebarButton(QPushButton):
                         border: none;
                         color: #1e1e2e;
                         text-align: left;
-                        padding: 12px 20px;
+                        padding: 12px 15px;
                         font-size: 14px;
                         font-weight: bold;
                         border-radius: 8px;
-                        margin: 2px 8px;
+                        margin: 2px 5px;
                     }
                 """
             else:
@@ -57,11 +57,11 @@ class SidebarButton(QPushButton):
                         border: none;
                         color: #1e1e2e;
                         text-align: left;
-                        padding: 12px 20px;
+                        padding: 12px 15px;
                         font-size: 14px;
                         font-weight: bold;
                         border-radius: 8px;
-                        margin: 2px 8px;
+                        margin: 2px 5px;
                     }
                 """
         else:
@@ -73,11 +73,11 @@ class SidebarButton(QPushButton):
                         border: none;
                         color: #cdd6f4;
                         text-align: left;
-                        padding: 12px 20px;
+                        padding: 12px 15px;
                         font-size: 14px;
                         font-weight: 500;
                         border-radius: 8px;
-                        margin: 2px 8px;
+                        margin: 2px 5px;
                     }
                 """
             else:
@@ -88,11 +88,11 @@ class SidebarButton(QPushButton):
                         border: none;
                         color: #bac2de;
                         text-align: left;
-                        padding: 12px 20px;
+                        padding: 12px 15px;
                         font-size: 14px;
                         font-weight: 500;
                         border-radius: 8px;
-                        margin: 2px 8px;
+                        margin: 2px 5px;
                     }
                 """
 
@@ -132,7 +132,7 @@ class Sidebar(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.current_page = "home"
+        self.current_page = "welcome"
         self.buttons = {}
         
         self.setup_ui()
@@ -168,7 +168,7 @@ class Sidebar(QWidget):
         """创建头部"""
         header = QWidget()
         header_layout = QVBoxLayout()
-        header_layout.setContentsMargins(20, 0, 20, 20)
+        header_layout.setContentsMargins(15, 0, 15, 20)
         
         # 应用名称
         app_name = QLabel("Nmodm")
@@ -219,12 +219,14 @@ class Sidebar(QWidget):
         
         # 菜单项
         menu_items = [
+            ("welcome", "🏠", "首页"),
             ("home", "🚀", "快速启动"),
             ("config", "⚙️", "基础配置"),
             ("me3", "📥", "工具下载"),
             ("mods", "🔧", "Mod配置"),
             ("bin_merge", "🔗", "BIN合并"),
-            ("lan_gaming", "🌐", "局域网联机"),
+            ("lan_gaming", "🌐", "局域网配置"),
+            ("virtual_lan", "🌍", "虚拟局域网"),
             ("about", "ℹ️", "关于")
         ]
         
@@ -235,7 +237,7 @@ class Sidebar(QWidget):
             nav_layout.addWidget(btn)
         
         # 设置首页为默认激活
-        self.buttons["home"].set_active(True)
+        self.buttons["welcome"].set_active(True)
         
         nav_container.setLayout(nav_layout)
         layout.addWidget(nav_container)
@@ -244,10 +246,10 @@ class Sidebar(QWidget):
         """创建底部信息"""
         footer = QWidget()
         footer_layout = QVBoxLayout()
-        footer_layout.setContentsMargins(20, 10, 20, 0)
+        footer_layout.setContentsMargins(15, 10, 15, 0)
         
         # 版本信息
-        version_label = QLabel("v2.0.4")
+        version_label = QLabel("v3.0.0")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;

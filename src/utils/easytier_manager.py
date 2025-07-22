@@ -1,0 +1,568 @@
+"""
+EasyTier管理器
+负责EasyTier进程管理、网络操作和状态监控
+"""
+
+import json
+import subprocess
+import time
+import ctypes
+from pathlib import Path
+from typing import Optional, Dict, List
+from PySide6.QtCore import QObject, QThread, Signal, QTimer
+import sys
+
+
+class EasyTierStartWorker(QThread):
+    """EasyTier启动工作线程"""
+
+    # 信号定义
+    start_finished = Signal(bool, str, object)  # 启动完成(成功, 消息, 进程对象)
+
+    def __init__(self, easytier_manager, cmd):
+        super().__init__()
+        self.easytier_manager = easytier_manager
+        self.cmd = cmd
+
+    def run(self):
+        """在后台线程中启动EasyTier"""
+        try:
+            process = self.easytier_manager._start_as_admin(self.cmd)
+            if process and process.poll() is None:
+                self.start_finished.emit(True, "启动成功", process)
+            else:
+                self.start_finished.emit(False, "启动失败", None)
+        except Exception as e:
+            self.start_finished.emit(False, f"启动异常: {e}", None)
+
+
+class EasyTierManager(QObject):
+    """EasyTier管理器"""
+    
+    # 信号定义
+    network_status_changed = Signal(bool)  # 网络状态变化
+    peer_list_updated = Signal(list)       # 节点列表更新
+    connection_info_updated = Signal(dict) # 连接信息更新
+    error_occurred = Signal(str)           # 错误发生
+    
+    def __init__(self):
+        super().__init__()
+        
+        # 路径配置
+        if getattr(sys, 'frozen', False):
+            self.root_dir = Path(sys.executable).parent
+        else:
+            self.root_dir = Path(__file__).parent.parent.parent
+            
+        self.esr_dir = self.root_dir / "ESR"
+        self.easytier_core = self.esr_dir / "easytier-core.exe"
+        self.easytier_cli = self.esr_dir / "easytier-cli.exe"
+        self.config_file = self.esr_dir / "easytier_config.json"
+        
+        # 进程管理
+        self.easytier_process: Optional[subprocess.Popen] = None
+        self.is_running = False
+        self.start_worker = None
+        
+        # 状态监控定时器
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self._check_status)
+        
+        # 确保目录存在
+        self.esr_dir.mkdir(exist_ok=True)
+        
+        # 加载配置
+        self.config = self.load_config()
+    
+    def load_config(self) -> Dict:
+        """加载配置文件"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                # 默认配置
+                # 使用EasyTier对应的参数命名，默认启用所有高级选项
+                default_config = {
+                    "network_name": "",           # --network-name
+                    "hostname": "",               # --hostname
+                    "network_secret": "",         # --network-secret
+                    "peers": ["tcp://public.easytier.top:11010"],  # --peers (默认只使用公共服务器)
+                    "dhcp": True,                 # --dhcp (默认启用，与ipv4互斥)
+                    # "ipv4": "10.126.126.1",    # --ipv4 (与dhcp互斥，不同时存在)
+                    "disable_encryption": False, # --disable-encryption (默认不禁用，即启用加密)
+                    "disable_ipv6": False,       # --disable-ipv6 (默认不禁用，即启用IPv6)
+                    "latency_first": True,       # --latency-first (默认启用)
+                    "multi_thread": True         # --multi-thread (默认启用)
+                }
+                self.save_config(default_config)
+                return default_config
+        except Exception as e:
+            print(f"加载EasyTier配置失败: {e}")
+            return {}
+    
+    def save_config(self, config: Dict = None):
+        """保存配置文件"""
+        try:
+            if config is None:
+                config = self.config
+            
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            self.config = config
+        except Exception as e:
+            print(f"保存EasyTier配置失败: {e}")
+    
+    def is_easytier_installed(self) -> bool:
+        """检查EasyTier是否已安装"""
+        return self.easytier_core.exists() and self.easytier_cli.exists()
+
+    def is_admin(self) -> bool:
+        """检查是否以管理员权限运行"""
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            return False
+
+    def check_wintun_driver(self) -> bool:
+        """检查WinTUN驱动是否存在"""
+        wintun_dll = self.esr_dir / "wintun.dll"
+        return wintun_dll.exists()
+    
+    def start_network(self, network_name: str, network_secret: str,
+                     ipv4: str = "10.126.126.1",
+                     peers: list = None,
+                     hostname: str = "",
+                     dhcp: bool = True) -> bool:
+        """启动EasyTier网络"""
+        try:
+            if not self.is_easytier_installed():
+                self.error_occurred.emit("EasyTier未安装，请先下载安装")
+                return False
+
+            if self.is_running:
+                self.error_occurred.emit("EasyTier已在运行中")
+                return False
+
+            # 不再检查整个应用的管理员权限，而是以管理员权限启动EasyTier
+
+            # 检查WinTUN驱动
+            if not self.check_wintun_driver():
+                self.error_occurred.emit("缺少WinTUN驱动文件(wintun.dll)\n请重新下载EasyTier")
+                return False
+            
+            # 处理peers参数
+            if peers is None:
+                peers = ["tcp://public.easytier.top:11010"]  # 默认公共服务器
+            elif isinstance(peers, str):
+                peers = [peers]  # 转换为列表
+
+            # 构建启动命令
+            cmd = [
+                str(self.easytier_core),
+                "--network-name", network_name,
+                "--network-secret", network_secret
+            ]
+
+            # 添加多个peers参数
+            for peer in peers:
+                cmd.extend(["--peers", peer])
+
+            # 添加可选参数（统一使用true/false值，直接使用配置中的值）
+            # 加密设置
+            if self.config.get("disable_encryption", False):
+                cmd.extend(["--disable-encryption", "true"])
+            else:
+                cmd.extend(["--disable-encryption", "false"])
+
+            # IPv6设置
+            if self.config.get("disable_ipv6", False):
+                cmd.extend(["--disable-ipv6", "true"])
+            else:
+                cmd.extend(["--disable-ipv6", "false"])
+
+            # 延迟优先设置
+            if self.config.get("latency_first", True):
+                cmd.extend(["--latency-first", "true"])
+            else:
+                cmd.extend(["--latency-first", "false"])
+
+            # 多线程设置
+            if self.config.get("multi_thread", True):
+                cmd.extend(["--multi-thread", "true"])
+            else:
+                cmd.extend(["--multi-thread", "false"])
+
+            # 添加IP配置（dhcp 和 ipv4 互斥）
+            if dhcp:
+                cmd.extend(["--dhcp"])
+            elif ipv4:  # 只有在非DHCP且有IP地址时才添加ipv4参数
+                cmd.extend(["--ipv4", ipv4])
+
+            # 添加玩家名称（hostname）
+            if hostname.strip():
+                cmd.extend(["--hostname", hostname.strip()])
+            
+            # 移除空参数
+            cmd = [arg for arg in cmd if arg]
+            
+            print(f"启动EasyTier命令: {' '.join(cmd)}")
+
+            # 保存配置（提前保存，避免启动失败时丢失）
+            # 更新配置（dhcp 和 ipv4 互斥）
+            update_config = {
+                "network_name": network_name,
+                "network_secret": network_secret,
+                "peers": peers,
+                "hostname": hostname
+            }
+
+            # IP配置：dhcp 和 ipv4 互斥
+            if dhcp:
+                update_config["dhcp"] = True
+                # 移除ipv4配置（如果存在）
+                self.config.pop("ipv4", None)
+            else:
+                update_config["ipv4"] = ipv4
+                # 移除dhcp配置（如果存在）
+                self.config.pop("dhcp", None)
+
+            self.config.update(update_config)
+            self.save_config()
+
+            # 在后台线程中启动EasyTier
+            self.start_worker = EasyTierStartWorker(self, cmd)
+            self.start_worker.start_finished.connect(self._on_start_finished)
+            self.start_worker.start()
+
+            return True  # 返回True表示启动请求已发送
+                
+        except Exception as e:
+            self.error_occurred.emit(f"启动EasyTier网络失败: {e}")
+            return False
+
+    def _on_start_finished(self, success: bool, message: str, process):
+        """启动完成回调"""
+        if success and process:
+            self.easytier_process = process
+            self.is_running = True
+
+            # 开始状态监控
+            self.status_timer.start(5000)  # 每5秒检查一次
+
+            self.network_status_changed.emit(True)
+            print("EasyTier网络启动成功")
+        else:
+            self.is_running = False
+            self.easytier_process = None
+
+            # 分析具体错误原因
+            error_message = self._analyze_error(message)
+            self.error_occurred.emit(error_message)
+            print(f"EasyTier启动失败: {message}")
+
+        # 清理工作线程
+        if self.start_worker:
+            self.start_worker.deleteLater()
+            self.start_worker = None
+    
+    def stop_network(self) -> bool:
+        """停止EasyTier网络"""
+        try:
+            # 停止状态监控
+            self.status_timer.stop()
+
+            # 终止进程
+            if self.easytier_process:
+                try:
+                    self.easytier_process.terminate()
+
+                    # 等待进程结束
+                    try:
+                        self.easytier_process.wait(timeout=3)
+                    except:
+                        # 强制杀死进程
+                        self.easytier_process.kill()
+                        try:
+                            self.easytier_process.wait(timeout=2)
+                        except:
+                            pass
+                except Exception as e:
+                    print(f"终止EasyTier进程失败: {e}")
+
+            # 额外保险：查找并终止所有EasyTier进程
+            try:
+                import psutil
+                found_processes = []
+                for proc in psutil.process_iter(['pid', 'name']):
+                    try:
+                        if proc.info['name'] == 'easytier-core.exe':
+                            found_processes.append(proc)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        # 进程可能已经结束或无权限访问，跳过
+                        continue
+
+                if found_processes:
+                    print(f"发现 {len(found_processes)} 个残留EasyTier进程，正在清理...")
+                    for proc in found_processes:
+                        try:
+                            print(f"终止EasyTier进程 PID: {proc.pid}")
+                            proc.terminate()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            # 进程已经结束或无权限，这是正常的
+                            pass
+                        except Exception as e:
+                            print(f"终止进程 {proc.pid} 失败: {e}")
+            except Exception as e:
+                print(f"清理残留进程时出错: {e}")
+
+            self.is_running = False
+            self.easytier_process = None
+
+            self.network_status_changed.emit(False)
+            print("EasyTier网络已停止")
+            return True
+
+        except Exception as e:
+            print(f"停止EasyTier网络失败: {e}")
+            # 即使出错也要重置状态
+            self.is_running = False
+            self.easytier_process = None
+            self.network_status_changed.emit(False)
+            return False
+    
+    def get_network_status(self) -> Dict:
+        """获取网络状态"""
+        try:
+            if not self.is_running or not self.easytier_process:
+                return {"connected": False, "peers": [], "local_ip": "", "node_info": {}}
+
+            # 获取节点信息和对等节点信息
+            node_info = self._get_node_info()
+            peers = self._get_peer_list()
+
+            # 从节点信息中提取本机IP
+            local_ip = node_info.get("ipv4_addr", self.config.get("peer_ip", ""))
+            if "/" in local_ip:
+                local_ip = local_ip.split("/")[0]  # 移除CIDR后缀
+
+            return {
+                "connected": True,
+                "peers": peers,
+                "local_ip": local_ip,
+                "network_name": self.config.get("network_name", ""),
+                "node_info": node_info
+            }
+
+        except Exception as e:
+            print(f"获取网络状态失败: {e}")
+            # 如果进程还在运行，则认为已连接
+            if self.is_running and self.easytier_process and self.easytier_process.poll() is None:
+                return {
+                    "connected": True,
+                    "peers": [],
+                    "local_ip": self.config.get("peer_ip", ""),
+                    "network_name": self.config.get("network_name", ""),
+                    "node_info": {}
+                }
+            return {"connected": False, "peers": [], "local_ip": "", "node_info": {}}
+    
+    def _get_node_info(self) -> Dict:
+        """获取节点信息"""
+        try:
+            cmd = [str(self.easytier_cli), "-o", "json", "node", "info"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, encoding='utf-8', errors='ignore')
+
+            if result.returncode == 0 and result.stdout:
+                import json
+                return json.loads(result.stdout)
+            else:
+                print(f"获取节点信息失败: {result.stderr}")
+                return {}
+        except Exception as e:
+            print(f"获取节点信息异常: {e}")
+            return {}
+
+    def _get_peer_list(self) -> List[Dict]:
+        """获取对等节点列表"""
+        try:
+            cmd = [str(self.easytier_cli), "-o", "json", "peer", "list"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, encoding='utf-8', errors='ignore')
+
+            if result.returncode == 0 and result.stdout:
+                import json
+                peer_data = json.loads(result.stdout)
+
+                # 过滤掉本机节点和公共服务器节点
+                peers = []
+                for peer in peer_data:
+                    # 跳过本机节点（cost为Local）和公共服务器节点（hostname包含PublicServer）
+                    if (peer.get("cost") != "Local" and
+                        not peer.get("hostname", "").startswith("PublicServer") and
+                        peer.get("ipv4")):  # 确保有IP地址
+
+                        peers.append({
+                            "ip": peer.get("ipv4", ""),
+                            "hostname": peer.get("hostname", ""),
+                            "latency": peer.get("lat_ms", "unknown"),
+                            "cost": peer.get("cost", ""),
+                            "loss_rate": peer.get("loss_rate", ""),
+                            "rx_bytes": peer.get("rx_bytes", ""),
+                            "tx_bytes": peer.get("tx_bytes", ""),
+                            "tunnel_proto": peer.get("tunnel_proto", ""),
+                            "nat_type": peer.get("nat_type", ""),
+                            "version": peer.get("version", ""),
+                            "id": peer.get("id", "")
+                        })
+
+                return peers
+            else:
+                print(f"获取对等节点列表失败: {result.stderr}")
+                return []
+        except Exception as e:
+            print(f"获取对等节点列表异常: {e}")
+            return []
+    
+    def _check_status(self):
+        """定期检查状态"""
+        if self.easytier_process and self.easytier_process.poll() is not None:
+            # 进程已结束
+            self.is_running = False
+            self.status_timer.stop()
+            self.network_status_changed.emit(False)
+            self.error_occurred.emit("EasyTier进程意外退出")
+        else:
+            # 获取并更新状态信息
+            status = self.get_network_status()
+            if status["connected"]:
+                self.peer_list_updated.emit(status["peers"])
+                self.connection_info_updated.emit(status)
+    
+    def get_config(self) -> Dict:
+        """获取当前配置"""
+        return self.config.copy()
+    
+    def update_config(self, new_config: Dict):
+        """更新配置"""
+        self.config.update(new_config)
+        self.save_config()
+
+    def _start_as_admin(self, cmd: list) -> subprocess.Popen:
+        """以管理员权限启动进程"""
+        try:
+            if sys.platform == "win32":
+                # Windows下使用ShellExecute以管理员权限启动
+                import ctypes
+                from ctypes import wintypes
+
+                # 使用ShellExecuteW以管理员权限启动
+                shell32 = ctypes.windll.shell32
+
+                # 构建参数字符串
+                args = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in cmd[1:])
+
+                # 以管理员权限启动
+                result = shell32.ShellExecuteW(
+                    None,                    # hwnd
+                    "runas",                 # lpOperation (以管理员身份运行)
+                    cmd[0],                  # lpFile (可执行文件路径)
+                    args,                    # lpParameters (参数)
+                    str(self.esr_dir),       # lpDirectory (工作目录)
+                    0                        # nShowCmd (隐藏窗口)
+                )
+
+                if result > 32:  # 成功
+                    # 等待进程启动
+                    time.sleep(3)
+
+                    # 查找EasyTier进程
+                    import psutil
+                    for proc in psutil.process_iter(['pid', 'name']):
+                        try:
+                            if proc.info['name'] == 'easytier-core.exe':
+                                # 创建一个伪Popen对象来管理进程
+                                class AdminProcess:
+                                    def __init__(self, pid):
+                                        self.pid = pid
+                                        self.returncode = None
+                                        self.stdout = None  # 管理员进程无法获取stdout
+                                        self.stderr = None  # 管理员进程无法获取stderr
+
+                                    def poll(self):
+                                        try:
+                                            proc = psutil.Process(self.pid)
+                                            return None if proc.is_running() else 1
+                                        except:
+                                            return 1
+
+                                    def terminate(self):
+                                        try:
+                                            proc = psutil.Process(self.pid)
+                                            proc.terminate()
+                                        except:
+                                            pass
+
+                                    def kill(self):
+                                        try:
+                                            proc = psutil.Process(self.pid)
+                                            proc.kill()
+                                        except:
+                                            pass
+
+                                    def wait(self, timeout=None):
+                                        try:
+                                            proc = psutil.Process(self.pid)
+                                            proc.wait(timeout)
+                                        except:
+                                            pass
+
+                                print(f"找到EasyTier进程，PID: {proc.info['pid']}")
+                                return AdminProcess(proc.info['pid'])
+                        except:
+                            continue
+
+                    # 如果没找到进程，可能启动失败了
+                    raise Exception("未找到启动的EasyTier进程")
+                else:
+                    raise Exception(f"ShellExecute失败，错误代码: {result}")
+            else:
+                # 非Windows系统，使用sudo
+                sudo_cmd = ["sudo"] + cmd
+                return subprocess.Popen(
+                    sudo_cmd,
+                    cwd=str(self.esr_dir),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+        except Exception as e:
+            print(f"以管理员权限启动失败: {e}")
+            print("回退到普通权限启动...")
+            # 回退到普通权限启动
+            return subprocess.Popen(
+                cmd,
+                cwd=str(self.esr_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+
+    def _analyze_error(self, error_output: str) -> str:
+        """分析错误输出，提供用户友好的错误信息"""
+        if "Failed to create adapter" in error_output:
+            return ("虚拟网络适配器创建失败\n\n可能的解决方案：\n"
+                   "1. 检查防火墙/杀毒软件是否阻止\n"
+                   "2. 重启计算机后重试\n"
+                   "3. 检查Windows版本兼容性\n"
+                   "4. 尝试手动以管理员身份运行")
+        elif "Permission denied" in error_output or "Access denied" in error_output:
+            return ("权限不足\n\n程序已尝试以管理员权限启动EasyTier")
+        elif "Address already in use" in error_output:
+            return ("网络地址已被占用\n\n请尝试使用不同的IP地址")
+        elif "Network unreachable" in error_output:
+            return ("网络不可达\n\n请检查网络连接和服务器地址")
+        elif "Connection refused" in error_output:
+            return ("连接被拒绝\n\n请检查服务器地址和端口")
+        else:
+            # 返回原始错误信息，但格式化一下
+            return f"EasyTier启动失败\n\n详细错误信息：\n{error_output}"
