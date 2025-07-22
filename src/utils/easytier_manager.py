@@ -372,7 +372,15 @@ class EasyTierManager(QObject):
         """获取节点信息"""
         try:
             cmd = [str(self.easytier_cli), "-o", "json", "node", "info"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, encoding='utf-8', errors='ignore')
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                encoding='utf-8',
+                errors='ignore',
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
 
             if result.returncode == 0 and result.stdout:
                 import json
@@ -388,7 +396,15 @@ class EasyTierManager(QObject):
         """获取对等节点列表"""
         try:
             cmd = [str(self.easytier_cli), "-o", "json", "peer", "list"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, encoding='utf-8', errors='ignore')
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                encoding='utf-8',
+                errors='ignore',
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
 
             if result.returncode == 0 and result.stdout:
                 import json
