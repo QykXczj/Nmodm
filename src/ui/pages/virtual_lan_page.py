@@ -24,7 +24,7 @@ from pathlib import Path
 from .base_page import BasePage
 from ...utils.download_manager import DownloadManager
 from ...utils.easytier_manager import EasyTierManager
-
+from ...config.network_optimization_config import NetworkOptimizationConfig
 
 class PingWorker(QThread):
     """延迟检测工作线程"""
@@ -71,7 +71,6 @@ class PingWorker(QThread):
             print(f"Ping检测异常: {e}")
             self.ping_result.emit(self.index, -1)
 
-
 class VirtualLanPage(BasePage):
     """虚拟局域网页面"""
     
@@ -81,6 +80,16 @@ class VirtualLanPage(BasePage):
         # 管理器
         self.download_manager = DownloadManager()
         self.easytier_manager = EasyTierManager()
+        self.network_config = NetworkOptimizationConfig()
+
+        # 工具管理器
+        from src.utils.tool_manager import ToolManager
+        self.tool_manager = ToolManager()
+
+        # 创建虚拟的连接信息标签（用于存储状态，不显示）
+        self.current_network_label = QLabel("未连接")
+        self.current_ip_label = QLabel("未分配")
+        self.optimization_status_label = QLabel("未启用")
 
         # 连接信号
         self.easytier_manager.network_status_changed.connect(self.on_network_status_changed)
@@ -93,6 +102,153 @@ class VirtualLanPage(BasePage):
 
         # 延迟检查当前房间状态，确保界面完全初始化后执行
         QTimer.singleShot(100, self.check_current_room_status)
+
+        # 异步清理残余进程，防止干扰本次运行（不阻塞UI）
+        QTimer.singleShot(500, self.cleanup_residual_processes_async)
+
+    def cleanup_residual_processes_async(self):
+        """异步清理残余进程，防止阻塞UI"""
+        try:
+            print("🧹 开始异步清理残余进程...")
+            self.log_message("🧹 正在后台清理残余进程...", "info")
+
+            # 使用线程池执行清理任务，避免阻塞UI
+            from concurrent.futures import ThreadPoolExecutor
+
+            def cleanup_task():
+                """在后台线程中执行清理任务"""
+                try:
+                    # 清理各种残余进程
+                    self._cleanup_easytier_processes()
+                    self._cleanup_winip_processes()
+                    return True
+                except Exception as e:
+                    print(f"❌ 后台清理失败: {e}")
+                    return False
+
+            # 在线程池中执行清理
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(cleanup_task)
+
+            # 使用QTimer定期检查任务完成状态
+            self._cleanup_timer = QTimer()
+            self._cleanup_timer.timeout.connect(lambda: self._check_cleanup_completion(future, executor))
+            self._cleanup_timer.start(100)  # 每100ms检查一次
+
+        except Exception as e:
+            print(f"❌ 启动异步清理失败: {e}")
+            self.log_message(f"⚠️ 启动后台清理时出现问题: {e}", "warning")
+
+    def _check_cleanup_completion(self, future, executor):
+        """检查清理任务完成状态"""
+        try:
+            if future.done():
+                # 任务完成，停止定时器
+                self._cleanup_timer.stop()
+
+                # 获取结果
+                success = future.result()
+
+                if success:
+                    print("✅ 异步清理完成")
+                    self.log_message("✅ 后台进程清理完成", "success")
+                else:
+                    print("❌ 异步清理失败")
+                    self.log_message("⚠️ 后台进程清理遇到问题", "warning")
+
+                # 关闭线程池
+                executor.shutdown(wait=False)
+
+        except Exception as e:
+            print(f"❌ 检查清理状态失败: {e}")
+            self._cleanup_timer.stop()
+            executor.shutdown(wait=False)
+
+    # 注释：原来的同步清理方法已移除，现在使用异步清理避免UI卡顿
+
+    def _cleanup_easytier_processes(self):
+        """清理EasyTier残余进程"""
+        try:
+            import psutil
+            found_processes = []
+
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'] == 'easytier-core.exe':
+                        found_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if found_processes:
+                print(f"🔍 发现 {len(found_processes)} 个残余EasyTier进程")
+                self.log_message(f"🔍 发现 {len(found_processes)} 个残余EasyTier进程，正在清理...", "info")
+
+                for proc in found_processes:
+                    try:
+                        print(f"  终止EasyTier进程 PID: {proc.pid}")
+                        proc.terminate()
+                        # 等待进程结束
+                        proc.wait(timeout=3)
+                    except psutil.TimeoutExpired:
+                        # 强制终止
+                        try:
+                            proc.kill()
+                            print(f"  强制终止EasyTier进程 PID: {proc.pid}")
+                        except:
+                            pass
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                    except Exception as e:
+                        print(f"  终止进程 {proc.pid} 失败: {e}")
+
+                print("✅ EasyTier残余进程已清理")
+            else:
+                print("🔍 未发现EasyTier残余进程")
+
+        except Exception as e:
+            print(f"❌ 清理EasyTier进程失败: {e}")
+
+    def _cleanup_winip_processes(self):
+        """清理WinIPBroadcast残余进程"""
+        try:
+            import psutil
+            found_processes = []
+
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() == 'winipbroadcast.exe':
+                        found_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if found_processes:
+                print(f"🔍 发现 {len(found_processes)} 个残余WinIPBroadcast进程")
+                self.log_message(f"🔍 发现 {len(found_processes)} 个残余WinIPBroadcast进程，正在清理...", "info")
+
+                for proc in found_processes:
+                    try:
+                        print(f"  终止WinIPBroadcast进程 PID: {proc.pid}")
+                        proc.terminate()
+                        proc.wait(timeout=3)
+                    except psutil.TimeoutExpired:
+                        try:
+                            proc.kill()
+                            print(f"  强制终止WinIPBroadcast进程 PID: {proc.pid}")
+                        except:
+                            pass
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                    except Exception as e:
+                        print(f"  终止进程 {proc.pid} 失败: {e}")
+
+                print("✅ WinIPBroadcast残余进程已清理")
+            else:
+                print("🔍 未发现WinIPBroadcast残余进程")
+
+        except Exception as e:
+            print(f"❌ 清理WinIPBroadcast进程失败: {e}")
+
+    # KCP进程清理功能已移除，因为EasyTier自带KCP支持
     
     def setup_content(self):
         """设置页面内容"""
@@ -734,8 +890,6 @@ class VirtualLanPage(BasePage):
         layout = QVBoxLayout(group)
         layout.setSpacing(15)
 
-
-
         # 房间代码输入区域
         join_group = QGroupBox("通过房间代码添加")
         join_group.setStyleSheet("""
@@ -862,8 +1016,6 @@ class VirtualLanPage(BasePage):
 
         join_layout.addLayout(join_btn_layout)
         layout.addWidget(join_group)
-
-
 
         return group
 
@@ -1259,8 +1411,6 @@ class VirtualLanPage(BasePage):
                 except Exception as e:
                     print(f"读取房间配置失败 {room_file}: {e}")
 
-
-
     def show_room_context_menu(self, position):
         """显示房间右键菜单"""
         item = self.room_list_widget.itemAt(position)
@@ -1315,12 +1465,22 @@ class VirtualLanPage(BasePage):
     def load_room_from_list(self, room_name: str):
         """从列表加载房间配置"""
         try:
+            # 检查网络运行状态
+            if self.easytier_manager.is_running:
+                current_network_name = self.network_name_edit.text().strip()
+                if current_network_name != room_name:
+                    self.log_message(f"❌ 加载失败：网络正在运行中，请先停止网络再切换到房间 '{room_name}'", "error")
+                    return
+                else:
+                    # 如果是当前房间，允许重新加载（刷新配置）
+                    self.log_message(f"🔄 重新加载当前房间 '{room_name}' 的配置", "info")
+
             # 读取房间配置
             rooms_dir = self.get_rooms_dir()
             room_file = rooms_dir / f"{room_name}.json"
 
             if not room_file.exists():
-                self.log_message(f"房间配置文件不存在: {room_name}", "error")
+                self.log_message(f"❌ 房间配置文件不存在: {room_name}", "error")
                 return
 
             with open(room_file, 'r', encoding='utf-8') as f:
@@ -1349,10 +1509,10 @@ class VirtualLanPage(BasePage):
                     radio_button.setChecked(False)
                 radio_button.setEnabled(False)  # 重新禁用
 
-            self.log_message(f"已加载房间 '{room_name}' 的配置", "success")
+            self.log_message(f"✅ 已加载房间 '{room_name}' 的配置", "success")
 
         except Exception as e:
-            self.log_message(f"加载房间配置失败: {str(e)}", "error")
+            self.log_message(f"❌ 加载房间配置失败: {str(e)}", "error")
 
     def share_room_from_list(self, room_name: str):
         """从列表分享房间"""
@@ -1368,24 +1528,40 @@ class VirtualLanPage(BasePage):
             with open(room_file, 'r', encoding='utf-8') as f:
                 room_config = json.load(f)
 
-            # 创建分享配置（不包含hostname和房间元数据）
+            # 创建极简分享配置（只包含必要字段）
             share_config = {
-                "network_name": room_config["network_name"],
-                "network_secret": room_config["network_secret"],
-                "peers": room_config.get("peers", ["tcp://public.easytier.top:11010"]),
-                "dhcp": room_config.get("dhcp", True),
-                "disable_encryption": room_config.get("disable_encryption", False),
-                "disable_ipv6": room_config.get("disable_ipv6", False),
-                "latency_first": room_config.get("latency_first", True),
-                "multi_thread": room_config.get("multi_thread", True)
+                "n": room_config["network_name"],      # 房间名称
+                "s": room_config["network_secret"],    # 房间密码
             }
 
-            # 添加IP配置（如果有）
-            if "ipv4" in room_config:
-                share_config["ipv4"] = room_config["ipv4"]
+            # 本机IP配置（只在非DHCP时添加）
+            if not room_config.get("dhcp", True):
+                # 检查是否是有效的IPv4地址
+                ipv4 = room_config.get("ipv4", "")
+                if self._is_valid_ipv4(ipv4):
+                    share_config["i"] = ipv4  # 包含具体IP
+                else:
+                    share_config["d"] = False  # 标记为非DHCP但无有效IP
+            # DHCP模式不添加任何IP相关字段（默认就是DHCP）
 
-            # 编码为base64
-            config_json = json.dumps(share_config, ensure_ascii=False)
+            # 公益服务器配置（只在选择了公益服务器时添加城市名）
+            peers = room_config.get("peers", ["tcp://public.easytier.top:11010"])
+            charity_servers = [peer for peer in peers if peer != "tcp://public.easytier.top:11010"]
+
+            if charity_servers:
+                # 获取选中的公益服务器城市名
+                city_names = []
+                for server_url in charity_servers:
+                    for server in self.server_list:
+                        if server['url'] == server_url:
+                            city_names.append(server['name'])
+                            break
+
+                if city_names:
+                    share_config["c"] = city_names  # 城市名列表
+
+            # 使用紧凑的JSON格式（无空格）并编码为base64
+            config_json = json.dumps(share_config, ensure_ascii=False, separators=(',', ':'))
             config_b64 = base64.b64encode(config_json.encode('utf-8')).decode('ascii')
             share_code = f"ESR://{config_b64}"
 
@@ -1399,24 +1575,157 @@ class VirtualLanPage(BasePage):
         except Exception as e:
             self.log_message(f"分享房间失败: {str(e)}", "error")
 
+    def _is_valid_ipv4(self, ip: str) -> bool:
+        """验证是否是有效的IPv4地址"""
+        try:
+            import ipaddress
+            ipaddress.IPv4Address(ip)
+            return True
+        except:
+            return False
+
+    def _convert_share_config(self, raw_config: dict) -> dict:
+        """转换极简分享配置到完整格式，兼容新旧格式"""
+        # 如果是新的极简格式（只有n、s等核心字段）
+        if "n" in raw_config and "s" in raw_config:
+            # 极简格式转换为完整格式，所有高级选项使用默认值（全部启用）
+            converted = {
+                "network_name": raw_config["n"],
+                "network_secret": raw_config["s"],
+                "peers": ["tcp://public.easytier.top:11010"],  # 默认使用公共服务器
+                "dhcp": True,  # 默认使用DHCP
+                # 所有高级选项使用默认值（全部启用）
+                "disable_encryption": False,  # 启用加密
+                "disable_ipv6": False,         # 启用IPv6
+                "latency_first": True,         # 启用延迟优先
+                "multi_thread": True,          # 启用多线程
+                # EasyTier网络加速选项（全部启用）
+                "enable_kcp_proxy": True,      # 启用KCP代理
+                "enable_quic_proxy": True,     # 启用QUIC代理
+                "use_smoltcp": True,           # 启用用户态网络栈
+                "enable_compression": True,    # 启用压缩算法
+                # 网络优化配置（全部启用）
+                "network_optimization": {
+                    "winip_broadcast": True,   # 启用IP广播
+                    "auto_metric": True        # 启用自动跃点
+                }
+            }
+
+            # 处理IP配置
+            if "i" in raw_config:
+                # 有具体IP地址
+                converted["ipv4"] = raw_config["i"]
+                converted["dhcp"] = False
+            elif "d" in raw_config and not raw_config["d"]:
+                # 标记为非DHCP但无具体IP
+                converted["dhcp"] = False
+            # 否则使用默认DHCP
+
+            # 处理公益服务器配置
+            if "c" in raw_config:
+                # 根据城市名找到对应的服务器URL
+                city_names = raw_config["c"]
+                if isinstance(city_names, str):
+                    city_names = [city_names]
+
+                # 查找对应的服务器URL
+                for city_name in city_names:
+                    for server in self.server_list:
+                        if server['name'] == city_name:
+                            converted["peers"].append(server['url'])
+                            break
+
+            return converted
+        else:
+            # 旧的完整格式，直接返回（向后兼容）
+            return raw_config
+
     def delete_room_from_list(self, room_name: str):
         """从列表删除房间"""
         try:
+            # 检查是否是当前加载的房间
+            current_network_name = self.network_name_edit.text().strip()
+            is_current_room = (current_network_name == room_name)
+
+            # 如果是当前加载的房间且网络正在运行，则拒绝删除
+            if is_current_room and self.easytier_manager.is_running:
+                self.log_message(f"❌ 删除失败：房间 '{room_name}' 正在运行中，请先停止网络", "error")
+                return
+
             # 删除房间配置文件
             rooms_dir = self.get_rooms_dir()
             room_file = rooms_dir / f"{room_name}.json"
 
             if room_file.exists():
                 room_file.unlink()
-                self.log_message(f"房间 '{room_name}' 已删除", "success")
+                self.log_message(f"✅ 房间 '{room_name}' 已删除", "success")
 
                 # 刷新房间列表
                 self.refresh_room_list_widget()
+
+                # 如果删除的是当前加载的房间且网络未运行，自动加载第一个房间
+                if is_current_room and not self.easytier_manager.is_running:
+                    self.auto_load_first_room()
+
             else:
-                self.log_message(f"房间配置文件不存在: {room_name}", "error")
+                self.log_message(f"❌ 房间配置文件不存在: {room_name}", "error")
 
         except Exception as e:
-            self.log_message(f"删除房间失败: {str(e)}", "error")
+            self.log_message(f"❌ 删除房间失败: {str(e)}", "error")
+
+    def auto_load_first_room(self):
+        """自动加载列表中的第一个房间"""
+        try:
+            # 安全检查：确保网络未运行
+            if self.easytier_manager.is_running:
+                self.log_message("⚠️ 网络正在运行中，跳过自动加载房间", "warning")
+                return
+
+            # 获取房间列表
+            rooms_dir = self.get_rooms_dir()
+            room_files = list(rooms_dir.glob("*.json"))
+
+            if room_files:
+                # 按文件名排序，加载第一个
+                room_files.sort(key=lambda x: x.stem)
+                first_room_name = room_files[0].stem
+
+                # 加载第一个房间
+                self.load_room_from_list(first_room_name)
+                self.log_message(f"🔄 已自动加载房间: {first_room_name}", "info")
+            else:
+                # 没有房间了，清空配置
+                self.clear_room_config()
+                self.log_message("📝 房间列表为空，已清空配置", "info")
+
+        except Exception as e:
+            self.log_message(f"⚠️ 自动加载房间失败: {str(e)}", "warning")
+
+    def clear_room_config(self):
+        """清空房间配置"""
+        try:
+            # 清空UI输入框
+            self.network_name_edit.clear()
+            self.machine_id_edit.clear()
+            self.network_secret_edit.clear()
+            self.peer_ip_edit.clear()
+
+            # 重置复选框为默认状态
+            self.dhcp_check.setChecked(True)
+            self.encryption_check.setChecked(True)
+            self.ipv6_check.setChecked(True)
+            self.latency_first_check.setChecked(True)
+            self.multi_thread_check.setChecked(True)
+
+            # 重置网络优化选项为默认状态
+            if hasattr(self, 'winip_broadcast_check'):
+                self.winip_broadcast_check.setChecked(True)
+            if hasattr(self, 'auto_metric_check'):
+                self.auto_metric_check.setChecked(True)
+            # KCP配置已移除
+
+        except Exception as e:
+            print(f"清空房间配置失败: {e}")
 
     def get_rooms_dir(self) -> Path:
         """获取房间配置目录"""
@@ -1428,8 +1737,6 @@ class VirtualLanPage(BasePage):
         rooms_dir = root_dir / "ESR" / "rooms_config"
         rooms_dir.mkdir(parents=True, exist_ok=True)
         return rooms_dir
-
-
 
     def create_room(self):
         """创建房间"""
@@ -1470,6 +1777,11 @@ class VirtualLanPage(BasePage):
                 "disable_ipv6": not self.ipv6_check.isChecked(),
                 "latency_first": self.latency_first_check.isChecked(),
                 "multi_thread": self.multi_thread_check.isChecked(),
+                # 网络优化配置
+                "network_optimization": {
+                    "winip_broadcast": self.winip_broadcast_check.isChecked(),
+                    "auto_metric": self.auto_metric_check.isChecked(),
+                },
                 # 房间元数据
                 "_room_meta": {
                     "created_by": hostname,
@@ -1502,8 +1814,6 @@ class VirtualLanPage(BasePage):
         except Exception as e:
             self.log_message(f"创建房间失败: {str(e)}", "error")
 
-
-
     def join_room(self):
         """添加房间"""
         try:
@@ -1528,7 +1838,11 @@ class VirtualLanPage(BasePage):
             try:
                 config_b64 = room_code[6:]  # 去掉 ESR:// 前缀
                 config_json = base64.b64decode(config_b64).decode('utf-8')
-                room_config = json.loads(config_json)
+                raw_config = json.loads(config_json)
+
+                # 转换精简格式到完整格式
+                room_config = self._convert_share_config(raw_config)
+
             except Exception as e:
                 self.log_message(f"房间代码解析失败: {str(e)}", "error")
                 return
@@ -1561,6 +1875,11 @@ class VirtualLanPage(BasePage):
                 "disable_ipv6": room_config.get("disable_ipv6", False),
                 "latency_first": room_config.get("latency_first", True),
                 "multi_thread": room_config.get("multi_thread", True),
+                # 网络优化配置（从分享的房间配置中获取，如果没有则使用当前设置）
+                "network_optimization": room_config.get("network_optimization", {
+                    "winip_broadcast": self.winip_broadcast_check.isChecked(),
+                    "auto_metric": self.auto_metric_check.isChecked(),
+                }),
                 # 房间元数据
                 "_room_meta": {
                     "joined_by": player_name,
@@ -1616,6 +1935,24 @@ class VirtualLanPage(BasePage):
             self.latency_first_check.setChecked(room_config.get("latency_first", True))
             self.multi_thread_check.setChecked(room_config.get("multi_thread", True))
 
+            # EasyTier网络加速设置
+            if hasattr(self, 'kcp_proxy_check'):
+                self.kcp_proxy_check.setChecked(room_config.get("enable_kcp_proxy", True))
+            if hasattr(self, 'quic_proxy_check'):
+                self.quic_proxy_check.setChecked(room_config.get("enable_quic_proxy", True))
+            if hasattr(self, 'smoltcp_check'):
+                self.smoltcp_check.setChecked(room_config.get("use_smoltcp", True))
+            if hasattr(self, 'compression_check'):
+                self.compression_check.setChecked(room_config.get("enable_compression", True))
+
+            # 网络优化设置
+            network_optimization = room_config.get("network_optimization", {})
+            if hasattr(self, 'winip_broadcast_check'):
+                self.winip_broadcast_check.setChecked(network_optimization.get("winip_broadcast", True))
+            if hasattr(self, 'auto_metric_check'):
+                self.auto_metric_check.setChecked(network_optimization.get("auto_metric", True))
+            # KCP配置已移除
+
             # 服务器配置（从peers字段解析）
             if hasattr(self, 'server_list'):
                 peers = room_config.get("peers", ["tcp://public.easytier.top:11010"])
@@ -1658,6 +1995,16 @@ class VirtualLanPage(BasePage):
                 "disable_ipv6": not self.ipv6_check.isChecked(),
                 "latency_first": self.latency_first_check.isChecked(),
                 "multi_thread": self.multi_thread_check.isChecked(),
+                # EasyTier网络加速选项
+                "enable_kcp_proxy": self.kcp_proxy_check.isChecked(),
+                "enable_quic_proxy": self.quic_proxy_check.isChecked(),
+                "use_smoltcp": self.smoltcp_check.isChecked(),
+                "enable_compression": self.compression_check.isChecked(),
+                # 网络优化配置
+                "network_optimization": {
+                    "winip_broadcast": self.winip_broadcast_check.isChecked(),
+                    "auto_metric": self.auto_metric_check.isChecked(),
+                },
             }
 
             # IP配置
@@ -1814,43 +2161,203 @@ class VirtualLanPage(BasePage):
             }
         """)
         layout = QGridLayout(group)
-        layout.setSpacing(15)
+        layout.setSpacing(6)  # 减少组件间距
+        layout.setContentsMargins(12, 8, 12, 8)  # 减少内边距
+
+        # 设置紧凑的复选框样式
+        compact_checkbox_style = """
+            QCheckBox {
+                margin: 1px 0px;
+                padding: 1px 0px;
+                font-size: 12px;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+            }
+        """
 
         # 加密选项
         self.encryption_check = QCheckBox("启用加密")
         self.encryption_check.setChecked(True)
+        self.encryption_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.encryption_check, 0, 0)
 
         # IPv6选项
         self.ipv6_check = QCheckBox("启用IPv6")
         self.ipv6_check.setChecked(True)  # 默认启用
+        self.ipv6_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.ipv6_check, 0, 1)
 
         # 延迟优先选项
         self.latency_first_check = QCheckBox("延迟优先")
         self.latency_first_check.setChecked(True)  # 默认启用延迟优先
+        self.latency_first_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.latency_first_check, 1, 0)
 
         # 多线程选项
         self.multi_thread_check = QCheckBox("使用多线程运行")
         self.multi_thread_check.setChecked(True)  # 默认启用多线程
+        self.multi_thread_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.multi_thread_check, 1, 1)
 
         # IPv6提醒信息
-        ipv6_hint = QLabel("💡 提醒：若启动失败可尝试取消勾选「启用IPv6」")
+        ipv6_hint = QLabel("💡 提醒：若启动失败可尝试取消勾选「启用IPv6」，其他选项尽量不要动！")
         ipv6_hint.setStyleSheet("""
             QLabel {
                 color: #fab387;
                 font-size: 11px;
                 font-style: italic;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 background-color: rgba(250, 179, 135, 0.1);
                 border: 1px solid rgba(250, 179, 135, 0.3);
-                border-radius: 4px;
-                margin-top: 8px;
+                border-radius: 3px;
+                margin: 3px 0px;
+                min-height: 16px;
             }
         """)
         layout.addWidget(ipv6_hint, 2, 0, 1, 2)  # 跨两列显示
+
+        # 分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("QFrame { color: #45475a; }")
+        layout.addWidget(separator, 3, 0, 1, 2)
+
+        # 网络优化标题
+        optimization_label = QLabel("🚀 游戏联机优化")
+        optimization_label.setStyleSheet("""
+            QLabel {
+                color: #a6e3a1;
+                font-size: 12px;
+                font-weight: bold;
+                margin: 4px 0px 2px 0px;
+                padding: 0px;
+            }
+        """)
+        layout.addWidget(optimization_label, 4, 0, 1, 2)
+
+        # WinIPBroadcast选项
+        self.winip_broadcast_check = QCheckBox("启用WinIPBroadcast")
+        self.winip_broadcast_check.setChecked(self.network_config.is_winip_broadcast_enabled())
+        self.winip_broadcast_check.setToolTip("解决局域网游戏房间发现问题（推荐启用）")
+        self.winip_broadcast_check.stateChanged.connect(self.on_optimization_setting_changed)
+        self.winip_broadcast_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.winip_broadcast_check, 5, 0)
+
+        # 网卡跃点优化选项
+        self.auto_metric_check = QCheckBox("自动优化网卡跃点")
+        self.auto_metric_check.setChecked(self.network_config.is_network_metric_enabled())
+        self.auto_metric_check.setToolTip("自动设置EasyTier网卡为最高优先级（推荐启用）")
+        self.auto_metric_check.stateChanged.connect(self.on_optimization_setting_changed)
+        self.auto_metric_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.auto_metric_check, 5, 1)
+
+        # 添加分隔线
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.HLine)
+        separator2.setFrameShadow(QFrame.Sunken)
+        separator2.setStyleSheet("QFrame { color: #45475a; }")
+        layout.addWidget(separator2, 6, 0, 1, 2)
+
+        # EasyTier网络优化标题
+        easytier_label = QLabel("⚡ EasyTier网络加速")
+        easytier_label.setStyleSheet("""
+            QLabel {
+                color: #f9e2af;
+                font-size: 12px;
+                font-weight: bold;
+                margin: 4px 0px 2px 0px;
+                padding: 0px;
+            }
+        """)
+        layout.addWidget(easytier_label, 7, 0, 1, 2)
+
+        # KCP代理选项
+        self.kcp_proxy_check = QCheckBox("启用KCP代理")
+        self.kcp_proxy_check.setChecked(True)  # 默认启用
+        self.kcp_proxy_check.setToolTip("使用KCP代理TCP流，提高在UDP丢包网络上的延迟和吞吐量")
+        self.kcp_proxy_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.kcp_proxy_check, 8, 0)
+
+        # QUIC代理选项
+        self.quic_proxy_check = QCheckBox("启用QUIC代理")
+        self.quic_proxy_check.setChecked(True)  # 默认启用
+        self.quic_proxy_check.setToolTip("使用QUIC代理TCP流，提高在UDP丢包网络上的延迟和吞吐量")
+        self.quic_proxy_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.quic_proxy_check, 8, 1)
+
+        # 用户态网络栈选项
+        self.smoltcp_check = QCheckBox("启用用户态网络栈")
+        self.smoltcp_check.setChecked(True)  # 默认启用
+        self.smoltcp_check.setToolTip("为子网代理和代理启用smoltcp堆栈，提升性能")
+        self.smoltcp_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.smoltcp_check, 9, 0)
+
+        # 压缩算法选项
+        self.compression_check = QCheckBox("启用压缩算法")
+        self.compression_check.setChecked(True)  # 默认启用
+        self.compression_check.setToolTip("使用zstd压缩算法减少网络流量")
+        self.compression_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.compression_check, 9, 1)
+
+        # 网络加速提醒信息
+        acceleration_hint = QLabel("🚀 网络加速：KCP/QUIC代理提升网络性能，用户态网络栈优化延迟，压缩减少流量")
+        acceleration_hint.setStyleSheet("""
+            QLabel {
+                color: #f9e2af;
+                font-size: 11px;
+                font-style: italic;
+                padding: 4px 8px;
+                background-color: rgba(249, 226, 175, 0.1);
+                border: 1px solid rgba(249, 226, 175, 0.3);
+                border-radius: 3px;
+                margin: 3px 0px;
+                min-height: 16px;
+            }
+        """)
+        layout.addWidget(acceleration_hint, 10, 0, 1, 2)
+
+        # 优化状态显示按钮
+        self.optimization_status_btn = QPushButton("📊 查看状态")
+        self.optimization_status_btn.setToolTip("查看当前网络优化状态和详细信息")
+        self.optimization_status_btn.clicked.connect(self.show_optimization_status)
+        self.optimization_status_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c7086;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 6px;
+                margin: 1px 0px;
+                min-height: 18px;
+                max-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #7c7f93;
+            }
+        """)
+        layout.addWidget(self.optimization_status_btn, 11, 0)
+
+        # 网络优化提醒信息
+        optimization_hint = QLabel("💡 游戏优化：WinIPBroadcast解决房间发现问题，网卡跃点优化确保游戏流量优先级")
+        optimization_hint.setStyleSheet("""
+            QLabel {
+                color: #a6e3a1;
+                font-size: 11px;
+                font-style: italic;
+                padding: 4px 8px;
+                background-color: rgba(166, 227, 161, 0.1);
+                border: 1px solid rgba(166, 227, 161, 0.3);
+                border-radius: 3px;
+                margin: 3px 0px;
+                min-height: 16px;
+            }
+        """)
+        layout.addWidget(optimization_hint, 12, 0, 1, 2)
 
         return group
     
@@ -1944,11 +2451,11 @@ class VirtualLanPage(BasePage):
         layout = QVBoxLayout(widget)
         layout.setSpacing(15)
         
-        # 连接信息
-        self.connection_info_group = self.create_connection_info_group()
-        layout.addWidget(self.connection_info_group)
-        
-        # 节点列表
+        # 网络优化工具状态
+        self.optimization_tools_group = self.create_optimization_tools_group()
+        layout.addWidget(self.optimization_tools_group)
+
+        # 组队房间信息
         self.peer_list_group = self.create_peer_list_group()
         layout.addWidget(self.peer_list_group)
         
@@ -1958,9 +2465,10 @@ class VirtualLanPage(BasePage):
         
         return widget
     
-    def create_connection_info_group(self) -> QGroupBox:
-        """创建连接信息组"""
-        group = QGroupBox("连接信息")
+
+    def create_optimization_tools_group(self) -> QGroupBox:
+        """创建网络优化工具状态组"""
+        group = QGroupBox("网络优化工具")
         group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -1975,38 +2483,60 @@ class VirtualLanPage(BasePage):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 8px 0 8px;
-                color: #89b4fa;
+                color: #a6e3a1;
             }
             QLabel {
                 color: #cdd6f4;
                 font-weight: normal;
+                font-size: 12px;
             }
         """)
         layout = QGridLayout(group)
-        
-        # 网络名称
-        network_title = QLabel("当前网络:")
-        network_title.setStyleSheet("color: #cdd6f4; font-weight: bold;")
-        layout.addWidget(network_title, 0, 0)
-        self.current_network_label = QLabel("未连接")
-        self.current_network_label.setStyleSheet("color: #bac2de;")
-        layout.addWidget(self.current_network_label, 0, 1)
 
-        # 本机IP
-        ip_title = QLabel("本机IP:")
-        ip_title.setStyleSheet("color: #cdd6f4; font-weight: bold;")
-        layout.addWidget(ip_title, 1, 0)
-        self.current_ip_label = QLabel("未分配")
-        self.current_ip_label.setStyleSheet("color: #bac2de;")
-        layout.addWidget(self.current_ip_label, 1, 1)
+        # WinIPBroadcast状态
+        winip_title = QLabel("IP广播:")
+        winip_title.setStyleSheet("color: #cdd6f4; font-weight: bold;")
+        layout.addWidget(winip_title, 0, 0)
+        self.winip_status_label = QLabel("❌ 未运行")
+        self.winip_status_label.setStyleSheet("color: #f38ba8;")
+        layout.addWidget(self.winip_status_label, 0, 1)
 
+        # 网卡跃点状态
+        metric_title = QLabel("跃点优化:")
+        metric_title.setStyleSheet("color: #cdd6f4; font-weight: bold;")
+        layout.addWidget(metric_title, 1, 0)
+        self.metric_status_label = QLabel("❌ 未优化")
+        self.metric_status_label.setStyleSheet("color: #f38ba8;")
+        layout.addWidget(self.metric_status_label, 1, 1)
 
-        
+        # KCP代理状态已移除
+
+        # 工具状态刷新按钮
+        refresh_btn = QPushButton("🔄 刷新状态")
+        refresh_btn.setToolTip("刷新网络优化工具状态")
+        refresh_btn.clicked.connect(self.refresh_optimization_tools_status)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 4px 8px;
+                margin-top: 5px;
+            }
+            QPushButton:hover {
+                background-color: #94e2d5;
+            }
+        """)
+        layout.addWidget(refresh_btn, 3, 0, 1, 2)
+
         return group
 
     def create_peer_list_group(self) -> QGroupBox:
-        """创建节点列表组"""
-        group = QGroupBox("连接节点")
+        """创建组队房间信息组"""
+        group = QGroupBox("组队房间信息")
         group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -2056,9 +2586,12 @@ class VirtualLanPage(BasePage):
         # 设置表格样式
         header = self.peer_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # IP地址
-        header.setSectionResizeMode(1, QHeaderView.Stretch)           # 主机名
+        header.setSectionResizeMode(1, QHeaderView.Stretch)           # 玩家名称
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 延迟
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 连接方式
+
+        # 隐藏行号列
+        self.peer_table.verticalHeader().setVisible(False)
 
         self.peer_table.setAlternatingRowColors(True)
         self.peer_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -2067,6 +2600,149 @@ class VirtualLanPage(BasePage):
         layout.addWidget(self.peer_table)
 
         return group
+
+    def update_peer_table_with_local_info(self):
+        """智能更新节点表格，包含本机信息"""
+        try:
+            # 获取本机信息
+            local_ip = getattr(self, 'current_ip_label', None)
+            local_network = getattr(self, 'current_network_label', None)
+
+            local_ip_text = local_ip.text() if local_ip else "未分配"
+            local_network_text = local_network.text() if local_network else "未连接"
+
+            # 只有在有有效连接信息时才更新
+            if local_ip_text == "未分配" or local_network_text == "未连接":
+                return
+
+            # 检查是否需要添加本机信息行
+            local_row_exists = False
+            local_row_index = -1
+
+            # 查找本机信息行
+            for row in range(self.peer_table.rowCount()):
+                name_item = self.peer_table.item(row, 1)
+                if name_item and "(本人)" in name_item.text():
+                    local_row_exists = True
+                    local_row_index = row
+                    break
+
+            # 获取主机名
+            hostname = "本机"
+            if hasattr(self, 'machine_id_edit') and self.machine_id_edit.text().strip():
+                hostname = self.machine_id_edit.text().strip()
+            elif hasattr(self, 'hostname_input') and self.hostname_input.text().strip():
+                hostname = self.hostname_input.text().strip()
+            elif hasattr(self, 'hostname_edit') and self.hostname_edit.text().strip():
+                hostname = self.hostname_edit.text().strip()
+
+            if not local_row_exists:
+                # 添加本机信息行到第一行
+                self.peer_table.insertRow(0)
+                local_row_index = 0
+
+                # 创建本机信息项
+                self._create_local_info_row(0, local_ip_text, hostname)
+            else:
+                # 更新现有本机信息
+                self._update_local_info_row(local_row_index, local_ip_text, hostname)
+
+            # 获取其他节点信息（如果有的话）
+            if hasattr(self.easytier_manager, 'get_peer_info'):
+                peers = self.easytier_manager.get_peer_info()
+                self._update_peer_rows(peers, local_row_index)
+
+        except Exception as e:
+            print(f"❌ 更新节点表格失败: {e}")
+
+    def _create_local_info_row(self, row_index: int, ip_text: str, hostname: str):
+        """创建本机信息行"""
+        # IP地址
+        ip_item = QTableWidgetItem(ip_text)
+        ip_item.setTextAlignment(Qt.AlignCenter)
+        self.peer_table.setItem(row_index, 0, ip_item)
+
+        # 玩家名称（标注本人）
+        display_name = f"{hostname} (本人)"
+        name_item = QTableWidgetItem(display_name)
+        name_item.setTextAlignment(Qt.AlignCenter)
+        name_item.setForeground(QColor("#a6e3a1"))  # 绿色高亮本人
+        self.peer_table.setItem(row_index, 1, name_item)
+
+        # 延迟
+        latency_item = QTableWidgetItem("0ms")
+        latency_item.setTextAlignment(Qt.AlignCenter)
+        latency_item.setForeground(QColor("#a6e3a1"))
+        self.peer_table.setItem(row_index, 2, latency_item)
+
+        # 连接方式
+        connection_item = QTableWidgetItem("本机")
+        connection_item.setTextAlignment(Qt.AlignCenter)
+        connection_item.setForeground(QColor("#89b4fa"))
+        self.peer_table.setItem(row_index, 3, connection_item)
+
+    def _update_local_info_row(self, row_index: int, ip_text: str, hostname: str):
+        """更新本机信息行"""
+        # 只更新可能变化的信息
+        ip_item = self.peer_table.item(row_index, 0)
+        if ip_item and ip_item.text() != ip_text:
+            ip_item.setText(ip_text)
+
+        name_item = self.peer_table.item(row_index, 1)
+        new_name = f"{hostname} (本人)"
+        if name_item and name_item.text() != new_name:
+            name_item.setText(new_name)
+
+    def _update_peer_rows(self, peers: list, local_row_index: int):
+        """更新其他节点行"""
+        # 这里可以添加其他节点的智能更新逻辑
+        # 目前先保持简单，只处理本机信息
+        # 避免未使用参数警告
+        _ = peers, local_row_index
+
+    def ensure_local_info_exists(self):
+        """确保本机信息始终存在于表格首行"""
+        try:
+            # 获取连接信息
+            local_ip_text = self.current_ip_label.text() if hasattr(self, 'current_ip_label') else "未分配"
+            local_network_text = self.current_network_label.text() if hasattr(self, 'current_network_label') else "未连接"
+
+            # 只有在有有效连接时才添加本机信息
+            if local_ip_text == "未分配" or local_network_text == "未连接":
+                return
+
+            # 检查首行是否是本机信息
+            if self.peer_table.rowCount() == 0:
+                # 表格为空，添加本机信息
+                hostname = "本机"
+                if hasattr(self, 'machine_id_edit') and self.machine_id_edit.text().strip():
+                    hostname = self.machine_id_edit.text().strip()
+                elif hasattr(self, 'hostname_input') and self.hostname_input.text().strip():
+                    hostname = self.hostname_input.text().strip()
+                elif hasattr(self, 'hostname_edit') and self.hostname_edit.text().strip():
+                    hostname = self.hostname_edit.text().strip()
+
+                self.peer_table.insertRow(0)
+                self._create_local_info_row(0, local_ip_text, hostname)
+
+            else:
+                # 检查首行是否是本机信息
+                name_item = self.peer_table.item(0, 1)
+                if not name_item or "(本人)" not in name_item.text():
+                    # 首行不是本机信息，插入本机信息到首行
+                    hostname = "本机"
+                    if hasattr(self, 'machine_id_edit') and self.machine_id_edit.text().strip():
+                        hostname = self.machine_id_edit.text().strip()
+                    elif hasattr(self, 'hostname_input') and self.hostname_input.text().strip():
+                        hostname = self.hostname_input.text().strip()
+                    elif hasattr(self, 'hostname_edit') and self.hostname_edit.text().strip():
+                        hostname = self.hostname_edit.text().strip()
+
+                    self.peer_table.insertRow(0)
+                    self._create_local_info_row(0, local_ip_text, hostname)
+
+        except Exception as e:
+            print(f"❌ 确保本机信息存在失败: {e}")
 
     def create_log_group(self) -> QGroupBox:
         """创建日志组"""
@@ -2129,6 +2805,7 @@ class VirtualLanPage(BasePage):
 
     def check_installation_status(self):
         """检查安装状态"""
+        # 检查EasyTier安装状态
         if self.easytier_manager.is_easytier_installed():
             self.status_label.setText("已安装")
             self.status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
@@ -2140,16 +2817,34 @@ class VirtualLanPage(BasePage):
             else:
                 self.version_label.setText("未知版本")
 
-
         else:
             self.status_label.setText("未安装")
             self.status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
             self.version_label.setText("未安装")
 
-
+        # 检查网络优化工具状态
+        self.check_tools_status()
 
         # 加载配置
         self.load_config()
+
+    def check_tools_status(self):
+        """检查网络优化工具状态"""
+        try:
+            print("🔍 检查网络优化工具状态...")
+            self.log_message("🔍 正在检查网络优化工具...", "info")
+
+            # 检查工具是否可用
+            if self.tool_manager.ensure_tools_available_with_ui_feedback(self.log_message):
+                print("✅ 网络优化工具检查完成")
+                self.log_message("✅ 网络优化工具已就绪", "success")
+            else:
+                print("❌ 网络优化工具检查失败")
+                self.log_message("❌ 网络优化工具缺失或损坏", "error")
+
+        except Exception as e:
+            print(f"❌ 工具状态检查失败: {e}")
+            self.log_message(f"❌ 工具状态检查失败: {e}", "error")
 
     def load_config(self):
         """加载配置"""
@@ -2179,6 +2874,9 @@ class VirtualLanPage(BasePage):
         self.latency_first_check.setChecked(config.get("latency_first", True))         # 默认启用延迟优先
         self.multi_thread_check.setChecked(config.get("multi_thread", True))           # 默认启用多线程
 
+        # 加载网络优化设置（从 easytier_config.json）
+        self.load_network_optimization_from_easytier_config()
+
         # 加载服务器选择状态
         if hasattr(self, 'server_list'):
             selected_peers = config.get("peers", ["tcp://public.easytier.top:11010"])
@@ -2205,7 +2903,12 @@ class VirtualLanPage(BasePage):
             "disable_encryption": not self.encryption_check.isChecked(), # --disable-encryption
             "disable_ipv6": not self.ipv6_check.isChecked(),           # --disable-ipv6
             "latency_first": self.latency_first_check.isChecked(),      # --latency-first
-            "multi_thread": self.multi_thread_check.isChecked()         # --multi-thread
+            "multi_thread": self.multi_thread_check.isChecked(),        # --multi-thread
+            # EasyTier网络加速选项
+            "enable_kcp_proxy": self.kcp_proxy_check.isChecked(),       # --enable-kcp-proxy
+            "enable_quic_proxy": self.quic_proxy_check.isChecked(),     # --enable-quic-proxy
+            "use_smoltcp": self.smoltcp_check.isChecked(),              # --use-smoltcp
+            "enable_compression": self.compression_check.isChecked()    # --compression
         }
 
         # 收集选中的公益服务器
@@ -2224,8 +2927,6 @@ class VirtualLanPage(BasePage):
             config["ipv4"] = self.peer_ip_edit.text().strip()          # --ipv4
 
         self.easytier_manager.update_config(config)
-
-
 
     def start_network(self):
         """启动网络"""
@@ -2274,93 +2975,516 @@ class VirtualLanPage(BasePage):
                 if server['enabled']:
                     selected_peers.append(server['url'])
 
-        success = self.easytier_manager.start_network(
-            network_name=network_name,
-            network_secret=network_secret,
-            ipv4=peer_ip,
-            peers=selected_peers,
-            hostname=machine_id,
-            dhcp=use_dhcp
-        )
+        # 检查是否启用网络优化
+        winip_enabled = hasattr(self, 'winip_broadcast_check') and self.winip_broadcast_check.isChecked()
+        metric_enabled = hasattr(self, 'auto_metric_check') and self.auto_metric_check.isChecked()
+
+        enable_optimization = winip_enabled or metric_enabled
+
+        if enable_optimization:
+            # 显示启用的优化项目
+            enabled_optimizations = []
+            if winip_enabled:
+                enabled_optimizations.append("IP广播")
+            if metric_enabled:
+                enabled_optimizations.append("跃点优化")
+
+            optimization_text = " + ".join(enabled_optimizations)
+            self.log_text.append(f"🚀 启动网络并应用游戏优化: {optimization_text}")
+
+            # 收集当前网络优化配置
+            network_optimization = {
+                "winip_broadcast": self.winip_broadcast_check.isChecked(),
+                "auto_metric": self.auto_metric_check.isChecked(),
+            }
+
+            # 使用优化版本启动
+            success = self.easytier_manager.start_network_with_optimization(
+                network_name=network_name,
+                network_secret=network_secret,
+                ipv4=peer_ip,
+                peers=selected_peers,
+                hostname=machine_id,
+                dhcp=use_dhcp,
+                network_optimization=network_optimization
+            )
+        else:
+            # 使用标准版本启动
+            self.log_text.append("🌐 启动网络（未启用优化）...")
+            success = self.easytier_manager.start_network(
+                network_name=network_name,
+                network_secret=network_secret,
+                ipv4=peer_ip,
+                peers=selected_peers,
+                hostname=machine_id,
+                dhcp=use_dhcp
+            )
 
         if success:
-            self.log_text.append("房间启动成功")
+            self.log_text.append("✅ 网络启动成功")
+            # 更新按钮状态
+            self.start_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
+            # 启动状态监控
+            self.start_status_monitoring()
         else:
-            self.log_text.append("房间启动失败")
+            self.log_text.append("❌ 网络启动失败")
 
     def stop_network(self):
         """停止网络"""
-        self.log_text.append("正在停止网络...")
-        success = self.easytier_manager.stop_network()
+        # 检查是否启用了网络优化
+        winip_enabled = hasattr(self, 'winip_broadcast_check') and self.winip_broadcast_check.isChecked()
+        metric_enabled = hasattr(self, 'auto_metric_check') and self.auto_metric_check.isChecked()
+
+        enable_optimization = winip_enabled or metric_enabled
+
+        if enable_optimization:
+            self.log_text.append("🛑 正在停止网络和优化...")
+            # 使用优化版本停止
+            success = self.easytier_manager.stop_network_with_optimization()
+        else:
+            self.log_text.append("🛑 正在停止网络...")
+            # 使用标准版本停止
+            success = self.easytier_manager.stop_network()
 
         if success:
-            self.log_text.append("网络已停止")
-        else:
-            self.log_text.append("停止网络失败")
-
-    # 信号处理方法
-    def on_network_status_changed(self, connected: bool):
-        """网络状态变化"""
-        if connected:
-            self.connection_status_label.setText("已连接")
-            self.connection_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
-            self.start_btn.setEnabled(False)
-            self.stop_btn.setEnabled(True)
-        else:
-            self.connection_status_label.setText("未连接")
-            self.connection_status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+            self.log_text.append("✅ 网络已停止")
+            # 更新按钮状态
             self.start_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
+            # 重置优化状态显示
+            if hasattr(self, 'optimization_status_label'):
+                self.optimization_status_label.setText("未启用")
+                self.optimization_status_label.setStyleSheet("color: #6c7086;")
+            # 停止状态监控
+            self.stop_status_monitoring()
+        else:
+            self.log_text.append("❌ 停止网络失败")
 
-            # 清空连接信息
-            self.current_network_label.setText("未连接")
-            self.current_ip_label.setText("未分配")
-            self.peer_table.setRowCount(0)
+    # 信号处理方法
 
     def on_peer_list_updated(self, peers: list):
-        """节点列表更新"""
-        self.peer_table.setRowCount(len(peers))
+        """节点列表更新，保留本机信息"""
+        try:
+            # 检查是否有本机信息行
+            local_row_exists = False
+            local_row_data = None
 
-        for i, peer in enumerate(peers):
-            # IP地址
-            ip_item = QTableWidgetItem(peer.get("ip", ""))
-            self.peer_table.setItem(i, 0, ip_item)
+            if self.peer_table.rowCount() > 0:
+                name_item = self.peer_table.item(0, 1)
+                if name_item and "(本人)" in name_item.text():
+                    local_row_exists = True
+                    # 保存本机信息
+                    local_row_data = []
+                    for col in range(4):
+                        item = self.peer_table.item(0, col)
+                        local_row_data.append(item.text() if item else "")
 
-            # 主机名（玩家名称）
-            hostname = peer.get("hostname", "")
-            if not hostname:
-                hostname = "未知"
-            hostname_item = QTableWidgetItem(hostname)
-            self.peer_table.setItem(i, 1, hostname_item)
+            # 设置表格行数（本机信息 + 其他节点）
+            total_rows = len(peers) + (1 if local_row_exists else 0)
+            self.peer_table.setRowCount(total_rows)
 
-            # 延迟
-            latency = peer.get("latency", "")
-            if latency and latency != "-":
-                try:
-                    # 如果是数字，添加ms单位
-                    float(latency)
-                    latency = f"{latency}ms"
-                except:
-                    pass
-            latency_item = QTableWidgetItem(latency)
-            self.peer_table.setItem(i, 2, latency_item)
+            # 恢复本机信息到第一行
+            if local_row_exists and local_row_data:
+                for col, text in enumerate(local_row_data):
+                    item = QTableWidgetItem(text)
+                    item.setTextAlignment(Qt.AlignCenter)
 
-            # 连接方式
-            cost = peer.get("cost", "")
-            if "relay" in cost:
-                connection_type = "中继"
-            elif "p2p" in cost:
-                connection_type = "直连"
-            else:
-                connection_type = cost
-            connection_item = QTableWidgetItem(connection_type)
-            self.peer_table.setItem(i, 3, connection_item)
+                    # 设置本机信息的颜色
+                    if col == 1:  # 玩家名称
+                        item.setForeground(QColor("#a6e3a1"))
+                    elif col == 2:  # 延迟
+                        item.setForeground(QColor("#a6e3a1"))
+                    elif col == 3:  # 连接方式
+                        item.setForeground(QColor("#89b4fa"))
+
+                    self.peer_table.setItem(0, col, item)
+
+            # 添加其他节点信息（从第二行开始，如果有本机信息的话）
+            start_row = 1 if local_row_exists else 0
+
+            for i, peer in enumerate(peers):
+                row_index = start_row + i
+
+                # IP地址
+                ip_item = QTableWidgetItem(peer.get("ip", ""))
+                ip_item.setTextAlignment(Qt.AlignCenter)
+                self.peer_table.setItem(row_index, 0, ip_item)
+
+                # 主机名（玩家名称）
+                hostname = peer.get("hostname", "")
+                if not hostname:
+                    hostname = "未知"
+                hostname_item = QTableWidgetItem(hostname)
+                hostname_item.setTextAlignment(Qt.AlignCenter)
+                self.peer_table.setItem(row_index, 1, hostname_item)
+
+                # 延迟
+                latency = peer.get("latency", "")
+                if latency and latency != "-":
+                    try:
+                        # 如果是数字，添加ms单位
+                        float(latency)
+                        latency = f"{latency}ms"
+                    except:
+                        pass
+                latency_item = QTableWidgetItem(latency)
+                latency_item.setTextAlignment(Qt.AlignCenter)
+                self.peer_table.setItem(row_index, 2, latency_item)
+
+                # 连接方式
+                cost = peer.get("cost", "")
+                if "relay" in cost:
+                    connection_type = "中继"
+                elif "p2p" in cost:
+                    connection_type = "直连"
+                else:
+                    connection_type = cost
+                connection_item = QTableWidgetItem(connection_type)
+                connection_item.setTextAlignment(Qt.AlignCenter)
+                self.peer_table.setItem(row_index, 3, connection_item)
+
+        except Exception as e:
+            print(f"❌ 更新节点列表失败: {e}")
 
     def on_connection_info_updated(self, info: dict):
         """连接信息更新"""
-        self.current_network_label.setText(info.get("network_name", "未知"))
-        self.current_ip_label.setText(info.get("local_ip", "未分配"))
+        old_network = self.current_network_label.text()
+        old_ip = self.current_ip_label.text()
+
+        new_network = info.get("network_name", "未知")
+        new_ip = info.get("local_ip", "未分配")
+
+        self.current_network_label.setText(new_network)
+        self.current_ip_label.setText(new_ip)
+
+        # 只有在信息真正变化时才更新表格
+        if old_network != new_network or old_ip != new_ip:
+            QTimer.singleShot(500, self.update_peer_table_with_local_info)
+            QTimer.singleShot(600, self.ensure_local_info_exists)
 
     def on_error_occurred(self, error_message: str):
         """错误发生"""
         self.log_text.append(f"错误: {error_message}")
+
+    def update_optimization_status(self):
+        """更新网络优化状态显示"""
+        try:
+            if hasattr(self.easytier_manager, 'get_optimization_status'):
+                status = self.easytier_manager.get_optimization_status()
+
+                active_optimizations = []
+                if status.get("WinIPBroadcast", False):
+                    active_optimizations.append("IP广播")
+                if status.get("网卡跃点优化", False):
+                    active_optimizations.append("跃点优化")
+
+                if active_optimizations:
+                    status_text = " + ".join(active_optimizations)
+                    self.optimization_status_label.setText(status_text)
+                    self.optimization_status_label.setStyleSheet("color: #a6e3a1; font-weight: bold;")
+                else:
+                    self.optimization_status_label.setText("未启用")
+                    self.optimization_status_label.setStyleSheet("color: #6c7086;")
+            else:
+                self.optimization_status_label.setText("不支持")
+                self.optimization_status_label.setStyleSheet("color: #6c7086;")
+
+        except Exception as e:
+            print(f"更新优化状态失败: {e}")
+
+    def on_network_status_changed(self, is_connected: bool):
+        """网络状态变化处理"""
+        if is_connected:
+            # 更新连接状态显示
+            if hasattr(self, 'connection_status_label'):
+                self.connection_status_label.setText("已连接")
+                self.connection_status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+
+            # 更新按钮状态
+            self.start_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
+
+            # 网络连接后更新优化状态
+            QTimer.singleShot(2000, self.update_optimization_status)  # 延迟2秒更新
+            QTimer.singleShot(3000, self.refresh_optimization_tools_status)  # 延迟3秒刷新工具状态
+            QTimer.singleShot(4000, self.ensure_local_info_exists)  # 延迟4秒确保本机信息存在
+        else:
+            # 更新连接状态显示
+            if hasattr(self, 'connection_status_label'):
+                self.connection_status_label.setText("未连接")
+                self.connection_status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+
+            # 更新按钮状态
+            self.start_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+
+            # 清空表格
+            self.peer_table.setRowCount(0)
+
+            # 网络断开时重置优化状态
+            if hasattr(self, 'optimization_status_label'):
+                self.optimization_status_label.setText("未启用")
+                self.optimization_status_label.setStyleSheet("color: #6c7086;")
+
+            # 重置工具状态
+            if hasattr(self, 'winip_status_label'):
+                self.winip_status_label.setText("❌ 未运行")
+                self.winip_status_label.setStyleSheet("color: #f38ba8;")
+            if hasattr(self, 'metric_status_label'):
+                self.metric_status_label.setText("❌ 未优化")
+                self.metric_status_label.setStyleSheet("color: #f38ba8;")
+
+    def on_optimization_setting_changed(self):
+        """网络优化设置变化处理"""
+        try:
+            # 保存设置到全局配置文件
+            self.network_config.update_winip_broadcast_config(
+                self.winip_broadcast_check.isChecked()
+            )
+            self.network_config.update_network_metric_config(
+                self.auto_metric_check.isChecked()
+            )
+            # KCP配置已移除
+
+            print("✅ 网络优化设置已保存到全局配置")
+
+            # 同步网络优化配置到 easytier_config.json
+            optimization_config = {
+                "winip_broadcast": self.winip_broadcast_check.isChecked(),
+                "auto_metric": self.auto_metric_check.isChecked(),
+            }
+
+            self.easytier_manager.update_network_optimization_config(optimization_config)
+
+        except Exception as e:
+            print(f"❌ 保存网络优化设置失败: {e}")
+
+    def load_network_optimization_from_easytier_config(self):
+        """从 easytier_config.json 加载网络优化配置"""
+        try:
+            # 获取 EasyTier 完整配置
+            easytier_config = self.easytier_manager.config
+
+            # 获取网络优化设置
+            optimization_config = easytier_config.get("network_optimization", {})
+
+            # 应用网络优化到UI控件
+            if hasattr(self, 'winip_broadcast_check'):
+                self.winip_broadcast_check.setChecked(optimization_config.get("winip_broadcast", True))
+            if hasattr(self, 'auto_metric_check'):
+                self.auto_metric_check.setChecked(optimization_config.get("auto_metric", True))
+
+            # 应用EasyTier网络加速设置到UI控件
+            if hasattr(self, 'kcp_proxy_check'):
+                self.kcp_proxy_check.setChecked(easytier_config.get("enable_kcp_proxy", True))
+            if hasattr(self, 'quic_proxy_check'):
+                self.quic_proxy_check.setChecked(easytier_config.get("enable_quic_proxy", True))
+            if hasattr(self, 'smoltcp_check'):
+                self.smoltcp_check.setChecked(easytier_config.get("use_smoltcp", True))
+            if hasattr(self, 'compression_check'):
+                self.compression_check.setChecked(easytier_config.get("enable_compression", True))
+
+            print("✅ 已从 easytier_config.json 加载网络优化配置")
+
+        except Exception as e:
+            print(f"⚠️ 从 easytier_config.json 加载网络优化配置失败: {e}")
+            # 使用默认值
+            if hasattr(self, 'winip_broadcast_check'):
+                self.winip_broadcast_check.setChecked(True)
+            if hasattr(self, 'auto_metric_check'):
+                self.auto_metric_check.setChecked(True)
+            # EasyTier网络加速默认值
+            if hasattr(self, 'kcp_proxy_check'):
+                self.kcp_proxy_check.setChecked(True)
+            if hasattr(self, 'quic_proxy_check'):
+                self.quic_proxy_check.setChecked(True)
+            if hasattr(self, 'smoltcp_check'):
+                self.smoltcp_check.setChecked(True)
+            if hasattr(self, 'compression_check'):
+                self.compression_check.setChecked(True)
+
+    def show_optimization_status(self):
+        """显示网络优化状态详情"""
+        try:
+
+            # 获取当前优化状态
+            if hasattr(self.easytier_manager, 'get_optimization_status'):
+                status = self.easytier_manager.get_optimization_status()
+
+            # 获取配置状态
+            config_summary = self.network_config.get_optimization_summary()
+
+            # 构建状态信息
+            status_text = "🔧 网络优化状态详情\n\n"
+
+            status_text += "📊 当前运行状态:\n"
+            for name, enabled in status.items():
+                icon = "✅" if enabled else "❌"
+                status_text += f"   {icon} {name}\n"
+
+            status_text += "\n⚙️ 配置设置状态:\n"
+            for name, enabled in config_summary.items():
+                icon = "✅" if enabled else "❌"
+                status_text += f"   {icon} {name}\n"
+
+            status_text += "\n💡 说明:\n"
+            status_text += "• WinIPBroadcast: 解决局域网游戏房间发现问题\n"
+            status_text += "• 网卡跃点优化: 确保游戏流量优先级\n"
+            status_text += "• 自动启动: 随EasyTier自动启用优化"
+
+            # 创建自定义状态对话框
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+            from PySide6.QtCore import Qt
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("网络优化状态")
+            dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            dialog.setFixedSize(450, 350)
+
+            # 设置对话框样式
+            dialog.setStyleSheet("""
+                QDialog {
+                    background-color: #1e1e2e;
+                    border: 2px solid #89b4fa;
+                    border-radius: 12px;
+                }
+                QLabel {
+                    color: #cdd6f4;
+                    font-family: 'Microsoft YaHei', sans-serif;
+                    background-color: transparent;
+                }
+                QPushButton {
+                    background-color: #89b4fa;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    padding: 8px 16px;
+                    margin: 8px;
+                }
+                QPushButton:hover {
+                    background-color: #74c7ec;
+                }
+            """)
+
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(20, 20, 20, 20)
+
+            # 标题
+            title_label = QLabel("🔧 网络优化状态详情")
+            title_label.setStyleSheet("""
+                QLabel {
+                    color: #89b4fa;
+                    font-size: 16px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                }
+            """)
+            layout.addWidget(title_label)
+
+            # 状态内容
+            content_label = QLabel(status_text)
+            content_label.setStyleSheet("""
+                QLabel {
+                    color: #cdd6f4;
+                    font-size: 12px;
+                    line-height: 1.4;
+                    padding: 10px;
+                    background-color: rgba(69, 71, 90, 0.3);
+                    border-radius: 8px;
+                }
+            """)
+            content_label.setWordWrap(True)
+            layout.addWidget(content_label)
+
+            # 关闭按钮
+            close_btn = QPushButton("关闭")
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn)
+
+            # 显示对话框
+            dialog.exec()
+
+        except Exception as e:
+            print(f"❌ 显示优化状态失败: {e}")
+
+    def refresh_optimization_tools_status(self):
+        """刷新网络优化工具状态"""
+        try:
+            # 获取优化器状态
+            if hasattr(self.easytier_manager, 'network_optimizer'):
+                optimizer = self.easytier_manager.network_optimizer
+                status = optimizer.get_optimization_status()
+
+                # 更新WinIPBroadcast状态
+                if status.get("WinIPBroadcast", False):
+                    self.winip_status_label.setText("✅ 运行中")
+                    self.winip_status_label.setStyleSheet("color: #a6e3a1;")
+                else:
+                    self.winip_status_label.setText("❌ 未运行")
+                    self.winip_status_label.setStyleSheet("color: #f38ba8;")
+
+                # 更新网卡跃点状态
+                if status.get("网卡跃点优化", False):
+                    self.metric_status_label.setText("✅ 已优化")
+                    self.metric_status_label.setStyleSheet("color: #a6e3a1;")
+                else:
+                    self.metric_status_label.setText("❌ 未优化")
+                    self.metric_status_label.setStyleSheet("color: #f38ba8;")
+
+                # KCP状态已移除
+
+                # 更新总体优化状态
+                enabled_count = sum(1 for enabled in status.values() if enabled)
+                if enabled_count > 0:
+                    enabled_items = [name for name, enabled in status.items() if enabled]
+                    optimization_text = " + ".join([
+                        "IP广播" if "WinIPBroadcast" in item else
+                        "跃点优化" if "网卡跃点优化" in item else
+                        item  # 默认显示原名称
+                        for item in enabled_items
+                    ])
+                    self.optimization_status_label.setText(optimization_text)
+                    self.optimization_status_label.setStyleSheet("color: #a6e3a1;")
+                else:
+                    self.optimization_status_label.setText("未启用")
+                    self.optimization_status_label.setStyleSheet("color: #6c7086;")
+
+                print("✅ 网络优化工具状态已刷新")
+            else:
+                # 重置所有状态为未启用
+                self.winip_status_label.setText("❌ 未运行")
+                self.winip_status_label.setStyleSheet("color: #f38ba8;")
+                self.metric_status_label.setText("❌ 未优化")
+                self.metric_status_label.setStyleSheet("color: #f38ba8;")
+                self.optimization_status_label.setText("未启用")
+                self.optimization_status_label.setStyleSheet("color: #6c7086;")
+
+        except Exception as e:
+            print(f"❌ 刷新优化工具状态失败: {e}")
+
+    def start_status_monitoring(self):
+        """启动状态监控"""
+        try:
+            # 启动定时器，每5秒刷新一次状态
+            if not hasattr(self, 'status_timer'):
+                self.status_timer = QTimer()
+                self.status_timer.timeout.connect(self.refresh_optimization_tools_status)
+
+            self.status_timer.start(5000)  # 5秒间隔
+            print("✅ 状态监控已启动")
+
+        except Exception as e:
+            print(f"❌ 启动状态监控失败: {e}")
+
+    def stop_status_monitoring(self):
+        """停止状态监控"""
+        try:
+            if hasattr(self, 'status_timer') and self.status_timer.isActive():
+                self.status_timer.stop()
+                print("✅ 状态监控已停止")
+
+        except Exception as e:
+            print(f"❌ 停止状态监控失败: {e}")

@@ -53,7 +53,7 @@ class AboutPage(BasePage):
         layout.setSpacing(10)
         
         # 应用名称和版本
-        app_name = QLabel("Nmodm v3.0.0")
+        app_name = QLabel("Nmodm v3.0.3")
         app_name.setStyleSheet("""
             QLabel {
                 color: #89b4fa;
@@ -96,7 +96,7 @@ class AboutPage(BasePage):
     
     def create_update_info(self):
         """创建更新说明区域"""
-        section = QGroupBox("v3.0.0 更新说明")
+        section = QGroupBox("v3.0.3 更新说明")
         section.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -133,27 +133,35 @@ class AboutPage(BasePage):
             }
         """)
 
-        update_content = """🎨 用户界面优化
-• 功能介绍卡片简化，移除边框和悬停效果
-• QQ群号可点击复制到剪切板，提供复制成功提示
-• 界面更加简洁美观，减少视觉干扰
+        update_content = """🚀 网络优化功能全面升级
+• 网络优化配置完整集成到房间系统
+• 房间配置文件现在包含网络优化选项
+• 分享房间时自动包含网络优化设置
+• 加入房间时自动继承网络优化配置
 
-⚡ 性能大幅提升
-• 彻底解决工具下载页面卡顿问题
-• 状态检查和更新检查改为异步后台执行
-• 页面切换立即响应，不再阻塞UI线程
-• 网络请求失败不影响基本功能使用
+🔧 配置管理体系完善
+• easytier_config.json 现在同步网络优化配置
+• 程序重启时自动恢复网络优化设置
+• 三层配置管理：全局配置、活动配置、房间配置
+• 配置间智能同步，确保一致性
 
-🔧 技术架构改进
-• 双线程架构：状态检查和更新检查分离
-• 完善的错误处理和状态提示机制
-• 修复EasyTier工具状态显示问题
-• 改进线程管理和资源释放
+🛡️ 安全保护机制增强
+• 网络运行时禁止切换到不同房间
+• 删除当前房间时检查网络状态
+• 智能提示用户先停止网络再操作
+• 允许重新加载当前房间刷新配置
 
-✨ 用户体验提升
-• 操作反馈更加及时明确
-• 错误信息具体清晰，便于理解
-• 不同状态用颜色区分，视觉层次清晰"""
+⚡ 网络优化自动提权
+• WinIPBroadcast 直接使用管理员权限启动
+• 网卡跃点优化自动请求管理员权限
+• 简化权限处理逻辑，提高成功率
+• 用户无需手动以管理员身份运行
+
+✨ 用户体验优化
+• 房间管理更加智能和安全
+• 网络优化设置持久化保存
+• 清晰的错误提示和操作建议
+• 完整的配置继承和同步机制"""
 
         update_text.setText(update_content)
         layout.addWidget(update_text)

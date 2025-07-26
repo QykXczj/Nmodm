@@ -5,12 +5,53 @@
 import os
 import sys
 import subprocess
+import zipfile
+import configparser
+import time
+import shutil
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFrame, QGroupBox, QLineEdit,
-                               QTextEdit, QFileDialog, QMessageBox)
-from PySide6.QtCore import Qt, Signal, QProcess
+                               QTextEdit, QFileDialog, QMessageBox, QProgressBar,
+                               QGridLayout, QScrollArea, QSplitter)
+from PySide6.QtCore import Qt, Signal, QProcess, QThread
 from .base_page import BasePage
+
+
+class ESLExtractWorker(QThread):
+    """ESL解压工作线程"""
+    progress_updated = Signal(int)  # 进度更新
+    status_updated = Signal(str, str)  # 状态更新 (message, type)
+    extraction_finished = Signal(bool)  # 解压完成 (success)
+
+    def __init__(self, zip_path, extract_path):
+        super().__init__()
+        self.zip_path = zip_path
+        self.extract_path = extract_path
+
+    def run(self):
+        """执行解压操作"""
+        try:
+            self.status_updated.emit("正在解压ESL工具...", "info")
+
+            with zipfile.ZipFile(self.zip_path, 'r') as zip_ref:
+                file_list = zip_ref.namelist()
+                total_files = len(file_list)
+
+                for i, file_name in enumerate(file_list):
+                    zip_ref.extract(file_name, self.extract_path)
+                    progress = int((i + 1) / total_files * 100)
+                    self.progress_updated.emit(progress)
+
+                    # 添加小延迟让用户看到进度
+                    self.msleep(10)
+
+            self.status_updated.emit("ESL工具解压完成", "success")
+            self.extraction_finished.emit(True)
+
+        except Exception as e:
+            self.status_updated.emit(f"解压失败: {e}", "error")
+            self.extraction_finished.emit(False)
 
 
 class LanGamingPage(BasePage):
@@ -18,7 +59,7 @@ class LanGamingPage(BasePage):
 
     def __init__(self, parent=None):
         super().__init__("🌐 局域网配置", parent)
-        
+
         # 获取项目根目录
         if getattr(sys, 'frozen', False):
             # 打包后的环境
@@ -26,18 +67,57 @@ class LanGamingPage(BasePage):
         else:
             # 开发环境
             self.root_dir = Path(__file__).parent.parent.parent.parent
-            
+
+        # ESL相关路径
         self.steamclient_dir = self.root_dir / "ESL"
         self.steam_settings_dir = self.steamclient_dir / "steam_settings"
-        
+        self.config_file_path = self.steam_settings_dir / "configs.user.ini"
+
+        # OnlineFix文件夹路径
+        self.onlinefix_dir = self.root_dir / "OnlineFix"
+        self.esl_zip_path = self.onlinefix_dir / "esl2.zip"
+
+        # 解压完成标志文件
+        self.esl_extracted_flag = self.steamclient_dir / ".esl_extracted"
+
+        # ESL解压工作线程
+        self.extract_worker = None
+
         self.setup_content()
-        self.load_current_settings()
+
+        # 初始化ESL工具
+        self.initialize_esl()
 
         # 检测局域网模式并更新UI
         self.check_and_update_lan_mode()
 
     def setup_content(self):
-        """设置页面内容"""
+        """设置页面内容 - 使用优化的网格布局"""
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #313244;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #585b70;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #6c7086;
+            }
+        """)
+
         # 创建主容器
         main_container = QFrame()
         main_container.setStyleSheet("""
@@ -48,77 +128,161 @@ class LanGamingPage(BasePage):
             }
         """)
 
-        layout = QVBoxLayout()
+        # 使用网格布局替代垂直布局
+        layout = QGridLayout()
         layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        layout.setSpacing(15)
 
-        # 1. 基础配置区域
-        self.setup_basic_config(layout)
-        
-        # 2. 启动区域
-        self.setup_launch_section(layout)
-        
-        # 3. 说明区域
-        self.setup_help_section(layout)
+        # 第一行：ESL状态区域（跨两列）
+        self.setup_esl_status_section_compact(layout, 0, 0, 1, 2)
+
+        # 第二行：左列配置，右列启动
+        self.setup_basic_config_compact(layout, 1, 0)
+        self.setup_launch_section_compact(layout, 1, 1)
+
+        # 第三行：说明区域（跨两列，但高度受限）
+        self.setup_help_section_compact(layout, 2, 0, 1, 2)
+
+        # 设置列的拉伸比例
+        layout.setColumnStretch(0, 1)  # 左列
+        layout.setColumnStretch(1, 1)  # 右列
+
+        # 设置行的拉伸比例
+        layout.setRowStretch(0, 0)  # ESL状态行 - 固定高度
+        layout.setRowStretch(1, 1)  # 主要内容行 - 可拉伸
+        layout.setRowStretch(2, 0)  # 说明行 - 固定高度
 
         main_container.setLayout(layout)
-        self.add_content(main_container)
+        scroll_area.setWidget(main_container)
+        self.add_content(scroll_area)
 
-    def setup_basic_config(self, parent_layout):
-        """设置基础配置区域"""
-        config_group = QGroupBox("🔧 局域网配置")
-        config_group.setStyleSheet("""
+    def setup_esl_status_section_compact(self, parent_layout, row, col, row_span, col_span):
+        """设置ESL状态区域 - 紧凑版"""
+        self.esl_status_group = QGroupBox("🔧 ESL工具状态")
+        self.esl_status_group.setMaximumHeight(120)  # 限制高度
+        self.esl_status_group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
-                font-size: 16px;
+                font-size: 15px;
                 font-weight: bold;
                 border: 2px solid #313244;
                 border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
+                margin-top: 8px;
+                padding-top: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
-                padding: 0 8px 0 8px;
+                padding: 0 6px 0 6px;
+                background-color: #1e1e2e;
+            }
+        """)
+
+        status_layout = QHBoxLayout()  # 改为水平布局
+        status_layout.setSpacing(10)
+
+        # ESL状态标签
+        self.esl_status_label = QLabel("正在检查ESL工具状态...")
+        self.esl_status_label.setStyleSheet("""
+            QLabel {
+                color: #f9e2af;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 6px 10px;
+                background-color: #313244;
+                border-radius: 6px;
+            }
+        """)
+
+        # 进度条（初始隐藏）
+        self.esl_progress_bar = QProgressBar()
+        self.esl_progress_bar.setVisible(False)
+        self.esl_progress_bar.setMaximumHeight(25)
+        self.esl_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #313244;
+                border-radius: 6px;
+                background-color: #1e1e2e;
+                text-align: center;
+                color: #cdd6f4;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QProgressBar::chunk {
+                background-color: #89b4fa;
+                border-radius: 4px;
+            }
+        """)
+
+        status_layout.addWidget(self.esl_status_label, 1)
+        status_layout.addWidget(self.esl_progress_bar, 1)
+
+        self.esl_status_group.setLayout(status_layout)
+        parent_layout.addWidget(self.esl_status_group, row, col, row_span, col_span)
+
+    def setup_basic_config_compact(self, parent_layout, row, col):
+        """设置基础配置区域 - 紧凑版"""
+        config_group = QGroupBox("🔧 局域网配置")
+        config_group.setStyleSheet("""
+            QGroupBox {
+                color: #cdd6f4;
+                font-size: 15px;
+                font-weight: bold;
+                border: 2px solid #313244;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 6px 0 6px;
                 background-color: #1e1e2e;
             }
         """)
 
         config_layout = QVBoxLayout()
-        config_layout.setSpacing(15)
+        config_layout.setSpacing(12)
 
-        # Steam ID 配置
-        steamid_layout = QHBoxLayout()
-        steamid_label = QLabel("Steam ID:")
-        steamid_label.setFixedWidth(120)
+        # Steam ID 配置 - 垂直布局节省空间
+        steamid_container = QFrame()
+        steamid_container.setStyleSheet("QFrame { border: none; }")
+        steamid_vlayout = QVBoxLayout()
+        steamid_vlayout.setSpacing(6)
+        steamid_vlayout.setContentsMargins(0, 0, 0, 0)
+
+        steamid_label = QLabel("Steam ID (76开头的17位数字):")
         steamid_label.setStyleSheet("""
             QLabel {
                 color: #cdd6f4;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
             }
         """)
-        
+
+        steamid_hlayout = QHBoxLayout()
+        steamid_hlayout.setSpacing(8)
+
         self.steamid_input = QLineEdit()
-        self.steamid_input.setPlaceholderText("输入Steam ID (76开头的17位数字)")
+        self.steamid_input.setPlaceholderText("例如: 76561198368389836")
         self.steamid_input.setStyleSheet("""
             QLineEdit {
                 background-color: #313244;
                 border: 2px solid #45475a;
                 border-radius: 6px;
-                padding: 8px 12px;
+                padding: 6px 10px;
                 color: #cdd6f4;
-                font-size: 13px;
+                font-size: 12px;
             }
             QLineEdit:focus {
                 border-color: #89b4fa;
             }
         """)
-        
+
         # 定位存档按钮
-        locate_save_btn = QPushButton("📁 定位存档")
-        locate_save_btn.setFixedWidth(100)
+        locate_save_btn = QPushButton("📁")
+        locate_save_btn.setFixedSize(30, 30)
+        locate_save_btn.setToolTip("定位存档文件夹")
         locate_save_btn.setStyleSheet("""
             QPushButton {
                 background-color: #74c7ec;
@@ -127,30 +291,36 @@ class LanGamingPage(BasePage):
                 border-radius: 6px;
                 font-size: 12px;
                 font-weight: bold;
-                padding: 8px 12px;
             }
             QPushButton:hover {
                 background-color: #89dceb;
             }
         """)
         locate_save_btn.clicked.connect(self.locate_save_folder)
-        
-        steamid_layout.addWidget(steamid_label)
-        steamid_layout.addWidget(self.steamid_input, 1)
-        steamid_layout.addWidget(locate_save_btn)
-        
-        # 玩家名称配置
-        name_layout = QHBoxLayout()
+
+        steamid_hlayout.addWidget(self.steamid_input, 1)
+        steamid_hlayout.addWidget(locate_save_btn)
+
+        steamid_vlayout.addWidget(steamid_label)
+        steamid_vlayout.addLayout(steamid_hlayout)
+        steamid_container.setLayout(steamid_vlayout)
+
+        # 玩家名称配置 - 垂直布局
+        name_container = QFrame()
+        name_container.setStyleSheet("QFrame { border: none; }")
+        name_vlayout = QVBoxLayout()
+        name_vlayout.setSpacing(6)
+        name_vlayout.setContentsMargins(0, 0, 0, 0)
+
         name_label = QLabel("玩家名称:")
-        name_label.setFixedWidth(120)
         name_label.setStyleSheet("""
             QLabel {
                 color: #cdd6f4;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
             }
         """)
-        
+
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("输入虚拟Steam玩家名称")
         self.name_input.setStyleSheet("""
@@ -158,18 +328,19 @@ class LanGamingPage(BasePage):
                 background-color: #313244;
                 border: 2px solid #45475a;
                 border-radius: 6px;
-                padding: 8px 12px;
+                padding: 6px 10px;
                 color: #cdd6f4;
-                font-size: 13px;
+                font-size: 12px;
             }
             QLineEdit:focus {
                 border-color: #89b4fa;
             }
         """)
-        
-        name_layout.addWidget(name_label)
-        name_layout.addWidget(self.name_input, 1)
-        
+
+        name_vlayout.addWidget(name_label)
+        name_vlayout.addWidget(self.name_input)
+        name_container.setLayout(name_vlayout)
+
         # 保存配置按钮
         save_config_btn = QPushButton("💾 保存配置")
         save_config_btn.setStyleSheet("""
@@ -178,9 +349,9 @@ class LanGamingPage(BasePage):
                 color: #1e1e2e;
                 border: none;
                 border-radius: 6px;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
-                padding: 10px 20px;
+                padding: 8px 16px;
             }
             QPushButton:hover {
                 background-color: #94d3a2;
@@ -188,61 +359,63 @@ class LanGamingPage(BasePage):
         """)
         save_config_btn.clicked.connect(self.save_config)
 
-        config_layout.addLayout(steamid_layout)
-        config_layout.addLayout(name_layout)
+        config_layout.addWidget(steamid_container)
+        config_layout.addWidget(name_container)
         config_layout.addWidget(save_config_btn)
-        
-        config_group.setLayout(config_layout)
-        parent_layout.addWidget(config_group)
+        config_layout.addStretch()  # 添加弹性空间
 
-    def setup_launch_section(self, parent_layout):
-        """设置启动区域"""
+        config_group.setLayout(config_layout)
+        parent_layout.addWidget(config_group, row, col)
+
+    def setup_launch_section_compact(self, parent_layout, row, col):
+        """设置启动区域 - 紧凑版"""
         self.launch_group = QGroupBox("🚀 进入局域网联机模式")
         self.launch_group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
-                font-size: 16px;
+                font-size: 15px;
                 font-weight: bold;
                 border: 2px solid #313244;
                 border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
+                margin-top: 8px;
+                padding-top: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
-                padding: 0 8px 0 8px;
+                padding: 0 6px 0 6px;
                 background-color: #1e1e2e;
             }
         """)
 
         launch_layout = QVBoxLayout()
-        launch_layout.setSpacing(15)
+        launch_layout.setSpacing(12)
 
         # 状态显示
         self.status_label = QLabel("准备就绪")
+        self.status_label.setWordWrap(True)  # 允许文字换行
         self.status_label.setStyleSheet("""
             QLabel {
                 color: #a6e3a1;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: bold;
-                padding: 8px;
+                padding: 6px 8px;
                 background-color: #313244;
                 border-radius: 6px;
             }
         """)
 
         # 启动按钮
-        self.launch_btn = QPushButton("🌐 启动局域网联机模式")
+        self.launch_btn = QPushButton("🌐 进入局域网联机模式")
         self.launch_btn.setStyleSheet("""
             QPushButton {
                 background-color: #89b4fa;
                 color: #1e1e2e;
                 border: none;
                 border-radius: 8px;
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
-                padding: 15px 30px;
+                padding: 12px 20px;
             }
             QPushButton:hover {
                 background-color: #74c7ec;
@@ -251,16 +424,16 @@ class LanGamingPage(BasePage):
         self.launch_btn.clicked.connect(self.launch_lan_mode)
 
         # 退出局域网模式按钮
-        self.exit_lan_btn = QPushButton("🚪 退出局域网联机模式")
+        self.exit_lan_btn = QPushButton("🚪 退出局域网联机")
         self.exit_lan_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f38ba8;
                 color: #1e1e2e;
                 border: none;
                 border-radius: 8px;
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
-                padding: 15px 30px;
+                padding: 12px 20px;
             }
             QPushButton:hover {
                 background-color: #eba0ac;
@@ -277,9 +450,9 @@ class LanGamingPage(BasePage):
                 color: white;
                 border: none;
                 border-radius: 6px;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: bold;
-                padding: 10px 20px;
+                padding: 8px 16px;
             }
             QPushButton:hover {
                 background-color: #5a6268;
@@ -292,86 +465,319 @@ class LanGamingPage(BasePage):
         launch_layout.addWidget(self.launch_btn)
         launch_layout.addWidget(self.exit_lan_btn)
         launch_layout.addWidget(self.check_dll_btn)
-        
-        self.launch_group.setLayout(launch_layout)
-        parent_layout.addWidget(self.launch_group)
+        launch_layout.addStretch()  # 添加弹性空间
 
-    def setup_help_section(self, parent_layout):
-        """设置说明区域"""
+        self.launch_group.setLayout(launch_layout)
+        parent_layout.addWidget(self.launch_group, row, col)
+
+    def setup_help_section_compact(self, parent_layout, row, col, row_span, col_span):
+        """设置说明区域 - 紧凑版"""
         help_group = QGroupBox("📖 使用说明")
+        help_group.setMaximumHeight(200)  # 限制高度
         help_group.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
-                font-size: 16px;
+                font-size: 15px;
                 font-weight: bold;
                 border: 2px solid #313244;
                 border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
+                margin-top: 8px;
+                padding-top: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
-                padding: 0 8px 0 8px;
+                padding: 0 6px 0 6px;
                 background-color: #1e1e2e;
             }
         """)
 
-        help_layout = QVBoxLayout()
-        
-        help_text = QTextEdit()
-        help_text.setReadOnly(True)
-        help_text.setMaximumHeight(150)
-        help_text.setStyleSheet("""
+        help_layout = QHBoxLayout()  # 改为水平布局
+        help_layout.setSpacing(15)
+
+        # 左侧：Steam ID获取方法
+        left_text = QTextEdit()
+        left_text.setReadOnly(True)
+        left_text.setMaximumHeight(160)
+        left_text.setStyleSheet("""
             QTextEdit {
                 background-color: #313244;
                 border: 1px solid #45475a;
                 border-radius: 6px;
-                padding: 10px;
+                padding: 8px;
                 color: #cdd6f4;
-                font-size: 12px;
-                line-height: 1.4;
+                font-size: 11px;
+                line-height: 1.3;
+            }
+            QScrollBar:vertical {
+                background-color: #45475a;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #6c7086;
+                border-radius: 4px;
             }
         """)
-        
-        help_content = """Steam ID 获取方法：
-1. 从Steam个人主页链接获取，例如：https://steamcommunity.com/profiles/76561198368389836/
-   其中 76561198368389836 就是Steam ID（特征：76开头的17位数字）
 
-2. 从本地存档文件夹获取，例如：C:\\Users\\用户名\\AppData\\Roaming\\Nightreign\\76561198368389836
+        left_content = """Steam ID 获取方法：
+
+1. Steam个人主页链接：
+   https://steamcommunity.com/profiles/76561198368389836/
+   其中 76561198368389836 就是Steam ID
+
+2. 本地存档文件夹：
+   C:\\Users\\用户名\\AppData\\Roaming\\Nightreign\\76561198368389836
    文件夹名称就是Steam ID
 
-使用步骤：
-1. 配置Steam ID和玩家名称，点击"保存配置"
-2. 点击"启动局域网联机模式"，程序会重新启动进入联机模式
-3. 确保所有玩家都使用相同的网络环境"""
-        
-        help_text.setPlainText(help_content)
-        
-        help_layout.addWidget(help_text)
+3. 点击 📁 按钮可直接打开存档文件夹"""
+
+        left_text.setPlainText(left_content)
+
+        # 右侧：使用步骤
+        right_text = QTextEdit()
+        right_text.setReadOnly(True)
+        right_text.setMaximumHeight(160)
+        right_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                padding: 8px;
+                color: #cdd6f4;
+                font-size: 11px;
+                line-height: 1.3;
+            }
+            QScrollBar:vertical {
+                background-color: #45475a;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #6c7086;
+                border-radius: 4px;
+            }
+        """)
+
+        right_content = """使用步骤：
+
+1. 首次启动会自动解压ESL工具
+2. 配置Steam ID和玩家名称
+3. 点击"保存配置"
+4. 点击"启动局域网联机"
+5. 程序会重新启动进入联机模式
+
+注意事项：
+• 玩家名称可随意更改
+• Steam ID需保证唯一性
+• 确保所有玩家在同一网络环境"""
+
+        right_text.setPlainText(right_content)
+
+        help_layout.addWidget(left_text, 1)
+        help_layout.addWidget(right_text, 1)
+
         help_group.setLayout(help_layout)
-        parent_layout.addWidget(help_group)
+        parent_layout.addWidget(help_group, row, col, row_span, col_span)
+
+    def initialize_esl(self):
+        """初始化ESL工具"""
+        try:
+            # 1. 检查是否已有解压完成标志
+            if self.esl_extracted_flag.exists() and self.validate_esl_structure():
+                self.update_esl_status("✅ ESL工具已就绪", "success")
+                self.load_current_settings()
+                return True
+
+            # 2. 检查OnlineFix文件夹中的esl2.zip
+            if self.esl_zip_path.exists():
+                self.update_esl_status("📦 发现ESL压缩包，准备解压...", "info")
+                self.extract_esl_package()
+                return True
+
+            # 3. 检查ESL文件夹中是否有旧的esl2.zip（向后兼容）
+            old_esl_zip = self.steamclient_dir / "esl2.zip"
+            if old_esl_zip.exists():
+                self.update_esl_status("📦 发现旧版ESL压缩包，准备迁移并解压...", "info")
+                # 迁移到OnlineFix文件夹
+                self.onlinefix_dir.mkdir(exist_ok=True)
+                if self.esl_zip_path.exists():
+                    self.esl_zip_path.unlink()
+                shutil.move(str(old_esl_zip), str(self.esl_zip_path))
+                print(f"✅ ESL压缩包已迁移到OnlineFix文件夹")
+                self.extract_esl_package()
+                return True
+
+            # 4. 都不存在，错误状态
+            self.update_esl_status("❌ ESL工具缺失，请重新下载程序", "error")
+            return False
+
+        except Exception as e:
+            print(f"ESL初始化失败: {e}")
+            self.update_esl_status(f"❌ ESL初始化失败: {e}", "error")
+            return False
+
+    def validate_esl_structure(self):
+        """验证ESL文件结构完整性"""
+        try:
+            required_files = [
+                self.steamclient_dir / "steamclient_loader.exe",
+                self.steam_settings_dir,
+            ]
+
+            return all(path.exists() for path in required_files)
+
+        except Exception as e:
+            print(f"验证ESL结构失败: {e}")
+            return False
+
+    def extract_esl_package(self):
+        """解压ESL压缩包"""
+        try:
+            if self.extract_worker and self.extract_worker.isRunning():
+                return
+
+            # 显示进度条
+            self.esl_progress_bar.setVisible(True)
+            self.esl_progress_bar.setValue(0)
+
+            # 创建解压工作线程
+            self.extract_worker = ESLExtractWorker(
+                str(self.esl_zip_path),
+                str(self.steamclient_dir.parent)
+            )
+
+            # 连接信号
+            self.extract_worker.progress_updated.connect(self.on_extract_progress)
+            self.extract_worker.status_updated.connect(self.update_esl_status)
+            self.extract_worker.extraction_finished.connect(self.on_extract_finished)
+
+            # 启动解压
+            self.extract_worker.start()
+
+        except Exception as e:
+            print(f"启动ESL解压失败: {e}")
+            self.update_esl_status(f"❌ 解压启动失败: {e}", "error")
+
+    def on_extract_progress(self, progress):
+        """解压进度更新"""
+        self.esl_progress_bar.setValue(progress)
+
+    def on_extract_finished(self, success):
+        """解压完成处理"""
+        try:
+            self.esl_progress_bar.setVisible(False)
+
+            if success:
+                # 验证解压结果
+                if self.validate_esl_structure():
+                    # 创建解压完成标志文件
+                    try:
+                        import time
+                        self.esl_extracted_flag.write_text(f"ESL extracted at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        print("✅ 已创建ESL解压完成标志")
+                    except Exception as e:
+                        print(f"创建解压标志失败: {e}")
+
+                    self.update_esl_status("✅ ESL工具初始化完成", "success")
+
+                    # 压缩包已经在OnlineFix文件夹中，无需移动
+                    print("📦 ESL压缩包保留在OnlineFix文件夹")
+
+                    # 加载配置
+                    self.load_current_settings()
+                else:
+                    self.update_esl_status("❌ ESL工具解压不完整", "error")
+            else:
+                self.update_esl_status("❌ ESL工具解压失败", "error")
+
+        except Exception as e:
+            print(f"解压完成处理失败: {e}")
+            self.update_esl_status(f"❌ 解压后处理失败: {e}", "error")
+
+    def update_esl_status(self, message, status_type="info"):
+        """更新ESL状态显示"""
+        color_map = {
+            "success": "#a6e3a1",
+            "error": "#f38ba8",
+            "warning": "#f9e2af",
+            "info": "#89b4fa"
+        }
+
+        color = color_map.get(status_type, "#cdd6f4")
+
+        self.esl_status_label.setText(message)
+        self.esl_status_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-size: 14px;
+                font-weight: bold;
+                padding: 8px;
+                background-color: #313244;
+                border-radius: 6px;
+            }}
+        """)
 
     def load_current_settings(self):
         """加载当前配置"""
         try:
-            # 加载Steam ID
-            steamid_file = self.steam_settings_dir / "force_steamid.txt"
-            if steamid_file.exists():
-                with open(steamid_file, 'r', encoding='utf-8') as f:
-                    steamid = f.read().strip()
+            if not self.config_file_path.exists():
+                print("配置文件不存在，使用默认值")
+                return
+
+            # 读取INI配置文件
+            config_data = self.parse_ini_config()
+
+            if config_data:
+                # 加载Steam ID
+                steamid = config_data.get('account_steamid', '')
+                if steamid:
                     self.steamid_input.setText(steamid)
 
-            # 加载玩家名称
-            name_file = self.steam_settings_dir / "forece_account_name.txt"
-            if name_file.exists():
-                with open(name_file, 'r', encoding='utf-8') as f:
-                    name = f.read().strip()
-                    self.name_input.setText(name)
+                # 加载玩家名称
+                account_name = config_data.get('account_name', '')
+                if account_name:
+                    self.name_input.setText(account_name)
+
+                print(f"✅ 配置加载成功: Steam ID={steamid}, 玩家名称={account_name}")
+            else:
+                print("⚠️ 配置文件解析失败，使用默认值")
 
         except Exception as e:
             print(f"加载配置失败: {e}")
             self.update_status(f"加载配置失败: {e}", "error")
+
+    def parse_ini_config(self):
+        """解析INI配置文件"""
+        try:
+            config_data = {}
+
+            with open(self.config_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            # 手动解析INI文件（保持注释）
+            in_user_section = False
+            for line in lines:
+                line = line.strip()
+
+                # 检查是否进入[user::general]段
+                if line == '[user::general]':
+                    in_user_section = True
+                    continue
+                elif line.startswith('[') and line.endswith(']'):
+                    in_user_section = False
+                    continue
+
+                # 解析配置项
+                if in_user_section and '=' in line and not line.startswith('//'):
+                    key, value = line.split('=', 1)
+                    config_data[key.strip()] = value.strip()
+
+            return config_data
+
+        except Exception as e:
+            print(f"解析INI配置失败: {e}")
+            return None
 
     def save_config(self):
         """保存配置"""
@@ -396,21 +802,105 @@ class LanGamingPage(BasePage):
             # 确保目录存在
             self.steam_settings_dir.mkdir(parents=True, exist_ok=True)
 
-            # 保存Steam ID
-            steamid_file = self.steam_settings_dir / "force_steamid.txt"
-            with open(steamid_file, 'w', encoding='utf-8') as f:
-                f.write(steamid)
+            # 更新INI配置文件
+            success = self.update_ini_config(steamid, name)
 
-            # 保存玩家名称
-            name_file = self.steam_settings_dir / "forece_account_name.txt"
-            with open(name_file, 'w', encoding='utf-8') as f:
-                f.write(name)
-
-            self.update_status("配置保存成功", "success")
+            if success:
+                self.update_status("配置保存成功", "success")
+                print(f"✅ 配置已保存: Steam ID={steamid}, 玩家名称={name}")
+            else:
+                self.update_status("配置保存失败", "error")
 
         except Exception as e:
             print(f"保存配置失败: {e}")
             self.update_status(f"保存配置失败: {e}", "error")
+
+    def update_ini_config(self, steamid, account_name):
+        """更新INI配置文件"""
+        try:
+            # 如果配置文件不存在，创建默认配置
+            if not self.config_file_path.exists():
+                self.create_default_config(steamid, account_name)
+                return True
+
+            # 读取现有配置文件
+            with open(self.config_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            # 更新配置项
+            updated_lines = []
+            in_user_section = False
+            steamid_updated = False
+            name_updated = False
+
+            for line in lines:
+                original_line = line
+                stripped_line = line.strip()
+
+                # 检查是否进入[user::general]段
+                if stripped_line == '[user::general]':
+                    in_user_section = True
+                    updated_lines.append(original_line)
+                    continue
+                elif stripped_line.startswith('[') and stripped_line.endswith(']'):
+                    in_user_section = False
+                    updated_lines.append(original_line)
+                    continue
+
+                # 更新配置项
+                if in_user_section and '=' in stripped_line and not stripped_line.startswith('//'):
+                    key, value = stripped_line.split('=', 1)
+                    key = key.strip()
+
+                    if key == 'account_steamid':
+                        updated_lines.append(f"account_steamid={steamid}\n")
+                        steamid_updated = True
+                    elif key == 'account_name':
+                        updated_lines.append(f"account_name={account_name}\n")
+                        name_updated = True
+                    else:
+                        updated_lines.append(original_line)
+                else:
+                    updated_lines.append(original_line)
+
+            # 如果某些配置项没有找到，添加到[user::general]段末尾
+            if in_user_section and (not steamid_updated or not name_updated):
+                if not steamid_updated:
+                    updated_lines.append(f"account_steamid={steamid}\n")
+                if not name_updated:
+                    updated_lines.append(f"account_name={account_name}\n")
+
+            # 写回文件
+            with open(self.config_file_path, 'w', encoding='utf-8') as f:
+                f.writelines(updated_lines)
+
+            return True
+
+        except Exception as e:
+            print(f"更新INI配置失败: {e}")
+            return False
+
+    def create_default_config(self, steamid, account_name):
+        """创建默认配置文件"""
+        try:
+            default_config = f"""[user::general]
+//下面的用户名随意更改 因为游戏显示的是你创建的角色名称
+account_name={account_name}
+//将下方的ID改成你steam的76开头的ID(或者自行修改数字保证唯一性)
+account_steamid={steamid}
+language=schinese
+ip_country=CN
+"""
+
+            with open(self.config_file_path, 'w', encoding='utf-8') as f:
+                f.write(default_config)
+
+            print("✅ 已创建默认配置文件")
+            return True
+
+        except Exception as e:
+            print(f"创建默认配置失败: {e}")
+            return False
 
     def locate_save_folder(self):
         """定位存档文件夹"""
@@ -452,6 +942,11 @@ class LanGamingPage(BasePage):
     def launch_lan_mode(self):
         """启动局域网联机模式"""
         try:
+            # 检查ESL工具是否就绪
+            if not self.validate_esl_structure():
+                self.update_status("ESL工具未就绪，请等待初始化完成", "error")
+                return
+
             # 检查配置文件
             is_valid, message = self.check_coldclient_config()
             if not is_valid:
@@ -470,6 +965,11 @@ class LanGamingPage(BasePage):
 
             if not steamid or not name:
                 self.update_status("请先保存配置", "warning")
+                return
+
+            # 验证配置文件是否存在且正确
+            if not self.config_file_path.exists():
+                self.update_status("配置文件不存在，请先保存配置", "warning")
                 return
 
             self.update_status("正在启动局域网联机模式...", "info")

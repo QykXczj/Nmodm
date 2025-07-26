@@ -23,7 +23,7 @@ class PyInstallerBuilder:
         self.dist_dir = self.builds_dir / "PyInstaller"
         self.build_dir = self.project_root / "build"
         self.spec_file = self.project_root / "nmodm.spec"
-        self.version = "2.0.0"  # 应用版本号
+        self.version = "3.0.3"  # 应用版本号
         
     def check_environment(self) -> bool:
         """检查打包环境"""
@@ -115,8 +115,11 @@ a = Analysis(
         # 静态资源文件
         ('zwnr.png', '.'),
 
-        # OnlineFix目录 - 破解文件（静态资源）
+        # OnlineFix目录 - 包含破解文件、ESL工具包、网络优化工具包等
         ('OnlineFix', 'OnlineFix'),
+
+        # ESL目录不再需要打包 - 现在从OnlineFix/esl2.zip解压
+        # 注释：ESL工具现在统一从OnlineFix文件夹的esl2.zip解压，无需预置ESL目录
 
         # 源代码目录
         ('src', 'src'),
@@ -143,6 +146,7 @@ a = Analysis(
         'src.ui.pages.me3_page',
         'src.ui.pages.mods_page',
         'src.ui.pages.bin_merge_page',
+        'src.ui.pages.lan_gaming_page',
         'src.ui.pages.about_page',
         
         # 标准库模块

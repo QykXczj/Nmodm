@@ -249,7 +249,7 @@ class Sidebar(QWidget):
         footer_layout.setContentsMargins(15, 10, 15, 0)
         
         # 版本信息
-        version_label = QLabel("v3.0.0")
+        version_label = QLabel("v3.0.3")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;

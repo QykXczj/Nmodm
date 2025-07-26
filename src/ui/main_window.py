@@ -161,14 +161,17 @@ class TitleBar(QWidget):
 class MainWindow(QMainWindow):
     """主窗口类"""
     
-    def __init__(self):
+    def __init__(self, app_instance=None):
         super().__init__()
         self.is_maximized = False
         self.normal_geometry = None
 
+        # 保存App实例的引用，用于访问页面
+        self.app_instance = app_instance
+
         # 局域网模式状态
         self.is_lan_mode = False
-        self.base_title = "Nmodm v3.0.0"
+        self.base_title = "Nmodm v3.0.3"
 
         self.setup_window()
         self.setup_ui()
@@ -293,84 +296,142 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """窗口关闭事件"""
-        try:
-            print("🚪 主窗口关闭，清理局域网模式状态...")
-            from src.utils.lan_mode_detector import cleanup_lan_mode_on_exit
-            cleanup_lan_mode_on_exit()
-        except Exception as e:
-            print(f"清理局域网模式状态失败: {e}")
+        # 检查是否可以关闭软件
+        if not self._can_close_application():
+            event.ignore()  # 阻止关闭
+            return
 
-        # 清理EasyTier进程
-        try:
-            print("🔌 清理EasyTier进程...")
-            self._cleanup_easytier()
-        except Exception as e:
-            print(f"清理EasyTier进程失败: {e}")
-
+        # 允许关闭，接受事件
+        print("🚪 软件正常关闭")
         super().closeEvent(event)
 
-    def _cleanup_easytier(self):
-        """清理EasyTier进程"""
+    def _can_close_application(self) -> bool:
+        """检查是否可以关闭应用程序"""
         try:
-            # 直接查找并终止所有EasyTier进程
-            import psutil
-            easytier_processes = []
+            # 1. 检查是否为局域网联机模式
+            if self._is_in_lan_gaming_mode():
+                self._show_lan_gaming_mode_warning()
+                return False
 
-            for proc in psutil.process_iter(['pid', 'name']):
-                try:
-                    if proc.info['name'] == 'easytier-core.exe':
-                        easytier_processes.append(proc)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    # 进程可能已经结束或无权限访问，跳过
-                    continue
-                except Exception:
-                    continue
+            # 2. 检查是否启动了网络
+            if self._is_network_running():
+                self._show_network_running_warning()
+                return False
 
-            if easytier_processes:
-                print(f"发现 {len(easytier_processes)} 个EasyTier进程，正在终止...")
-                for proc in easytier_processes:
-                    try:
-                        print(f"终止EasyTier进程 PID: {proc.pid}")
-                        proc.terminate()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        # 进程已经结束或无权限，这是正常的
-                        pass
-                    except Exception as e:
-                        print(f"终止进程 {proc.pid} 失败: {e}")
-                        try:
-                            proc.kill()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                        except:
-                            pass
-
-                # 等待一下确保进程停止
-                import time
-                time.sleep(1)
-
-                # 检查是否还有残留进程
-                remaining = []
-                for proc in psutil.process_iter(['pid', 'name']):
-                    try:
-                        if proc.info['name'] == 'easytier-core.exe':
-                            remaining.append(proc)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-                    except:
-                        continue
-
-                if remaining:
-                    print(f"强制终止 {len(remaining)} 个残留EasyTier进程...")
-                    for proc in remaining:
-                        try:
-                            proc.kill()
-                        except:
-                            pass
-            else:
-                print("未发现运行中的EasyTier进程")
+            # 3. 所有检查通过，可以关闭
+            return True
 
         except Exception as e:
-            print(f"清理EasyTier进程时出错: {e}")
+            print(f"❌ 关闭检查失败: {e}")
+            # 发生异常时允许关闭，避免软件无法退出
+            return True
+
+    def _is_in_lan_gaming_mode(self) -> bool:
+        """检查是否处于局域网联机模式"""
+        try:
+            from src.utils.lan_mode_detector import is_lan_mode
+            is_lan = is_lan_mode()
+
+            if is_lan:
+                print("🎮 检测到局域网联机模式激活")
+
+            return is_lan
+
+        except Exception as e:
+            print(f"❌ 局域网模式检测失败: {e}")
+            return False
+
+    def _show_lan_gaming_mode_warning(self):
+        """显示局域网联机模式警告"""
+        from PySide6.QtWidgets import QMessageBox
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("无法关闭软件")
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setText("当前处于局域网联机模式")
+        msg_box.setInformativeText(
+            "检测到您正在使用局域网联机功能。\n\n"
+            "为了避免游戏连接中断，请先退出局域网联机模式再关闭软件。\n\n"
+            "操作步骤：\n"
+            "1. 切换到「局域网联机」页面\n"
+            "2. 点击「退出联机」按钮\n"
+            "3. 等待退出完成后再关闭软件"
+        )
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        msg_box.exec()
+
+    def _is_network_running(self) -> bool:
+        """检查是否有网络正在运行"""
+        try:
+            # 检查虚拟局域网页面的网络状态
+            virtual_lan_page = self._get_virtual_lan_page()
+            if virtual_lan_page and hasattr(virtual_lan_page, 'easytier_manager'):
+                # 注意：is_running 是属性，不是方法
+                easytier_running = virtual_lan_page.easytier_manager.is_running
+                if easytier_running:
+                    print("🌐 检测到EasyTier网络正在运行")
+                    return True
+
+            # 检查其他可能的网络状态
+            # 可以在这里添加更多网络状态检查
+
+            return False
+
+        except Exception as e:
+            print(f"❌ 网络状态检测失败: {e}")
+            return False
+
+    def _get_virtual_lan_page(self):
+        """获取虚拟局域网页面实例"""
+        try:
+            if not self.app_instance:
+                print("❌ 无法访问App实例")
+                return None
+
+            # 通过App实例获取虚拟局域网页面
+            virtual_lan_page = self.app_instance.get_or_create_page("virtual_lan")
+
+            # 检查页面是否有easytier_manager属性
+            if virtual_lan_page and hasattr(virtual_lan_page, 'easytier_manager'):
+                return virtual_lan_page
+            else:
+                print("❌ 虚拟局域网页面未找到或未初始化")
+                return None
+
+        except Exception as e:
+            print(f"❌ 获取虚拟局域网页面失败: {e}")
+            return None
+
+    def _show_network_running_warning(self):
+        """显示网络运行警告"""
+        from PySide6.QtWidgets import QMessageBox
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("无法关闭软件")
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setText("检测到网络正在运行")
+        msg_box.setInformativeText(
+            "检测到您的虚拟局域网正在运行中。\n\n"
+            "为了避免网络连接异常中断，请先停止网络再关闭软件。\n\n"
+            "操作步骤：\n"
+            "1. 切换到「虚拟局域网」页面\n"
+            "2. 点击「停止网络」按钮\n"
+            "3. 等待网络停止完成后再关闭软件"
+        )
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        msg_box.exec()
+
+    # 注释：进程清理方法已移除
+    # 现在软件关闭时不再自动清理进程，而是检查状态并提示用户手动停止
+
+    # 注释：并行查找进程方法已移除
+
+    # 注释：所有进程处理相关方法已移除
+    # 包括：_find_process_by_tasklist, _find_processes_psutil_optimized,
+    # _find_processes_fallback, _parallel_terminate_processes,
+    # _parallel_force_kill_processes, _terminate_single_process, _force_kill_single_process
+
+    # 注释：所有进程处理方法已移除，现在使用状态检查代替进程清理
 
     def setup_status_bar(self):
         """设置状态栏"""

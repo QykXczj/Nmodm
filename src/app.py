@@ -26,8 +26,8 @@ class NmodmApp:
         # 页面缓存（延迟加载）
         self._pages_cache = {}
 
-        # 创建主窗口
-        self.main_window = MainWindow()
+        # 创建主窗口，传递App实例
+        self.main_window = MainWindow(app_instance=self)
 
         # 设置局域网模式状态
         self.main_window.set_lan_mode(self.lan_detector.is_lan_mode)
@@ -62,7 +62,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("3.0.0")
+        self.app.setApplicationVersion("3.0.3")
         self.app.setOrganizationName("Nmodm Team")
 
         # 初始化局域网模式检测器

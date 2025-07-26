@@ -12,6 +12,9 @@ from typing import Optional, Dict, List
 from PySide6.QtCore import QObject, QThread, Signal, QTimer
 import sys
 
+from .tool_manager import ToolManager
+from .network_optimizer import NetworkOptimizer
+
 
 class EasyTierStartWorker(QThread):
     """EasyTier启动工作线程"""
@@ -34,6 +37,34 @@ class EasyTierStartWorker(QThread):
                 self.start_finished.emit(False, "启动失败", None)
         except Exception as e:
             self.start_finished.emit(False, f"启动异常: {e}", None)
+
+
+class NetworkOptimizationWorker(QThread):
+    """网络优化工作线程"""
+    optimization_finished = Signal(bool, str)  # 成功/失败, 消息
+
+    def __init__(self, network_optimizer):
+        super().__init__()
+        self.network_optimizer = network_optimizer
+
+    def run(self):
+        """在后台线程中启动网络优化"""
+        try:
+            # 等待EasyTier完全启动
+            print("⏳ 等待EasyTier完全启动...")
+            time.sleep(3)
+
+            # 启动网络优化
+            print("🚀 启动网络优化...")
+            optimization_success = self.network_optimizer.start_all_optimizations()
+
+            if optimization_success:
+                self.optimization_finished.emit(True, "网络优化启动成功")
+            else:
+                self.optimization_finished.emit(False, "部分网络优化启动失败，但EasyTier正常运行")
+
+        except Exception as e:
+            self.optimization_finished.emit(False, f"网络优化启动失败: {e}")
 
 
 class EasyTierManager(QObject):
@@ -67,10 +98,18 @@ class EasyTierManager(QObject):
         # 状态监控定时器
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self._check_status)
-        
+
+        # 网络优化器
+        self.network_optimizer = NetworkOptimizer()
+        self.network_optimizer.optimization_status_changed.connect(self._on_optimization_status_changed)
+        self.network_optimizer.error_occurred.connect(self._on_optimization_error)
+
+        # 网络优化工作线程
+        self.optimization_worker = None
+
         # 确保目录存在
         self.esr_dir.mkdir(exist_ok=True)
-        
+
         # 加载配置
         self.config = self.load_config()
     
@@ -93,7 +132,17 @@ class EasyTierManager(QObject):
                     "disable_encryption": False, # --disable-encryption (默认不禁用，即启用加密)
                     "disable_ipv6": False,       # --disable-ipv6 (默认不禁用，即启用IPv6)
                     "latency_first": True,       # --latency-first (默认启用)
-                    "multi_thread": True         # --multi-thread (默认启用)
+                    "multi_thread": True,        # --multi-thread (默认启用)
+                    # EasyTier网络加速选项
+                    "enable_kcp_proxy": True,    # --enable-kcp-proxy (默认启用KCP代理)
+                    "enable_quic_proxy": True,   # --enable-quic-proxy (默认启用QUIC代理)
+                    "use_smoltcp": True,         # --use-smoltcp (默认启用用户态网络栈)
+                    "enable_compression": True,  # --compression zstd (默认启用压缩)
+                    # 网络优化配置
+                    "network_optimization": {
+                        "winip_broadcast": True,
+                        "auto_metric": True
+                    }
                 }
                 self.save_config(default_config)
                 return default_config
@@ -203,7 +252,33 @@ class EasyTierManager(QObject):
             # 添加玩家名称（hostname）
             if hostname.strip():
                 cmd.extend(["--hostname", hostname.strip()])
-            
+
+            # 添加EasyTier网络加速参数
+            # KCP代理
+            if self.config.get("enable_kcp_proxy", True):
+                cmd.extend(["--enable-kcp-proxy", "true"])
+
+            # QUIC代理
+            if self.config.get("enable_quic_proxy", True):
+                cmd.extend(["--enable-quic-proxy", "true"])
+
+            # 用户态网络栈
+            if self.config.get("use_smoltcp", True):
+                cmd.extend(["--use-smoltcp", "true"])
+
+            # 压缩算法
+            if self.config.get("enable_compression", True):
+                cmd.extend(["--compression", "zstd"])
+            else:
+                cmd.extend(["--compression", "none"])
+
+            # 日志配置
+            logs_dir = self.esr_dir / "logs"
+            logs_dir.mkdir(exist_ok=True)  # 确保logs目录存在
+            cmd.extend(["--file-log-dir", str(logs_dir)])
+            cmd.extend(["--file-log-level", "info"])  # 设置文件日志级别
+            cmd.extend(["--console-log-level", "warn"])  # 控制台只显示警告和错误
+
             # 移除空参数
             cmd = [arg for arg in cmd if arg]
             
@@ -268,59 +343,35 @@ class EasyTierManager(QObject):
             self.start_worker = None
     
     def stop_network(self) -> bool:
-        """停止EasyTier网络"""
+        """停止EasyTier网络（优化版本，减少卡顿）"""
         try:
             # 停止状态监控
             self.status_timer.stop()
 
-            # 终止进程
+            # 终止进程（快速版本）
             if self.easytier_process:
                 try:
                     self.easytier_process.terminate()
 
-                    # 等待进程结束
+                    # 减少等待时间，避免卡顿
                     try:
-                        self.easytier_process.wait(timeout=3)
+                        self.easytier_process.wait(timeout=1)  # 从3秒减少到1秒
                     except:
-                        # 强制杀死进程
+                        # 如果1秒内没有结束，直接强制杀死
                         self.easytier_process.kill()
-                        try:
-                            self.easytier_process.wait(timeout=2)
-                        except:
-                            pass
+                        # 不再等待kill的结果，避免额外延迟
+
                 except Exception as e:
                     print(f"终止EasyTier进程失败: {e}")
 
-            # 额外保险：查找并终止所有EasyTier进程
-            try:
-                import psutil
-                found_processes = []
-                for proc in psutil.process_iter(['pid', 'name']):
-                    try:
-                        if proc.info['name'] == 'easytier-core.exe':
-                            found_processes.append(proc)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        # 进程可能已经结束或无权限访问，跳过
-                        continue
-
-                if found_processes:
-                    print(f"发现 {len(found_processes)} 个残留EasyTier进程，正在清理...")
-                    for proc in found_processes:
-                        try:
-                            print(f"终止EasyTier进程 PID: {proc.pid}")
-                            proc.terminate()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            # 进程已经结束或无权限，这是正常的
-                            pass
-                        except Exception as e:
-                            print(f"终止进程 {proc.pid} 失败: {e}")
-            except Exception as e:
-                print(f"清理残留进程时出错: {e}")
-
+            # 快速重置状态，不等待进程清理完成
             self.is_running = False
             self.easytier_process = None
-
             self.network_status_changed.emit(False)
+
+            # 异步清理残留进程，避免阻塞UI
+            QTimer.singleShot(100, self._cleanup_remaining_processes)
+
             print("EasyTier网络已停止")
             return True
 
@@ -331,6 +382,33 @@ class EasyTierManager(QObject):
             self.easytier_process = None
             self.network_status_changed.emit(False)
             return False
+
+    def _cleanup_remaining_processes(self):
+        """异步清理残留进程，避免阻塞UI"""
+        try:
+            import psutil
+            found_processes = []
+
+            # 只查找easytier-core.exe进程，提高效率
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'] == 'easytier-core.exe':
+                        found_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if found_processes:
+                print(f"🧹 后台清理 {len(found_processes)} 个残留EasyTier进程...")
+                for proc in found_processes:
+                    try:
+                        proc.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                    except Exception as e:
+                        print(f"清理进程 {proc.pid} 失败: {e}")
+
+        except Exception as e:
+            print(f"后台清理残留进程时出错: {e}")
     
     def get_network_status(self) -> Dict:
         """获取网络状态"""
@@ -464,6 +542,26 @@ class EasyTierManager(QObject):
         self.config.update(new_config)
         self.save_config()
 
+    def update_network_optimization_config(self, optimization_config: Dict):
+        """更新网络优化配置"""
+        try:
+            if "network_optimization" not in self.config:
+                self.config["network_optimization"] = {}
+
+            self.config["network_optimization"].update(optimization_config)
+            self.save_config()
+            print(f"✅ 网络优化配置已同步到 easytier_config.json")
+
+        except Exception as e:
+            print(f"❌ 同步网络优化配置失败: {e}")
+
+    def get_network_optimization_config(self) -> Dict:
+        """获取网络优化配置"""
+        return self.config.get("network_optimization", {
+            "winip_broadcast": True,
+            "auto_metric": True
+        })
+
     def _start_as_admin(self, cmd: list) -> subprocess.Popen:
         """以管理员权限启动进程"""
         try:
@@ -582,3 +680,136 @@ class EasyTierManager(QObject):
         else:
             # 返回原始错误信息，但格式化一下
             return f"EasyTier启动失败\n\n详细错误信息：\n{error_output}"
+
+    def _on_optimization_status_changed(self, optimization_name: str, enabled: bool):
+        """网络优化状态变化回调"""
+        status = "启用" if enabled else "禁用"
+        print(f"🔧 网络优化: {optimization_name} {status}")
+
+    def _on_optimization_error(self, error_message: str):
+        """网络优化错误回调"""
+        print(f"❌ 网络优化错误: {error_message}")
+        self.error_occurred.emit(f"网络优化错误: {error_message}")
+
+    def start_with_optimization(self, config: Optional[Dict] = None) -> bool:
+        """启动EasyTier并应用网络优化（已弃用）"""
+        print("⚠️ start_with_optimization方法已弃用，请使用start_network_with_optimization")
+        return False
+
+    def stop_with_optimization(self):
+        """停止EasyTier并清理网络优化"""
+        try:
+            # 停止网络优化
+            print("🛑 停止网络优化...")
+            self.network_optimizer.stop_all_optimizations()
+
+            # 停止EasyTier
+            self.stop_network()
+
+            print("✅ EasyTier和网络优化已停止")
+
+        except Exception as e:
+            print(f"❌ 停止EasyTier和网络优化失败: {e}")
+
+    def get_optimization_status(self) -> Dict[str, bool]:
+        """获取网络优化状态"""
+        return self.network_optimizer.get_optimization_status()
+
+    def toggle_winip_broadcast(self, enabled: bool) -> bool:
+        """切换WinIPBroadcast状态"""
+        if enabled:
+            return self.network_optimizer.start_winip_broadcast()
+        else:
+            self.network_optimizer.stop_winip_broadcast()
+            return True
+
+    def refresh_network_metric(self) -> bool:
+        """刷新网卡跃点优化"""
+        return self.network_optimizer.optimize_network_metric()
+
+    def start_network_with_optimization(self, network_name: str, network_secret: str = "",
+                                      ipv4: str = "", peers: List[str] = None,
+                                      hostname: str = "", dhcp: bool = True,
+                                      network_optimization: Dict = None) -> bool:
+        """启动网络并应用优化"""
+        try:
+            # 构建配置
+            config = {
+                "network_name": network_name,
+                "network_secret": network_secret,
+                "hostname": hostname,
+                "peers": peers or ["tcp://public.easytier.top:11010"],
+                "dhcp": dhcp,
+                "disable_encryption": False,  # 默认启用加密
+                "disable_ipv6": False,       # 默认启用IPv6
+                "latency_first": True,       # 默认延迟优先
+                "multi_thread": True         # 默认多线程
+            }
+
+            if not dhcp and ipv4:
+                config["ipv4"] = ipv4
+
+            # 如果提供了网络优化配置，同步到 easytier_config.json
+            if network_optimization:
+                self.update_network_optimization_config(network_optimization)
+
+            # 首先启动EasyTier网络
+            if not self.start_network(
+                network_name=network_name,
+                network_secret=network_secret,
+                ipv4=ipv4,
+                peers=peers,
+                hostname=hostname,
+                dhcp=dhcp
+            ):
+                return False
+
+            # 异步启动网络优化，避免阻塞UI
+            self._start_optimization_async()
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 启动网络和优化失败: {e}")
+            self.error_occurred.emit(f"启动失败: {e}")
+            return False
+
+    def _start_optimization_async(self):
+        """异步启动网络优化"""
+        try:
+            # 创建网络优化工作线程
+            self.optimization_worker = NetworkOptimizationWorker(self.network_optimizer)
+
+            # 连接信号并启动线程
+            self.optimization_worker.optimization_finished.connect(self._on_optimization_finished)
+            self.optimization_worker.start()
+
+        except Exception as e:
+            print(f"❌ 启动网络优化线程失败: {e}")
+
+    def _on_optimization_finished(self, success: bool, message: str):
+        """网络优化完成回调"""
+        if success:
+            print(f"✅ {message}")
+        else:
+            print(f"⚠️ {message}")
+
+        # 清理工作线程
+        if self.optimization_worker:
+            self.optimization_worker.deleteLater()
+            self.optimization_worker = None
+
+    def stop_network_with_optimization(self) -> bool:
+        """停止网络并清理优化"""
+        try:
+            # 停止网络优化工作线程
+            if self.optimization_worker and self.optimization_worker.isRunning():
+                self.optimization_worker.terminate()
+                self.optimization_worker.wait(3000)  # 等待3秒
+                self.optimization_worker = None
+
+            self.stop_with_optimization()
+            return True
+        except Exception as e:
+            print(f"❌ 停止网络和优化失败: {e}")
+            return False

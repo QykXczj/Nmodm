@@ -21,7 +21,7 @@ class NuitkaBuilder:
         self.src_dir = self.project_root / "src"
         self.builds_dir = self.project_root / "Builds"
         self.dist_dir = self.builds_dir / "Nuitka"
-        self.version = "3.0.0"  # 应用版本号
+        self.version = "3.0.3"  # 应用版本号
         self.build_dir = self.project_root / "build"
         
     def check_environment(self) -> bool:
@@ -144,14 +144,8 @@ class NuitkaBuilder:
                     rel_path = file_path.relative_to(self.project_root)
                     data_files.append(f"--include-data-file={file_path}={rel_path}")
 
-        # 添加ESL目录 - 逐个文件添加以确保包含所有文件
-        esl_dir = self.project_root / "ESL"
-        if esl_dir.exists():
-            # 递归添加ESL目录中的所有文件
-            for file_path in esl_dir.rglob("*"):
-                if file_path.is_file():
-                    rel_path = file_path.relative_to(self.project_root)
-                    data_files.append(f"--include-data-file={file_path}={rel_path}")
+        # ESL目录不再需要打包 - 现在从OnlineFix/esl2.zip解压
+        # 注释：ESL工具现在统一从OnlineFix文件夹的esl2.zip解压，无需预置ESL目录
 
         return data_files
     
@@ -204,10 +198,10 @@ class NuitkaBuilder:
         # 添加模式特定参数
         if onefile:
             cmd.append("--onefile")
-            output_name = "Nmodm_nuitka_onefile.exe"
+            output_name = f"Nmodm_v{self.version}_onefile.exe"
         else:
             cmd.append("--standalone")
-            output_name = "Nmodm_nuitka_standalone"
+            output_name = "Nmodm"  # 可执行文件名
         
         # 添加输出目录
         cmd.extend([
@@ -263,24 +257,48 @@ class NuitkaBuilder:
                     # Nuitka默认创建main.dist目录
                     exe_dir = self.dist_dir / "main.dist"
                     if exe_dir.exists():
-                        exe_path = exe_dir / f"{output_name}.exe"
                         print(f"📁 输出目录: {exe_dir}")
-                        if exe_path.exists():
-                            print(f"📁 主执行文件: {exe_path}")
-                        else:
-                            print("⚠️ 主执行文件位置可能不同")
-                            # 查找目录中的exe文件
+
+                        # 查找主执行文件
+                        exe_path = None
+                        for possible_name in [f"{output_name}.exe", "main.exe"]:
+                            test_path = exe_dir / possible_name
+                            if test_path.exists():
+                                exe_path = test_path
+                                break
+
+                        if not exe_path:
+                            # 查找目录中的任何exe文件
                             exe_files = list(exe_dir.glob("*.exe"))
                             if exe_files:
-                                print(f"📁 找到执行文件: {exe_files[0]}")
+                                exe_path = exe_files[0]
 
-                        # 重命名目录为更友好的名称
-                        target_dir = self.dist_dir / output_name
+                        if exe_path:
+                            print(f"📁 主执行文件: {exe_path}")
+                            size_mb = exe_path.stat().st_size / (1024 * 1024)
+                            print(f"📊 文件大小: {size_mb:.1f} MB")
+
+                            # 重命名可执行文件为Nmodm.exe
+                            target_exe_path = exe_dir / "Nmodm.exe"
+                            if exe_path.name != "Nmodm.exe":
+                                if target_exe_path.exists():
+                                    target_exe_path.unlink()
+                                exe_path.rename(target_exe_path)
+                                print(f"📁 可执行文件重命名为: Nmodm.exe")
+                        else:
+                            print("❌ 未找到输出的exe文件")
+                            return False
+
+                        # 重命名目录为版本化名称
+                        target_dir = self.dist_dir / f"Nmodm_v{self.version}"
                         if target_dir.exists():
-                            import shutil
-                            shutil.rmtree(target_dir)
-                        exe_dir.rename(target_dir)
-                        print(f"📁 重命名为: {target_dir}")
+                            print(f"🗑️ 删除已存在的目录: {target_dir}")
+                            if not self.force_remove_directory(target_dir):
+                                return False
+
+                        # 使用强化的重命名方法
+                        if not self.safe_rename_directory(exe_dir, target_dir):
+                            return False
                     else:
                         print("❌ 未找到输出目录")
                         return False
@@ -304,17 +322,10 @@ class NuitkaBuilder:
         print("🧪 测试可执行文件...")
         
         if onefile:
-            exe_path = self.dist_dir / "Nmodm_nuitka_onefile.exe"
+            exe_path = self.dist_dir / f"Nmodm_v{self.version}_onefile.exe"
         else:
-            exe_dir = self.dist_dir / "Nmodm_nuitka_standalone"
-            exe_path = exe_dir / "Nmodm_nuitka_standalone.exe"
-            if not exe_path.exists():
-                # 尝试其他可能的名称
-                for possible_name in ["main.exe", "Nmodm.exe"]:
-                    test_path = exe_dir / possible_name
-                    if test_path.exists():
-                        exe_path = test_path
-                        break
+            exe_dir = self.dist_dir / f"Nmodm_v{self.version}"
+            exe_path = exe_dir / "Nmodm.exe"
         
         if not exe_path.exists():
             print(f"❌ 可执行文件不存在: {exe_path}")
@@ -342,6 +353,90 @@ class NuitkaBuilder:
         except Exception as e:
             print(f"❌ 测试异常: {e}")
             return False
+
+    def force_remove_directory(self, directory_path: Path, max_retries: int = 3) -> bool:
+        """强制删除目录"""
+        import time
+
+        for attempt in range(max_retries):
+            try:
+                if directory_path.exists():
+                    # 尝试修改权限
+                    if sys.platform == "win32":
+                        subprocess.run(["attrib", "-R", str(directory_path / "*"), "/S"],
+                                     capture_output=True, check=False)
+
+                    # 删除目录
+                    shutil.rmtree(directory_path, ignore_errors=True)
+
+                    # 验证删除
+                    if not directory_path.exists():
+                        print(f"✅ 成功删除目录: {directory_path}")
+                        return True
+                    else:
+                        print(f"⚠️ 第 {attempt + 1} 次删除尝试失败")
+                else:
+                    return True
+
+            except Exception as e:
+                print(f"❌ 第 {attempt + 1} 次删除失败: {e}")
+
+            if attempt < max_retries - 1:
+                print(f"⏳ 等待 2 秒后重试...")
+                time.sleep(2)
+
+        print(f"❌ 无法删除目录: {directory_path}")
+        print("💡 请关闭可能正在使用该目录的程序，然后重试")
+        return False
+
+    def safe_rename_directory(self, source_dir: Path, target_dir: Path, max_retries: int = 3) -> bool:
+        """安全重命名目录"""
+        import time
+
+        for attempt in range(max_retries):
+            try:
+                # 尝试直接重命名
+                source_dir.rename(target_dir)
+                print(f"📁 目录重命名为: {target_dir}")
+                return True
+
+            except PermissionError as e:
+                print(f"❌ 第 {attempt + 1} 次重命名失败: {e}")
+
+                if attempt < max_retries - 1:
+                    # 尝试终止可能使用该目录的进程
+                    if sys.platform == "win32":
+                        subprocess.run(["taskkill", "/f", "/im", "python.exe"],
+                                     capture_output=True, check=False)
+                        subprocess.run(["taskkill", "/f", "/im", "main.exe"],
+                                     capture_output=True, check=False)
+                        subprocess.run(["taskkill", "/f", "/im", "Nmodm.exe"],
+                                     capture_output=True, check=False)
+
+                    print(f"⏳ 等待 3 秒后重试...")
+                    time.sleep(3)
+                else:
+                    # 最后一次尝试：使用复制+删除的方式
+                    print("🔄 尝试使用复制+删除的方式...")
+                    try:
+                        shutil.copytree(source_dir, target_dir)
+                        if self.force_remove_directory(source_dir):
+                            print(f"📁 目录复制重命名为: {target_dir}")
+                            return True
+                        else:
+                            print("❌ 复制成功但删除源目录失败")
+                            return False
+                    except Exception as copy_e:
+                        print(f"❌ 复制重命名也失败: {copy_e}")
+
+            except Exception as e:
+                print(f"❌ 重命名失败: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+
+        print(f"❌ 重命名目录失败: {source_dir} -> {target_dir}")
+        print("💡 请关闭可能正在使用该目录的程序，然后重试")
+        return False
 
 
 def main():
@@ -406,9 +501,9 @@ def main():
         if success_count > 0:
             print("\n🎉 打包完成！输出文件位置:")
             if choice in ['1', '3']:
-                print(f"  📁 单文件: dist/Nmodm_nuitka_onefile.exe")
+                print(f"  📁 单文件: Builds/Nuitka/Nmodm_v{builder.version}_onefile.exe")
             if choice in ['2', '3']:
-                print(f"  📁 独立模式: dist/Nmodm_nuitka_standalone/")
+                print(f"  📁 独立模式: Builds/Nuitka/Nmodm_v{builder.version}/Nmodm.exe")
             
             print("\n💡 建议:")
             print("  - Nuitka编译的程序性能更好")

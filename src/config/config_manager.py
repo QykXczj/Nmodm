@@ -79,13 +79,22 @@ class ConfigManager:
             game_dir = self.get_game_directory()
             if not game_dir:
                 return False
-            
-            # 复制OnlineFix文件夹中除gconfig.ini外的所有文件到游戏目录
+
+            # 定义不是破解补丁的文件（排除列表）
+            excluded_files = {
+                "gconfig.ini",      # 配置文件
+                "esl2.zip",         # ESL工具包
+                "tool.zip",         # 网络优化工具包
+                "Regulations"       # 可能的文件夹
+            }
+
+            # 复制OnlineFix文件夹中的破解文件到游戏目录
             for file_path in self.onlinefix_dir.iterdir():
-                if file_path.name != "gconfig.ini" and file_path.is_file():
+                if file_path.name not in excluded_files and file_path.is_file():
                     dest_path = Path(game_dir) / file_path.name
                     shutil.copy2(file_path, dest_path)
-            
+                    print(f"✅ 应用破解文件: {file_path.name}")
+
             return True
         except Exception as e:
             print(f"应用破解失败: {e}")
@@ -97,14 +106,23 @@ class ConfigManager:
             game_dir = self.get_game_directory()
             if not game_dir:
                 return False
-            
+
+            # 定义不是破解补丁的文件（排除列表）
+            excluded_files = {
+                "gconfig.ini",      # 配置文件
+                "esl2.zip",         # ESL工具包
+                "tool.zip",         # 网络优化工具包
+                "Regulations"       # 可能的文件夹
+            }
+
             # 删除游戏目录中的破解文件
             for file_path in self.onlinefix_dir.iterdir():
-                if file_path.name != "gconfig.ini" and file_path.is_file():
+                if file_path.name not in excluded_files and file_path.is_file():
                     crack_file = Path(game_dir) / file_path.name
                     if crack_file.exists():
                         crack_file.unlink()
-            
+                        print(f"✅ 移除破解文件: {file_path.name}")
+
             return True
         except Exception as e:
             print(f"移除破解失败: {e}")
@@ -116,14 +134,22 @@ class ConfigManager:
             game_dir = self.get_game_directory()
             if not game_dir:
                 return False
-            
+
+            # 定义不是破解补丁的文件（排除列表）
+            excluded_files = {
+                "gconfig.ini",      # 配置文件
+                "esl2.zip",         # ESL工具包
+                "tool.zip",         # 网络优化工具包
+                "Regulations"       # 可能的文件夹
+            }
+
             # 检查是否存在破解文件
             for file_path in self.onlinefix_dir.iterdir():
-                if file_path.name != "gconfig.ini" and file_path.is_file():
+                if file_path.name not in excluded_files and file_path.is_file():
                     crack_file = Path(game_dir) / file_path.name
                     if crack_file.exists():
                         return True
-            
+
             return False
         except Exception as e:
             print(f"检查破解状态失败: {e}")
