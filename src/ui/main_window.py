@@ -308,6 +308,11 @@ class MainWindow(QMainWindow):
     def _can_close_application(self) -> bool:
         """检查是否可以关闭应用程序"""
         try:
+            # 检查是否有局域网模式重启标志
+            if hasattr(self, '_lan_mode_restart') and self._lan_mode_restart:
+                print("🔄 检测到局域网模式重启标志，允许关闭窗口")
+                return True
+
             # 1. 检查是否为局域网联机模式
             if self._is_in_lan_gaming_mode():
                 self._show_lan_gaming_mode_warning()

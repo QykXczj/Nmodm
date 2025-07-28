@@ -1009,6 +1009,10 @@ ip_country=CN
             main_window = self.window()
             if main_window:
                 print("🚪 局域网联机模式启动，关闭当前窗口...")
+
+                # 设置特殊标志，允许在局域网模式下关闭窗口
+                main_window._lan_mode_restart = True
+
                 main_window.close()
         except Exception as e:
             print(f"关闭窗口失败: {e}")
