@@ -722,6 +722,12 @@ class ModConfigManager:
         if not target_package:
             return False
 
+        # 清除所有其他mod的强制最后加载设置，确保只有一个mod可以强制最后加载
+        for other_pkg in self.packages:
+            if other_pkg != target_package:
+                # 清除所有其他mod的load_after设置
+                other_pkg.load_after = None
+
         # 获取所有其他启用的mod ID列表（排除目标mod）
         other_enabled_mods = []
         for pkg in self.packages:
@@ -794,13 +800,608 @@ class ModConfigManager:
             if isinstance(dep, dict) and 'id' in dep:
                 load_after_ids.add(dep['id'])
 
-        # 如果load_after包含所有其他启用的mod，则认为是强制最后加载
-        return other_enabled_mods.issubset(load_after_ids)
+        # 如果load_after包含大部分其他启用的mod，则认为是强制最后加载
+        if len(other_enabled_mods) == 0:
+            return False
+
+        # 计算交集
+        intersection_count = len(load_after_ids.intersection(other_enabled_mods))
+
+        # 如果总mod数量较少（<=3），只要包含至少一个就认为是强制最后加载
+        # 如果总mod数量较多，需要包含至少50%
+        if len(other_enabled_mods) <= 3:
+            return intersection_count >= 1
+        else:
+            return intersection_count >= len(other_enabled_mods) * 0.5
+
+    def get_native_load_before(self, dll_name: str) -> Optional[List[Dict[str, Any]]]:
+        """获取DLL的前置加载设置"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        for native in self.natives:
+            # 匹配DLL名称或路径
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                return native.load_before
+
+        return None
+
+    def set_native_load_before(self, dll_name: str, target_dlls: List[str], optional: bool = True) -> bool:
+        """设置DLL前置加载
+
+        Args:
+            dll_name: 要设置的DLL名称
+            target_dlls: 需要在此DLL之前加载的DLL列表
+            optional: 是否设置为可选依赖
+
+        Returns:
+            bool: 设置是否成功
+        """
+        clean_name = dll_name.replace(" (外部)", "")
+
+        # 找到目标DLL
+        target_native = None
+        for native in self.natives:
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                target_native = native
+                break
+
+        if not target_native:
+            return False
+
+        # 设置load_before依赖
+        if target_dlls:
+            target_native.load_before = [
+                {"id": dll_name, "optional": optional} for dll_name in target_dlls
+            ]
+        else:
+            target_native.load_before = None
+
+        return True
+
+    def clear_native_load_before(self, dll_name: str) -> bool:
+        """清除DLL前置加载设置"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        for native in self.natives:
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                native.load_before = None
+                return True
+
+        return False
+
+    def is_force_load_first_native(self, dll_name: str) -> bool:
+        """检查DLL是否设置为强制优先加载"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        for native in self.natives:
+            # 匹配DLL名称或路径
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                # 检查是否有load_before设置，且包含所有其他启用的DLL
+                if native.load_before:
+                    # 获取所有其他启用的DLL
+                    other_dlls = set()
+                    for other_native in self.natives:
+                        if (other_native.enabled and
+                            other_native != native):
+                            other_dll_name = Path(other_native.path).name
+                            other_dlls.add(other_dll_name)
+
+                    # 检查load_before是否包含所有其他DLL
+                    load_before_ids = set()
+                    for item in native.load_before:
+                        load_before_ids.add(item.get('id', ''))
+
+                    # 如果load_before包含所有其他启用的DLL，则认为是强制优先加载
+                    return other_dlls.issubset(load_before_ids)
+
+        return False
+
+    def set_force_load_first_native(self, dll_name: str) -> bool:
+        """设置DLL强制优先加载"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        # 找到目标DLL
+        target_native = None
+        for native in self.natives:
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                target_native = native
+                break
+
+        if not target_native:
+            return False
+
+        # 清除所有其他DLL的强制优先加载设置，但保留特定顺序设置
+        for other_native in self.natives:
+            if other_native != target_native:
+                # 检查是否有特定顺序设置需要保留
+                if other_native.load_before and self._has_only_specific_order_deps(other_native):
+                    # 保留特定顺序设置
+                    continue
+                else:
+                    # 清除强制优先加载设置
+                    other_native.load_before = None
+
+        # 获取所有其他启用的DLL（排除已设置强制优先加载的）
+        other_dlls = []
+        for other_native in self.natives:
+            if (other_native.enabled and
+                other_native != target_native):
+                other_dll_name = Path(other_native.path).name
+                other_dlls.append(other_dll_name)
+
+        # 设置load_before为所有其他启用的DLL（必需依赖）
+        if other_dlls:
+            target_native.load_before = [
+                {"id": dll, "optional": False} for dll in other_dlls
+            ]
+        else:
+            target_native.load_before = None
+
+        # 确保特定的DLL顺序
+        self.ensure_specific_dll_orders()
+
+        # 优化强制优先加载的依赖
+        target_dll_name = Path(target_native.path).name
+        self._optimize_force_load_dependencies(target_dll_name)
+
+        return True
+
+    def _is_force_load_first_config(self, native) -> bool:
+        """检查native是否是强制优先加载配置"""
+        if not native.load_before:
+            return False
+
+        # 获取所有其他启用的DLL
+        other_enabled_dlls = set()
+        for other_native in self.natives:
+            if (other_native.enabled and other_native != native):
+                other_dll_name = Path(other_native.path).name
+                other_enabled_dlls.add(other_dll_name)
+
+        # 检查load_before是否包含所有其他启用的DLL
+        load_before_ids = set()
+        for item in native.load_before:
+            load_before_ids.add(item.get('id', ''))
+
+        # 如果load_before包含大部分其他启用的DLL，认为是强制优先加载
+        if len(other_enabled_dlls) == 0:
+            return False
+
+        return len(load_before_ids.intersection(other_enabled_dlls)) >= max(1, len(other_enabled_dlls) * 0.6)
+
+    def clear_force_load_first_native(self, dll_name: str) -> bool:
+        """清除DLL强制优先加载"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        for native in self.natives:
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                native.load_before = None
+                return True
+
+        return False
+
+    def _has_only_specific_order_deps(self, native) -> bool:
+        """检查native是否只有特定顺序依赖"""
+        if not native.load_before:
+            return False
+
+        dll_name = Path(native.path).name
+
+        # 检查所有依赖是否都是特定顺序要求
+        specific_orders = [
+            ("nighter.dll", "nrsc.dll"),  # nighter.dll必须在nrsc.dll之前
+        ]
+
+        for dep in native.load_before:
+            dep_id = dep.get('id', '')
+            is_specific_order = False
+
+            for first, second in specific_orders:
+                if dll_name == first and dep_id == second:
+                    is_specific_order = True
+                    break
+
+            if not is_specific_order:
+                return False
+
+        return True
+
+    def set_specific_dll_order(self, first_dll: str, second_dll: str) -> bool:
+        """设置特定DLL的加载顺序（first_dll在second_dll之前加载）"""
+        first_clean = first_dll.replace(" (外部)", "")
+        second_clean = second_dll.replace(" (外部)", "")
+
+        # 找到两个DLL
+        first_native = None
+        second_native = None
+
+        for native in self.natives:
+            dll_name = Path(native.path).name
+            if (dll_name == first_clean or
+                native.path == first_clean or
+                native.path.endswith(first_clean)):
+                first_native = native
+            elif (dll_name == second_clean or
+                  native.path == second_clean or
+                  native.path.endswith(second_clean)):
+                second_native = native
+
+        if not first_native or not second_native:
+            return False
+
+        # 确保两个DLL都启用
+        if not first_native.enabled or not second_native.enabled:
+            return False
+
+        # 检查是否会创建循环依赖
+        second_dll_name = Path(second_native.path).name
+        first_dll_name = Path(first_native.path).name
+
+        if self._would_create_circular_dependency(first_dll_name, second_dll_name):
+            # 如果会创建循环依赖，先清除反向依赖
+            self._remove_reverse_dependency(second_dll_name, first_dll_name)
+
+        # 设置first_dll的load_before包含second_dll
+        if not first_native.load_before:
+            first_native.load_before = []
+
+        # 检查是否已经存在这个依赖
+        already_exists = any(dep.get('id') == second_dll_name for dep in first_native.load_before)
+
+        if not already_exists:
+            first_native.load_before.append({"id": second_dll_name, "optional": False})
+
+        return True
+
+    def _would_create_circular_dependency(self, first_dll: str, second_dll: str) -> bool:
+        """检查设置first_dll -> second_dll是否会创建循环依赖"""
+        # 检查second_dll是否已经依赖first_dll
+        for native in self.natives:
+            if (native.enabled and
+                Path(native.path).name == second_dll and
+                native.load_before):
+                for dep in native.load_before:
+                    if dep.get('id') == first_dll:
+                        return True
+        return False
+
+    def _remove_reverse_dependency(self, from_dll: str, to_dll: str):
+        """移除from_dll对to_dll的依赖"""
+        for native in self.natives:
+            if (native.enabled and
+                Path(native.path).name == from_dll and
+                native.load_before):
+                # 移除对to_dll的依赖
+                native.load_before = [
+                    dep for dep in native.load_before
+                    if dep.get('id') != to_dll
+                ]
+                # 如果load_before为空，设置为None
+                if not native.load_before:
+                    native.load_before = None
+
+    def remove_specific_dll_order(self, first_dll: str, second_dll: str) -> bool:
+        """移除特定DLL的加载顺序"""
+        first_clean = first_dll.replace(" (外部)", "")
+        second_clean = second_dll.replace(" (外部)", "")
+
+        # 找到第一个DLL
+        first_native = None
+        for native in self.natives:
+            dll_name = Path(native.path).name
+            if (dll_name == first_clean or
+                native.path == first_clean or
+                native.path.endswith(first_clean)):
+                first_native = native
+                break
+
+        if not first_native or not first_native.load_before:
+            return False
+
+        # 移除对second_dll的依赖
+        second_dll_name = Path(second_clean).name if '/' in second_clean else second_clean
+        first_native.load_before = [
+            dep for dep in first_native.load_before
+            if dep.get('id') != second_dll_name
+        ]
+
+        # 如果load_before为空，设置为None
+        if not first_native.load_before:
+            first_native.load_before = None
+
+        return True
+
+    def ensure_specific_dll_orders(self):
+        """确保特定的DLL加载顺序"""
+        # 定义特定的DLL顺序要求
+        specific_orders = [
+            ("nighter.dll", "nrsc.dll"),  # nighter.dll必须在nrsc.dll之前
+        ]
+
+        for first_dll, second_dll in specific_orders:
+            # 检查两个DLL是否都启用
+            first_enabled = False
+            second_enabled = False
+
+            for native in self.natives:
+                dll_name = Path(native.path).name
+                if dll_name == first_dll and native.enabled:
+                    first_enabled = True
+                elif dll_name == second_dll and native.enabled:
+                    second_enabled = True
+
+            # 如果两个DLL都启用，确保顺序正确
+            if first_enabled and second_enabled:
+                self.set_specific_dll_order(first_dll, second_dll)
+
+    def update_load_dependencies(self):
+        """更新所有load_before和load_after依赖，移除未启用的mod"""
+        # 获取所有启用的mod ID
+        enabled_package_ids = set()
+        for pkg in self.packages:
+            if pkg.enabled:
+                enabled_package_ids.add(pkg.id)
+
+        # 获取所有启用的native DLL名称
+        enabled_native_ids = set()
+        for native in self.natives:
+            if native.enabled:
+                dll_name = Path(native.path).name
+                enabled_native_ids.add(dll_name)
+
+        # 更新packages的load_after依赖
+        for pkg in self.packages:
+            if pkg.load_after:
+                # 过滤掉未启用的依赖
+                updated_load_after = []
+                for dep in pkg.load_after:
+                    dep_id = dep.get('id', '')
+                    if dep_id in enabled_package_ids:
+                        updated_load_after.append(dep)
+
+                pkg.load_after = updated_load_after if updated_load_after else None
+
+        # 更新natives的load_before依赖
+        for native in self.natives:
+            if native.load_before:
+                # 过滤掉未启用的依赖
+                updated_load_before = []
+                for dep in native.load_before:
+                    dep_id = dep.get('id', '')
+                    if dep_id in enabled_native_ids:
+                        updated_load_before.append(dep)
+
+                native.load_before = updated_load_before if updated_load_before else None
+
+            if native.load_after:
+                # 过滤掉未启用的依赖
+                updated_load_after = []
+                for dep in native.load_after:
+                    dep_id = dep.get('id', '')
+                    if dep_id in enabled_native_ids:
+                        updated_load_after.append(dep)
+
+                native.load_after = updated_load_after if updated_load_after else None
+
+        # 确保特定的DLL顺序
+        self.ensure_specific_dll_orders()
+
+    def add_to_load_dependencies(self, newly_enabled_id: str, is_native: bool = False):
+        """当mod被启用时，将其添加到相关的load依赖中"""
+        if is_native:
+            # 处理native DLL
+            # 找到设置了强制优先加载的DLL，重新构建其完整的依赖列表
+            for native in self.natives:
+                if (native.enabled and
+                    native.load_before and
+                    self._is_force_load_first_config(native)):
+                    # 重新构建完整的依赖列表
+                    target_dll_name = Path(native.path).name
+                    self._rebuild_force_load_first_dependencies(target_dll_name)
+                    break
+
+            # 确保特定的DLL顺序（无论是否有强制优先加载）
+            self.ensure_specific_dll_orders()
+        else:
+            # 处理package mod
+            # 找到设置了强制最后加载的mod，重新构建其完整的依赖列表
+            for pkg in self.packages:
+                if (pkg.enabled and
+                    pkg.load_after and
+                    self.is_force_load_last(pkg.id)):
+                    # 重新构建完整的依赖列表
+                    self._rebuild_force_load_last_dependencies(pkg.id)
+                    break
+
+    def _rebuild_force_load_first_dependencies(self, dll_name: str):
+        """重新构建DLL强制优先加载的完整依赖列表，智能处理特定DLL顺序"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        # 找到目标DLL
+        target_native = None
+        for native in self.natives:
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                target_native = native
+                break
+
+        if not target_native:
+            return
+
+        # 获取所有其他启用的DLL，但智能处理特定顺序
+        other_dlls = []
+        target_dll_name = Path(target_native.path).name
+
+        for other_native in self.natives:
+            if (other_native.enabled and
+                other_native != target_native):
+                other_dll_name = Path(other_native.path).name
+
+                # 检查是否存在特定顺序关系
+                if self._has_specific_order_dependency(other_dll_name, target_dll_name):
+                    # 如果other_dll应该在target_dll之前，则target_dll不应该依赖other_dll
+                    continue
+
+                # 检查是否可以通过链式依赖间接满足顺序要求
+                if self._can_reach_through_chain(target_dll_name, other_dll_name):
+                    # 如果可以通过链式依赖到达，则不需要直接依赖
+                    continue
+
+                other_dlls.append(other_dll_name)
+
+        # 重新设置优化后的load_before依赖
+        if other_dlls:
+            target_native.load_before = [
+                {"id": dll, "optional": False} for dll in other_dlls
+            ]
+        else:
+            target_native.load_before = None
+
+        # 确保特定的DLL顺序
+        self.ensure_specific_dll_orders()
+
+        # 在确保特定顺序后，重新优化强制优先加载的依赖
+        self._optimize_force_load_dependencies(target_dll_name)
+
+    def _has_specific_order_dependency(self, first_dll: str, second_dll: str) -> bool:
+        """检查两个DLL之间是否存在特定的顺序依赖关系"""
+        # 定义特定的DLL顺序要求
+        specific_orders = [
+            ("nighter.dll", "nrsc.dll"),  # nighter.dll必须在nrsc.dll之前
+        ]
+
+        for first, second in specific_orders:
+            if first == first_dll and second == second_dll:
+                return True
+
+        return False
+
+    def _can_reach_through_chain(self, from_dll: str, to_dll: str) -> bool:
+        """检查是否可以通过链式依赖从from_dll到达to_dll"""
+        # 定义特定的DLL顺序要求
+        specific_orders = [
+            ("nighter.dll", "nrsc.dll"),  # nighter.dll必须在nrsc.dll之前
+        ]
+
+        # 检查是否存在链式路径：from_dll -> intermediate_dll -> to_dll
+        for first, second in specific_orders:
+            if to_dll == second:
+                # 目标是second，检查是否可以通过first到达
+                # 如果from_dll会依赖first，且first会依赖second，则可以通过链式到达
+
+                # 检查first是否存在且启用
+                first_exists = any(
+                    native.enabled and Path(native.path).name == first
+                    for native in self.natives
+                )
+
+                if first_exists and from_dll != first and from_dll != second:
+                    # from_dll -> first -> second 的链式关系
+                    return True
+
+        return False
+
+    def _optimize_force_load_dependencies(self, dll_name: str):
+        """优化强制优先加载的依赖，移除可以通过链式依赖到达的DLL"""
+        clean_name = dll_name.replace(" (外部)", "")
+
+        # 找到目标DLL
+        target_native = None
+        for native in self.natives:
+            if (Path(native.path).name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                target_native = native
+                break
+
+        if not target_native or not target_native.load_before:
+            return
+
+        # 检查每个依赖是否可以通过链式依赖到达
+        optimized_deps = []
+
+        for dep in target_native.load_before:
+            dep_id = dep.get('id', '')
+
+            # 检查是否可以通过其他依赖链式到达这个DLL
+            can_reach_through_chain = False
+
+            for other_dep in target_native.load_before:
+                other_dep_id = other_dep.get('id', '')
+                if other_dep_id != dep_id:
+                    # 检查other_dep是否会依赖dep_id
+                    if self._dll_depends_on(other_dep_id, dep_id):
+                        can_reach_through_chain = True
+                        break
+
+            # 如果不能通过链式到达，则保留这个直接依赖
+            if not can_reach_through_chain:
+                optimized_deps.append(dep)
+
+        # 更新优化后的依赖
+        target_native.load_before = optimized_deps if optimized_deps else None
+
+    def _dll_depends_on(self, dll_name: str, target_dll: str) -> bool:
+        """检查dll_name是否依赖target_dll"""
+        for native in self.natives:
+            if (native.enabled and
+                Path(native.path).name == dll_name and
+                native.load_before):
+                # 检查load_before中是否包含target_dll
+                for dep in native.load_before:
+                    if dep.get('id') == target_dll:
+                        return True
+        return False
+
+    def _rebuild_force_load_last_dependencies(self, mod_id: str):
+        """重新构建mod强制最后加载的完整依赖列表"""
+        clean_id = mod_id.replace(" (外部)", "")
+
+        # 找到目标mod
+        target_package = None
+        for pkg in self.packages:
+            if pkg.id == clean_id:
+                target_package = pkg
+                break
+
+        if not target_package:
+            return
+
+        # 获取所有其他启用的mod ID列表（排除目标mod）
+        other_enabled_mods = []
+        for pkg in self.packages:
+            if pkg.enabled and pkg.id != clean_id:
+                other_enabled_mods.append(pkg.id)
+
+        # 重新设置完整的load_after依赖
+        if other_enabled_mods:
+            target_package.load_after = [
+                {"id": other_mod_id, "optional": True} for other_mod_id in other_enabled_mods
+            ]
+        else:
+            target_package.load_after = None
 
     def _write_custom_toml(self, config_data: Dict[str, Any], file_handle):
         """自定义TOML写入方法，确保正确的格式"""
         # 写入profileVersion
         file_handle.write(f'profileVersion = "{config_data.get("profileVersion", "v1")}"\n\n')
+
+        # 写入supports部分
+        file_handle.write('[[supports]]\n')
+        file_handle.write('game = "nightreign"\n\n')
 
         # 写入packages
         if 'packages' in config_data:

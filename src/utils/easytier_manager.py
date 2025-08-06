@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import Optional, Dict, List
 from PySide6.QtCore import QObject, QThread, Signal, QTimer
 import sys
+import uuid
 
 from .tool_manager import ToolManager
 from .network_optimizer import NetworkOptimizer
+from .easytier_config_generator import EasyTierConfigGenerator
 
 
 class EasyTierStartWorker(QThread):
@@ -78,23 +80,26 @@ class EasyTierManager(QObject):
     
     def __init__(self):
         super().__init__()
-        
+
         # 路径配置
         if getattr(sys, 'frozen', False):
             self.root_dir = Path(sys.executable).parent
         else:
             self.root_dir = Path(__file__).parent.parent.parent
-            
+
         self.esr_dir = self.root_dir / "ESR"
         self.easytier_core = self.esr_dir / "easytier-core.exe"
         self.easytier_cli = self.esr_dir / "easytier-cli.exe"
-        self.config_file = self.esr_dir / "easytier_config.json"
-        
+        self.config_file = self.esr_dir / "easytier_config.json"  # 保留JSON配置用于兼容
+
+        # 配置文件生成器
+        self.config_generator = EasyTierConfigGenerator()
+
         # 进程管理
         self.easytier_process: Optional[subprocess.Popen] = None
         self.is_running = False
         self.start_worker = None
-        
+
         # 状态监控定时器
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self._check_status)
@@ -129,14 +134,14 @@ class EasyTierManager(QObject):
                     "peers": ["tcp://public.easytier.top:11010"],  # --peers (默认只使用公共服务器)
                     "dhcp": True,                 # --dhcp (默认启用，与ipv4互斥)
                     # "ipv4": "10.126.126.1",    # --ipv4 (与dhcp互斥，不同时存在)
-                    "disable_encryption": False, # --disable-encryption (默认不禁用，即启用加密)
+                    "disable_encryption": True,  # --disable-encryption (默认禁用加密，提升性能)
                     "disable_ipv6": False,       # --disable-ipv6 (默认不禁用，即启用IPv6)
                     "latency_first": True,       # --latency-first (默认启用)
                     "multi_thread": True,        # --multi-thread (默认启用)
                     # EasyTier网络加速选项
                     "enable_kcp_proxy": True,    # --enable-kcp-proxy (默认启用KCP代理)
                     "enable_quic_proxy": True,   # --enable-quic-proxy (默认启用QUIC代理)
-                    "use_smoltcp": True,         # --use-smoltcp (默认启用用户态网络栈)
+                    "use_smoltcp": False,        # --use-smoltcp (默认禁用用户态网络栈，提升兼容性)
                     "enable_compression": True,  # --compression zstd (默认启用压缩)
                     # 网络优化配置
                     "network_optimization": {
@@ -178,7 +183,134 @@ class EasyTierManager(QObject):
         """检查WinTUN驱动是否存在"""
         wintun_dll = self.esr_dir / "wintun.dll"
         return wintun_dll.exists()
-    
+
+    def start_network_with_config_file(self, network_name: str, network_secret: str = "",
+                                      ipv4: str = "", peers: List[str] = None,
+                                      hostname: str = "", dhcp: bool = True,
+                                      listeners: List[str] = None,
+                                      rpc_portal: str = "0.0.0.0:0",
+                                      flags: Dict = None) -> bool:
+        """
+        使用配置文件启动EasyTier网络（推荐方式）
+
+        Args:
+            network_name: 网络名称
+            network_secret: 网络密码
+            ipv4: IPv4地址（非DHCP模式）
+            peers: 对等节点列表
+            hostname: 主机名（玩家名称）
+            dhcp: 是否使用DHCP
+            listeners: 监听地址列表
+            rpc_portal: RPC门户地址
+
+        Returns:
+            是否启动成功
+        """
+        try:
+            if self.is_running:
+                self.error_occurred.emit("EasyTier网络已在运行中")
+                return False
+
+            # 检查EasyTier是否已安装
+            if not self.is_easytier_installed():
+                self.error_occurred.emit("EasyTier未安装\n请先下载并安装EasyTier")
+                return False
+
+            # 检查WinTUN驱动
+            if not self.check_wintun_driver():
+                self.error_occurred.emit("缺少WinTUN驱动文件(wintun.dll)\n请重新下载EasyTier")
+                return False
+
+            # 处理peers参数
+            if peers is None:
+                peers = ["tcp://public.easytier.top:11010"]  # 默认公共服务器
+            elif isinstance(peers, str):
+                peers = [peers]  # 转换为列表
+
+            # 处理listeners参数
+            if listeners is None:
+                listeners = ["udp://0.0.0.0:11010"]
+
+            # 构建flags配置（优先使用传入的flags，否则使用配置中的默认值）
+            print(f"🔍 调试：传入的flags = {flags}")
+            if flags is None:
+                print("🔍 调试：flags为None，使用默认配置")
+                flags = {
+                    "enable_kcp_proxy": self.config.get("enable_kcp_proxy", True),
+                    "enable_quic_proxy": self.config.get("enable_quic_proxy", True),
+                    "latency_first": self.config.get("latency_first", True),
+                    "multi_thread": self.config.get("multi_thread", True),
+                    "enable_encryption": not self.config.get("disable_encryption", True),  # 转换为enable_encryption
+                    "disable_ipv6": self.config.get("disable_ipv6", False),
+                    "use_smoltcp": self.config.get("use_smoltcp", False),
+                    "enable_compression": self.config.get("enable_compression", True)
+                }
+            else:
+                print(f"🔍 调试：使用传入的flags，enable_encryption = {flags.get('enable_encryption')}")
+
+            # 生成并保存配置文件
+            success = self.config_generator.generate_and_save(
+                network_name=network_name,
+                network_secret=network_secret,
+                hostname=hostname,
+                peers=peers,
+                dhcp=dhcp,
+                ipv4=ipv4,
+                listeners=listeners,
+                rpc_portal=rpc_portal,
+                flags=flags
+            )
+
+            if not success:
+                self.error_occurred.emit("生成EasyTier配置文件失败")
+                return False
+
+            # 构建启动命令（使用配置文件）
+            config_file_path = self.config_generator.get_config_file_path()
+            cmd = [
+                str(self.easytier_core),
+                "--config-file", str(config_file_path)
+            ]
+
+            # 添加日志配置（覆盖配置文件中的设置）
+            logs_dir = self.esr_dir / "logs"
+            logs_dir.mkdir(exist_ok=True)
+            cmd.extend(["--file-log-dir", str(logs_dir)])
+            cmd.extend(["--file-log-level", "info"])
+            cmd.extend(["--console-log-level", "warn"])
+
+            print(f"🚀 启动EasyTier命令（配置文件模式）: {' '.join(cmd)}")
+
+            # 保存配置到JSON文件（保持兼容性）
+            update_config = {
+                "network_name": network_name,
+                "network_secret": network_secret,
+                "peers": peers,
+                "hostname": hostname
+            }
+
+            # IP配置：dhcp 和 ipv4 互斥
+            if dhcp:
+                update_config["dhcp"] = True
+                self.config.pop("ipv4", None)
+            else:
+                update_config["ipv4"] = ipv4
+                self.config.pop("dhcp", None)
+
+            self.config.update(update_config)
+            self.save_config()
+
+            # 在后台线程中启动EasyTier
+            self.start_worker = EasyTierStartWorker(self, cmd)
+            self.start_worker.start_finished.connect(self._on_start_finished)
+            self.start_worker.start()
+
+            return True  # 返回True表示启动请求已发送
+
+        except Exception as e:
+            self.error_occurred.emit(f"启动EasyTier网络失败: {e}")
+            return False
+
     def start_network(self, network_name: str, network_secret: str,
                      ipv4: str = "10.126.126.1",
                      peers: list = None,
@@ -730,37 +862,23 @@ class EasyTierManager(QObject):
     def start_network_with_optimization(self, network_name: str, network_secret: str = "",
                                       ipv4: str = "", peers: List[str] = None,
                                       hostname: str = "", dhcp: bool = True,
-                                      network_optimization: Dict = None) -> bool:
-        """启动网络并应用优化"""
+                                      network_optimization: Dict = None,
+                                      flags: Dict = None) -> bool:
+        """启动网络并应用优化（使用配置文件模式）"""
         try:
-            # 构建配置
-            config = {
-                "network_name": network_name,
-                "network_secret": network_secret,
-                "hostname": hostname,
-                "peers": peers or ["tcp://public.easytier.top:11010"],
-                "dhcp": dhcp,
-                "disable_encryption": False,  # 默认启用加密
-                "disable_ipv6": False,       # 默认启用IPv6
-                "latency_first": True,       # 默认延迟优先
-                "multi_thread": True         # 默认多线程
-            }
-
-            if not dhcp and ipv4:
-                config["ipv4"] = ipv4
-
             # 如果提供了网络优化配置，同步到 easytier_config.json
             if network_optimization:
                 self.update_network_optimization_config(network_optimization)
 
-            # 首先启动EasyTier网络
-            if not self.start_network(
+            # 使用配置文件模式启动EasyTier网络
+            if not self.start_network_with_config_file(
                 network_name=network_name,
                 network_secret=network_secret,
                 ipv4=ipv4,
                 peers=peers,
                 hostname=hostname,
-                dhcp=dhcp
+                dhcp=dhcp,
+                flags=flags  # 传递flags参数
             ):
                 return False
 

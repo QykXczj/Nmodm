@@ -264,7 +264,7 @@ class WelcomePage(BasePage):
                 background-color: rgba(0, 0, 0, 0.1);
             }}
         """)
-        btn.clicked.connect(lambda: self.open_url(url))
+        btn.clicked.connect(lambda checked=False: self.open_url(url))
         return btn
     
     def create_contact_section(self, layout):
@@ -304,7 +304,7 @@ class WelcomePage(BasePage):
         """)
         qq_number.setCursor(QCursor(Qt.PointingHandCursor))
         qq_number.setToolTip("点击复制QQ群号")
-        qq_number.clicked.connect(lambda: self.copy_to_clipboard("908596561", "QQ群号"))
+        qq_number.clicked.connect(lambda checked=False: self.copy_to_clipboard("908596561", "QQ群号"))
         contact_layout.addWidget(qq_number)
 
         layout.addWidget(contact_widget)

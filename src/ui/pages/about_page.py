@@ -53,7 +53,7 @@ class AboutPage(BasePage):
         layout.setSpacing(10)
         
         # 应用名称和版本
-        app_name = QLabel("Nmodm v3.0.3")
+        app_name = QLabel("Nmodm v3.0.5")
         app_name.setStyleSheet("""
             QLabel {
                 color: #89b4fa;
@@ -96,7 +96,7 @@ class AboutPage(BasePage):
     
     def create_update_info(self):
         """创建更新说明区域"""
-        section = QGroupBox("v3.0.3 更新说明")
+        section = QGroupBox("v3.0.5 更新说明")
         section.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;

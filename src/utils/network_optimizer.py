@@ -97,11 +97,22 @@ class NetworkOptimizer(QObject):
                 )
 
                 if result > 32:  # 成功
-                    # 等待启动
+                    print("✅ 管理员权限请求成功，等待进程启动...")
+                    # 等待启动，由于ShellExecuteW不返回进程对象，我们需要通过进程名查找
                     time.sleep(3)
+                    
+                    # 重置进程对象，因为ShellExecuteW启动的进程我们无法直接控制
+                    self.winip_process = None
+                    
                     return self._check_winip_status()
                 else:
                     print(f"❌ 管理员权限启动失败，错误代码: {result}")
+                    if result == 5:
+                        print("   错误原因: 拒绝访问（用户取消了UAC提示）")
+                    elif result == 2:
+                        print("   错误原因: 文件未找到")
+                    elif result == 31:
+                        print("   错误原因: 没有关联的应用程序")
                     return False
             else:
                 # 非Windows系统，使用sudo
@@ -116,39 +127,59 @@ class NetworkOptimizer(QObject):
                 return self._check_winip_status()
 
         except Exception as e:
-            print(f"管理员权限启动WinIPBroadcast失败: {e}")
-            return False
+            p
 
     def _check_winip_status(self) -> bool:
         """检查WinIPBroadcast启动状态"""
         process_started = False
+        found_process = None
 
-        # 方法1：检查进程是否还在运行
+        # 方法1：检查我们启动的进程是否还在运行（仅适用于非管理员权限启动）
         if self.winip_process and self.winip_process.poll() is None:
             process_started = True
-            print("✅ WinIPBroadcast进程启动成功")
+            print("✅ WinIPBroadcast进程启动成功（直接启动）")
         else:
-            # 方法2：检查是否有WinIPBroadcast进程在运行（可能是后台启动）
+            # 方法2：检查是否有WinIPBroadcast进程在运行（包括管理员权限启动的）
             try:
                 import psutil
-                for proc in psutil.process_iter(['pid', 'name']):
+                for proc in psutil.process_iter(['pid', 'name', 'create_time']):
                     try:
                         if proc.info['name'].lower() == 'winipbroadcast.exe':
                             print(f"✅ 检测到WinIPBroadcast进程运行中 (PID: {proc.info['pid']})")
                             process_started = True
+                            found_process = proc
                             break
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
             except ImportError:
-                print("⚠️ psutil未安装，无法进行进程检测")
+                print("⚠️ psutil未安装，无法检查进程状态")
+                # 如果没有psutil，尝试使用系统命令检查
+                try:
+                    import subprocess
+                    result = subprocess.run(['tasklist', '/fi', 'imagename eq WinIPBroadcast.exe'], 
+                                          capture_output=True, text=True)
+                    if 'WinIPBroadcast.exe' in result.stdout:
+                        print("✅ 检测到WinIPBroadcast进程运行中（系统命令检查）")
+                        process_started = True
+                except:
+                    pass
 
         if process_started:
             self.winip_enabled = True
             self.optimization_status_changed.emit("WinIPBroadcast", True)
             print("✅ WinIPBroadcast启动成功")
+            
+            # 如果找到了进程但没有进程对象，尝试保存进程信息（用于后续管理）
+            if not self.winip_process and found_process:
+                try:
+                    # 注意：我们不能直接控制管理员权限启动的进程，但可以记录其存在
+                    print(f"📝 记录管理员权限启动的WinIPBroadcast进程 (PID: {found_process.pid})")
+                except:
+                    pass
+            
             return True
         else:
-            # 获取错误信息
+            # 如果有进程对象，尝试获取错误信息
             if self.winip_process:
                 try:
                     _, stderr = self.winip_process.communicate(timeout=1)
@@ -165,6 +196,8 @@ class NetworkOptimizer(QObject):
     def stop_winip_broadcast(self):
         """停止WinIPBroadcast"""
         try:
+            import time
+            
             # 首先尝试停止我们启动的进程
             if self.winip_process and self.winip_process.poll() is None:
                 self.winip_process.terminate()
@@ -180,6 +213,8 @@ class NetworkOptimizer(QObject):
             # 额外保险：查找并终止所有WinIPBroadcast进程
             try:
                 import psutil
+                
+                # 第一次扫描
                 found_processes = []
                 for proc in psutil.process_iter(['pid', 'name']):
                     try:
@@ -190,26 +225,92 @@ class NetworkOptimizer(QObject):
 
                 if found_processes:
                     print(f"🔍 发现 {len(found_processes)} 个WinIPBroadcast进程，正在终止...")
+                    
+                    # 第一轮：优雅终止
                     for proc in found_processes:
                         try:
                             print(f"  终止WinIPBroadcast进程 PID: {proc.pid}")
                             proc.terminate()
-                            # 等待进程结束
-                            proc.wait(timeout=3)
-                        except psutil.TimeoutExpired:
-                            # 如果进程没有响应，强制终止
-                            try:
-                                proc.kill()
-                                print(f"  强制终止WinIPBroadcast进程 PID: {proc.pid}")
-                            except:
-                                pass
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            # 进程已经结束或无权限，这是正常的
                             pass
                         except Exception as e:
                             print(f"  终止进程 {proc.pid} 失败: {e}")
 
-                    print("✅ 所有WinIPBroadcast进程已终止")
+                    # 等待进程结束
+                    time.sleep(2)
+
+                    # 第二轮：强制终止仍在运行的进程
+                    remaining_processes = []
+                    for proc in found_processes:
+                        try:
+                            if proc.is_running():
+                                remaining_processes.append(proc)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+
+                    if remaining_processes:
+                        print(f"  仍有 {len(remaining_processes)} 个进程运行，强制终止...")
+                        for proc in remaining_processes:
+                            try:
+                                print(f"  强制终止WinIPBroadcast进程 PID: {proc.pid}")
+                                proc.kill()
+                                proc.wait(timeout=3)
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                            except Exception as e:
+                                print(f"  强制终止进程 {proc.pid} 失败: {e}")
+
+                    # 最终验证
+                    time.sleep(1)
+                    final_check = []
+                    for proc in psutil.process_iter(['pid', 'name']):
+                        try:
+                            if proc.info['name'].lower() == 'winipbroadcast.exe':
+                                final_check.append(proc)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+
+                    if final_check:
+                        print(f"⚠️ 仍有 {len(final_check)} 个WinIPBroadcast进程未能清理")
+                        # 尝试使用系统命令
+                        try:
+                            import subprocess
+                            import sys
+                            
+                            if sys.platform == "win32":
+                                # 尝试使用管理员权限的taskkill
+                                import ctypes
+                                
+                                # 检查是否有管理员权限
+                                is_admin = ctypes.windll.shell32.IsUserAnAdmin()
+                                
+                                if is_admin:
+                                    # 有管理员权限，直接使用taskkill
+                                    result = subprocess.run(['taskkill', '/f', '/im', 'WinIPBroadcast.exe'], 
+                                                          capture_output=True, text=True)
+                                    if result.returncode == 0:
+                                        print("✅ 使用管理员权限taskkill成功清理WinIPBroadcast进程")
+                                    else:
+                                        print(f"⚠️ 管理员权限taskkill执行失败: {result.stderr}")
+                                else:
+                                    print("⚠️ 需要管理员权限才能完全清理WinIPBroadcast进程")
+                                    print("💡 建议以管理员权限重启程序，或手动结束WinIPBroadcast进程")
+                                    
+                                    # 不弹出UAC窗口，只给出提示
+                                    print("💡 WinIPBroadcast进程以管理员权限运行，无法静默清理")
+                                    print("💡 如需完全清理，请以管理员权限重启程序")
+                            else:
+                                # 非Windows系统
+                                result = subprocess.run(['pkill', '-f', 'WinIPBroadcast'], 
+                                                      capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    print("✅ 使用pkill成功清理WinIPBroadcast进程")
+                                else:
+                                    print(f"⚠️ pkill执行失败: {result.stderr}")
+                        except Exception as e:
+                            print(f"⚠️ 系统命令清理失败: {e}")
+                    else:
+                        print("✅ 所有WinIPBroadcast进程已终止")
                 else:
                     print("🛑 WinIPBroadcast已停止")
 

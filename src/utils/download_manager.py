@@ -6,7 +6,7 @@ import os
 import json
 import zipfile
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict
 from PySide6.QtCore import QObject, Signal, QThread
@@ -95,6 +95,33 @@ class DownloadManager(QObject):
 
         # 加载镜像配置
         self.PROXY_URLS = self.load_mirrors()
+
+        # EasyTier版本信息缓存
+        self._easytier_cache = {
+            'release': {'data': None, 'timestamp': None},
+            'prerelease': {'data': None, 'timestamp': None}
+        }
+        self._cache_duration = timedelta(minutes=5)  # 缓存5分钟
+
+    def _is_cache_valid(self, cache_type: str) -> bool:
+        """检查缓存是否有效"""
+        cache = self._easytier_cache.get(cache_type)
+        if not cache or not cache['timestamp'] or not cache['data']:
+            return False
+        return datetime.now() - cache['timestamp'] < self._cache_duration
+
+    def _get_cached_data(self, cache_type: str):
+        """获取缓存数据"""
+        if self._is_cache_valid(cache_type):
+            return self._easytier_cache[cache_type]['data']
+        return None
+
+    def _set_cache_data(self, cache_type: str, data):
+        """设置缓存数据"""
+        self._easytier_cache[cache_type] = {
+            'data': data,
+            'timestamp': datetime.now()
+        }
 
     def load_mirrors(self) -> list:
         """加载镜像配置"""
@@ -542,17 +569,61 @@ class DownloadManager(QObject):
 
     # ==================== EasyTier 相关方法 ====================
 
-    def get_latest_easytier_version(self) -> Optional[str]:
-        """获取EasyTier最新版本"""
-        try:
-            url = "https://api.github.com/repos/EasyTier/EasyTier/releases/latest"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+    def get_latest_easytier_version(self, include_prerelease: bool = False) -> Optional[str]:
+        """获取EasyTier最新版本
 
-            data = response.json()
-            return data.get('tag_name', '').lstrip('v')
+        Args:
+            include_prerelease: 是否包含预发行版
+        """
+        try:
+            release_info = self.get_easytier_release_info(include_prerelease)
+            if release_info:
+                return release_info.get('tag_name', '').lstrip('v')
+            return None
         except Exception as e:
             print(f"获取EasyTier版本失败: {e}")
+            return None
+
+    def get_easytier_release_info(self, include_prerelease: bool = False) -> Optional[Dict]:
+        """获取EasyTier发行版详细信息
+
+        Args:
+            include_prerelease: 是否包含预发行版
+
+        Returns:
+            包含版本信息的字典，包括tag_name, prerelease等字段
+        """
+        cache_type = 'prerelease' if include_prerelease else 'release'
+
+        # 先检查缓存
+        cached_data = self._get_cached_data(cache_type)
+        if cached_data:
+            return cached_data
+
+        try:
+            if include_prerelease:
+                # 获取所有发行版，包括预发行版
+                url = "https://api.github.com/repos/EasyTier/EasyTier/releases"
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+
+                releases = response.json()
+                if releases:
+                    # 返回第一个发行版（最新的，可能是预发行版）
+                    data = releases[0]
+                    self._set_cache_data(cache_type, data)
+                    return data
+            else:
+                # 只获取正式发行版
+                url = "https://api.github.com/repos/EasyTier/EasyTier/releases/latest"
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+
+                data = response.json()
+                self._set_cache_data(cache_type, data)
+                return data
+        except Exception as e:
+            print(f"获取EasyTier发行版信息失败: {e}")
             return None
 
     def get_current_easytier_version(self) -> Optional[str]:
@@ -567,11 +638,18 @@ class DownloadManager(QObject):
             print(f"读取EasyTier版本失败: {e}")
             return None
 
-    def save_easytier_version(self, version: str):
-        """保存EasyTier版本信息"""
+    def save_easytier_version(self, version: str, is_prerelease: bool = False):
+        """保存EasyTier版本信息
+
+        Args:
+            version: 版本号
+            is_prerelease: 是否为预发行版
+        """
         try:
             version_data = {
                 'version': version,
+                'is_prerelease': is_prerelease,
+                'version_type': 'prerelease' if is_prerelease else 'release',
                 'download_time': json.dumps(datetime.now(), default=str)
             }
             with open(self.esr_version_file, 'w', encoding='utf-8') as f:
@@ -579,23 +657,52 @@ class DownloadManager(QObject):
         except Exception as e:
             print(f"保存EasyTier版本信息失败: {e}")
 
-    def check_easytier_update(self) -> tuple[bool, Optional[str], Optional[str]]:
-        """检查EasyTier更新"""
+    def get_current_easytier_version_info(self) -> Optional[Dict]:
+        """获取当前EasyTier版本详细信息"""
         try:
-            latest_version = self.get_latest_easytier_version()
+            if self.esr_version_file.exists():
+                with open(self.esr_version_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            return None
+        except Exception as e:
+            print(f"读取EasyTier版本信息失败: {e}")
+            return None
+
+    def is_current_easytier_prerelease(self) -> bool:
+        """检查当前安装的EasyTier是否为预发行版"""
+        try:
+            version_info = self.get_current_easytier_version_info()
+            if version_info:
+                return version_info.get('is_prerelease', False)
+            return False
+        except Exception as e:
+            print(f"检查EasyTier版本类型失败: {e}")
+            return False
+
+    def check_easytier_update(self, include_prerelease: bool = False) -> tuple[bool, Optional[str], Optional[str]]:
+        """检查EasyTier更新
+
+        Args:
+            include_prerelease: 是否包含预发行版
+        """
+        try:
+            latest_version = self.get_latest_easytier_version(include_prerelease)
             current_version = self.get_current_easytier_version()
 
             if not latest_version:
                 return False, None, "无法获取最新版本信息"
 
             if not current_version:
-                return True, latest_version, "未安装EasyTier"
+                version_type = "预发行版" if include_prerelease else "正式版"
+                return True, latest_version, f"未安装EasyTier ({version_type})"
 
             # 简单的版本比较
             if latest_version != current_version:
-                return True, latest_version, f"发现新版本 {latest_version}"
+                version_type = "预发行版" if include_prerelease else "正式版"
+                return True, latest_version, f"发现新{version_type} {latest_version}"
 
-            return False, current_version, "已是最新版本"
+            version_type = "预发行版" if include_prerelease else "正式版"
+            return False, current_version, f"已是最新{version_type}"
         except Exception as e:
             return False, None, f"检查更新失败: {e}"
 
@@ -610,14 +717,21 @@ class DownloadManager(QObject):
             print(f"构建EasyTier下载链接失败: {e}")
             return None
 
-    def download_easytier(self, version: str = None, selected_mirror: str = None) -> bool:
-        """下载EasyTier"""
+    def download_easytier(self, version: str = None, selected_mirror: str = None, include_prerelease: bool = False) -> bool:
+        """下载EasyTier
+
+        Args:
+            version: 指定版本号，如果为None则获取最新版本
+            selected_mirror: 选择的镜像
+            include_prerelease: 是否包含预发行版（仅在version为None时生效）
+        """
         try:
             # 如果没有指定版本，获取最新版本
             if not version:
-                version = self.get_latest_easytier_version()
+                version = self.get_latest_easytier_version(include_prerelease)
                 if not version:
-                    print("无法获取EasyTier最新版本")
+                    version_type = "预发行版" if include_prerelease else "正式版"
+                    print(f"无法获取EasyTier最新{version_type}")
                     return False
 
             download_url = self.get_easytier_download_url(version)
@@ -644,7 +758,7 @@ class DownloadManager(QObject):
                     # 创建下载工作线程
                     self.easytier_download_worker = DownloadWorker(url, str(save_path))
                     self.easytier_download_worker.finished.connect(
-                        lambda success, msg: self._on_easytier_download_finished(success, msg, version, save_path)
+                        lambda success, msg: self._on_easytier_download_finished(success, msg, version, save_path, include_prerelease)
                     )
                     self.easytier_download_worker.start()
 
@@ -675,12 +789,12 @@ class DownloadManager(QObject):
         else:
             return mirror_url.replace("https://", "").replace("http://", "").rstrip("/")
 
-    def _on_easytier_download_finished(self, success: bool, message: str, version: str, zip_path: Path):
+    def _on_easytier_download_finished(self, success: bool, message: str, version: str, zip_path: Path, is_prerelease: bool = False):
         """EasyTier下载完成回调"""
         if success:
             print("EasyTier下载完成，开始解压...")
             if self._extract_easytier(zip_path, version):
-                self.save_easytier_version(version)
+                self.save_easytier_version(version, is_prerelease)
                 print(f"EasyTier v{version} 安装完成")
                 # 发送安装完成信号
                 if hasattr(self, 'easytier_install_finished'):

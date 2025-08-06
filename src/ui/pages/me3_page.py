@@ -4,7 +4,7 @@ ME3工具和ERModsMerger下载管理
 """
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QProgressBar, QFrame, QGroupBox,
-                               QTextEdit, QComboBox)
+                               QTextEdit, QComboBox, QRadioButton)
 from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from .base_page import BasePage
 
@@ -41,9 +41,10 @@ class UpdateCheckWorker(QThread):
     erm_update_checked = Signal(dict)
     easytier_update_checked = Signal(dict)
 
-    def __init__(self, download_manager):
+    def __init__(self, download_manager, include_prerelease=False):
         super().__init__()
         self.download_manager = download_manager
+        self.include_prerelease = include_prerelease
 
     def run(self):
         """在后台线程中检查更新"""
@@ -81,14 +82,15 @@ class UpdateCheckWorker(QThread):
 
         # 检查EasyTier更新
         try:
-            has_update, latest_version, message = self.download_manager.check_easytier_update()
+            has_update, latest_version, message = self.download_manager.check_easytier_update(self.include_prerelease)
             current_version = self.download_manager.get_current_easytier_version()
             self.easytier_update_checked.emit({
                 'success': True,
                 'has_update': has_update,
                 'latest_version': latest_version,
                 'current_version': current_version,
-                'message': message
+                'message': message,
+                'include_prerelease': self.include_prerelease
             })
         except Exception as e:
             self.easytier_update_checked.emit({'success': False, 'error': str(e)})
@@ -177,17 +179,20 @@ class VersionInfoCard(QFrame):
 
         self.setLayout(main_layout)
     
-    def update_info(self, current_version=None, latest_version=None, status=None):
+    def update_info(self, current_version=None, latest_version=None, status=None, version_type=None):
         """更新版本信息"""
         if current_version is not None:
             self.current_version_label.setText(f"当前版本: {current_version or '未安装'}")
-        
+
         if latest_version is not None:
-            self.latest_version_label.setText(f"最新版本: {latest_version or '获取失败'}")
+            latest_text = f"最新版本: {latest_version or '获取失败'}"
+            if version_type:
+                latest_text += f" ({version_type})"
+            self.latest_version_label.setText(latest_text)
         
         if status is not None:
             # 根据状态设置不同的颜色和样式
-            if any(keyword in status for keyword in ["已安装", "安装完成", "已是最新版本", "最新版本"]):
+            if any(keyword in status for keyword in ["已安装", "安装完成", "已是最新版本", "最新版本", "已是最新正式版", "已是最新预发行版"]):
                 # 成功状态：绿色
                 color = "#a6e3a1"
                 border_color = "#a6e3a1"
@@ -834,7 +839,13 @@ class ToolDownloadPage(BasePage):
 
         # 创建并启动更新检查工作线程
         dm = self.get_download_manager()
-        self.update_check_worker = UpdateCheckWorker(dm)
+
+        # 获取EasyTier版本类型选择
+        include_prerelease = False
+        if hasattr(self, 'easytier_prerelease_radio') and self.easytier_prerelease_radio.isChecked():
+            include_prerelease = True
+
+        self.update_check_worker = UpdateCheckWorker(dm, include_prerelease)
         self.update_check_worker.me3_update_checked.connect(self.on_me3_update_checked)
         self.update_check_worker.erm_update_checked.connect(self.on_erm_update_checked)
         self.update_check_worker.easytier_update_checked.connect(self.on_easytier_update_checked)
@@ -894,17 +905,21 @@ class ToolDownloadPage(BasePage):
                 latest_version = result.get('latest_version')
                 current_version = result.get('current_version')
                 message = result.get('message', '')
+                include_prerelease = result.get('include_prerelease', False)
 
+                version_type = "预发行版" if include_prerelease else "正式版"
                 self.easytier_version_card.update_info(
                     current_version=current_version,
                     latest_version=latest_version,
-                    status=message
+                    status=message,
+                    version_type=version_type
                 )
 
                 # 更新状态标签
+                version_type = "预发行版" if include_prerelease else "正式版"
                 if has_update and latest_version:
-                    self.easytier_download_btn.setText(f"更新到 v{latest_version}")
-                    self.easytier_status_label.setText(f"发现新版本: v{latest_version}")
+                    self.easytier_download_btn.setText(f"更新到 v{latest_version} ({version_type})")
+                    self.easytier_status_label.setText(f"发现新{version_type}: v{latest_version}")
                     self.easytier_status_label.setStyleSheet("""
                         QLabel {
                             color: #f9e2af;
@@ -914,8 +929,8 @@ class ToolDownloadPage(BasePage):
                         }
                     """)
                 elif current_version:
-                    self.easytier_download_btn.setText("重新下载")
-                    self.easytier_status_label.setText("已是最新版本")
+                    self.easytier_download_btn.setText(f"重新下载 ({version_type})")
+                    self.easytier_status_label.setText(f"已是最新{version_type}")
                     self.easytier_status_label.setStyleSheet("""
                         QLabel {
                             color: #a6e3a1;
@@ -925,8 +940,8 @@ class ToolDownloadPage(BasePage):
                         }
                     """)
                 else:
-                    self.easytier_download_btn.setText("下载EasyTier")
-                    self.easytier_status_label.setText("可以下载最新版本")
+                    self.easytier_download_btn.setText(f"下载EasyTier ({version_type})")
+                    self.easytier_status_label.setText(f"可以下载最新{version_type}")
                     self.easytier_status_label.setStyleSheet("""
                         QLabel {
                             color: #89b4fa;
@@ -1015,23 +1030,32 @@ class ToolDownloadPage(BasePage):
         """检查EasyTier更新"""
         try:
             dm = self.get_download_manager()
-            has_update, latest_version, message = dm.check_easytier_update()
+
+            # 获取版本类型选择
+            include_prerelease = False
+            if hasattr(self, 'easytier_prerelease_radio') and self.easytier_prerelease_radio.isChecked():
+                include_prerelease = True
+
+            has_update, latest_version, message = dm.check_easytier_update(include_prerelease)
 
             # 更新界面
             current_version = dm.get_current_easytier_version()
+            version_type = "预发行版" if include_prerelease else "正式版"
             self.easytier_version_card.update_info(
                 current_version=current_version,
                 latest_version=latest_version,
-                status=message
+                status=message,
+                version_type=version_type
             )
 
             # 更新按钮文本
+            version_type = "预发行版" if include_prerelease else "正式版"
             if has_update and latest_version:
-                self.easytier_download_btn.setText(f"更新到 v{latest_version}")
+                self.easytier_download_btn.setText(f"更新到 v{latest_version} ({version_type})")
             elif current_version:
-                self.easytier_download_btn.setText("重新下载")
+                self.easytier_download_btn.setText(f"重新下载 ({version_type})")
             else:
-                self.easytier_download_btn.setText("下载EasyTier")
+                self.easytier_download_btn.setText(f"下载EasyTier ({version_type})")
 
         except Exception as e:
             print(f"检查EasyTier更新失败: {e}")
@@ -1319,6 +1343,72 @@ class ToolDownloadPage(BasePage):
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(10)
 
+        # 版本类型选择区域
+        version_type_container = QWidget()
+        version_type_layout = QHBoxLayout()
+        version_type_layout.setContentsMargins(0, 0, 0, 0)
+        version_type_layout.setSpacing(10)
+
+        version_type_label = QLabel("版本类型:")
+        version_type_label.setStyleSheet("""
+            QLabel {
+                color: #cdd6f4;
+                font-size: 13px;
+                font-weight: bold;
+                min-width: 70px;
+            }
+        """)
+
+        # 版本类型选择单选按钮
+        self.easytier_release_radio = QRadioButton("正式版")
+        self.easytier_prerelease_radio = QRadioButton("预发行版")
+
+        # 根据当前安装的版本类型自动选择
+        self.auto_select_version_type()
+
+        # 设置单选按钮样式
+        radio_style = """
+            QRadioButton {
+                color: #cdd6f4;
+                font-size: 12px;
+                spacing: 5px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+            }
+            QRadioButton::indicator:unchecked {
+                border: 2px solid #6c7086;
+                border-radius: 8px;
+                background-color: #1e1e2e;
+            }
+            QRadioButton::indicator:checked {
+                border: 2px solid #89b4fa;
+                border-radius: 8px;
+                background-color: #89b4fa;
+            }
+        """
+        self.easytier_release_radio.setStyleSheet(radio_style)
+        self.easytier_prerelease_radio.setStyleSheet(radio_style)
+
+        # 连接信号，当版本类型改变时自动检查更新
+        self.easytier_release_radio.toggled.connect(self.on_easytier_version_type_changed)
+        self.easytier_prerelease_radio.toggled.connect(self.on_easytier_version_type_changed)
+
+        # 创建防抖定时器
+        self.easytier_version_check_timer = QTimer()
+        self.easytier_version_check_timer.setSingleShot(True)
+        self.easytier_version_check_timer.timeout.connect(self.delayed_easytier_version_check)
+        self.easytier_version_check_timer.setInterval(300)  # 300ms防抖延迟
+
+        version_type_layout.addWidget(version_type_label)
+        version_type_layout.addWidget(self.easytier_release_radio)
+        version_type_layout.addWidget(self.easytier_prerelease_radio)
+        version_type_layout.addStretch()
+
+        version_type_container.setLayout(version_type_layout)
+        button_layout.addWidget(version_type_container)
+
         # 按钮行
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
@@ -1402,6 +1492,41 @@ class ToolDownloadPage(BasePage):
 
         button_container.setLayout(button_layout)
         layout.addWidget(button_container)
+
+    def auto_select_version_type(self):
+        """根据当前安装的版本类型自动选择单选框"""
+        try:
+            download_manager = self.get_download_manager()
+            is_prerelease = download_manager.is_current_easytier_prerelease()
+
+            if is_prerelease:
+                self.easytier_prerelease_radio.setChecked(True)
+                print("🔄 自动选择预发行版（基于当前安装版本）")
+            else:
+                self.easytier_release_radio.setChecked(True)
+                print("🔄 自动选择正式版（基于当前安装版本或默认）")
+        except Exception as e:
+            # 如果出错，默认选择正式版
+            self.easytier_release_radio.setChecked(True)
+            print(f"⚠️ 自动选择版本类型失败，使用默认正式版: {e}")
+
+    def on_easytier_version_type_changed(self):
+        """版本类型改变时的回调"""
+        # 显示切换状态
+        if hasattr(self, 'easytier_version_card'):
+            version_type = "预发行版" if (hasattr(self, 'easytier_prerelease_radio') and
+                                      self.easytier_prerelease_radio.isChecked()) else "正式版"
+            self.easytier_version_card.update_info(status=f"正在切换到{version_type}...")
+
+        # 使用防抖定时器，避免快速切换时频繁请求
+        if hasattr(self, 'easytier_version_check_timer'):
+            self.easytier_version_check_timer.stop()
+            self.easytier_version_check_timer.start()
+
+    def delayed_easytier_version_check(self):
+        """延迟执行的版本检查"""
+        if hasattr(self, 'easytier_version_card'):
+            self.check_easytier_update()
 
     def create_easytier_mirror_controls(self, layout):
         """创建EasyTier镜像选择控件"""
@@ -1503,8 +1628,16 @@ class ToolDownloadPage(BasePage):
             if hasattr(self, 'easytier_mirror_combo') and self.easytier_mirror_combo.currentData():
                 selected_mirror = self.easytier_mirror_combo.currentData()
 
+            # 获取版本类型选择
+            include_prerelease = False
+            if hasattr(self, 'easytier_prerelease_radio') and self.easytier_prerelease_radio.isChecked():
+                include_prerelease = True
+
             # 开始下载
-            success = download_manager.download_easytier(selected_mirror=selected_mirror)
+            success = download_manager.download_easytier(
+                selected_mirror=selected_mirror,
+                include_prerelease=include_prerelease
+            )
 
             if success:
                 # 连接进度信号
@@ -1534,22 +1667,30 @@ class ToolDownloadPage(BasePage):
             self.easytier_check_btn.setEnabled(False)
             self.easytier_version_card.update_info(status="检查中...")
 
+            # 获取版本类型选择
+            include_prerelease = False
+            if hasattr(self, 'easytier_prerelease_radio') and self.easytier_prerelease_radio.isChecked():
+                include_prerelease = True
+
             # 检查更新
-            has_update, latest_version, message = download_manager.check_easytier_update()
+            has_update, latest_version, message = download_manager.check_easytier_update(include_prerelease)
 
             # 更新界面
             current_version = download_manager.get_current_easytier_version()
+            version_type = "预发行版" if include_prerelease else "正式版"
             self.easytier_version_card.update_info(
                 current_version=current_version,
                 latest_version=latest_version,
-                status=message
+                status=message,
+                version_type=version_type
             )
 
             # 更新按钮文本
+            version_type = "预发行版" if include_prerelease else "正式版"
             if has_update and latest_version:
-                self.easytier_download_btn.setText(f"更新到 v{latest_version}")
+                self.easytier_download_btn.setText(f"更新到 v{latest_version} ({version_type})")
             else:
-                self.easytier_download_btn.setText("下载EasyTier")
+                self.easytier_download_btn.setText(f"下载EasyTier ({version_type})")
 
         except Exception as e:
             print(f"检查EasyTier更新失败: {e}")

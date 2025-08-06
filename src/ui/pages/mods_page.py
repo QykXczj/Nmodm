@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFrame, QGroupBox, QListWidget,
                                QListWidgetItem, QCheckBox, QLineEdit, QTextEdit,
                                QSplitter, QScrollArea, QComboBox, QFileDialog,
-                               QMenu, QApplication)
+                               QMenu, QApplication, QDialog)
 from PySide6.QtCore import Qt, Signal, QTimer, QProcess
 from .base_page import BasePage
 from ...config.mod_config_manager import ModConfigManager
@@ -672,10 +672,16 @@ class ModsPage(BasePage):
         if enabled:
             # 添加到配置
             self.mod_manager.add_package(package_name, f"{package_name}/")
+            # 新启用的mod，添加到相关依赖中
+            self.mod_manager.add_to_load_dependencies(package_name, is_native=False)
         else:
             # 从配置移除
             self.mod_manager.remove_package(package_name)
+            # 禁用的mod，从所有依赖中移除
+            self.mod_manager.update_load_dependencies()
 
+        # 保存配置
+        self.mod_manager.save_config()
         self.update_config_preview()
         # 发出配置变化信号
         self.config_changed.emit()
@@ -685,10 +691,16 @@ class ModsPage(BasePage):
         if enabled:
             # 添加到配置
             self.mod_manager.add_native(dll_name)
+            # 新启用的DLL，添加到相关依赖中
+            self.mod_manager.add_to_load_dependencies(dll_name, is_native=True)
         else:
             # 从配置移除
             self.mod_manager.remove_native(dll_name)
+            # 禁用的DLL，从所有依赖中移除
+            self.mod_manager.update_load_dependencies()
 
+        # 保存配置
+        self.mod_manager.save_config()
         self.update_config_preview()
         # 发出配置变化信号
         self.config_changed.emit()
@@ -953,23 +965,23 @@ class ModsPage(BasePage):
 
         # 添加备注菜单项
         comment_action = menu.addAction("📝 编辑备注")
-        comment_action.triggered.connect(lambda: self.edit_mod_comment(clean_name, checkbox))
+        comment_action.triggered.connect(lambda checked=False: self.edit_mod_comment(clean_name, checkbox))
 
         # 添加强制最后加载选项
         menu.addSeparator()
         is_force_last = self.mod_manager.is_force_load_last(clean_name)
         if is_force_last:
             force_last_action = menu.addAction("🔓 取消强制最后加载")
-            force_last_action.triggered.connect(lambda: self.clear_force_load_last(clean_name))
+            force_last_action.triggered.connect(lambda checked=False: self.clear_force_load_last(clean_name))
         else:
             force_last_action = menu.addAction("🔒 强制最后加载")
-            force_last_action.triggered.connect(lambda: self.set_force_load_last(clean_name))
+            force_last_action.triggered.connect(lambda checked=False: self.set_force_load_last(clean_name))
 
         # 如果是外部mod，添加移除选项
         if is_external:
             menu.addSeparator()
             remove_action = menu.addAction("🗑️ 移除外部Mod")
-            remove_action.triggered.connect(lambda: self.remove_external_mod(clean_name))
+            remove_action.triggered.connect(lambda checked=False: self.remove_external_mod(clean_name))
 
         menu.exec(self.packages_list.mapToGlobal(position))
 
@@ -1016,13 +1028,41 @@ class ModsPage(BasePage):
 
         # 添加备注菜单项
         comment_action = menu.addAction("📝 编辑备注")
-        comment_action.triggered.connect(lambda: self.edit_native_comment(clean_name, checkbox))
+        comment_action.triggered.connect(lambda checked=False: self.edit_native_comment(clean_name, checkbox))
+
+        # 添加前置加载功能
+        menu.addSeparator()
+
+        # 检查当前是否已设置前置加载
+        is_force_load_first = self.mod_manager.is_force_load_first_native(clean_name)
+
+        if is_force_load_first:
+            clear_load_first_action = menu.addAction("🔓 清除强制优先加载")
+            clear_load_first_action.triggered.connect(lambda: self.clear_force_load_first_native(clean_name))
+        else:
+            load_first_action = menu.addAction("⬆️ 强制优先加载")
+            load_first_action.triggered.connect(lambda: self.set_force_load_first_native(clean_name))
+
+        # 添加特定DLL的配置功能
+        menu.addSeparator()
+
+        # 检查DLL类型（支持路径格式）
+        if clean_name.endswith("nrsc.dll") or "SeamlessCoop" in clean_name:
+            print(f"✅ 添加 nrsc.dll 配置菜单")
+            config_action = menu.addAction("⚙️ 配置 SeamlessCoop")
+            config_action.triggered.connect(lambda: self.configure_nrsc_settings())
+        elif clean_name.endswith("nighter.dll") or "nighter" in clean_name:
+            print(f"✅ 添加 nighter.dll 配置菜单")
+            difficulty_action = menu.addAction("🌙 调整难度")
+            difficulty_action.triggered.connect(lambda: self.configure_nighter_difficulty())
+        else:
+            print(f"ℹ️ DLL '{clean_name}' 无特殊配置选项")
 
         # 如果是外部DLL，添加移除选项
         if is_external:
             menu.addSeparator()
             remove_action = menu.addAction("🗑️ 移除外部DLL")
-            remove_action.triggered.connect(lambda: self.remove_external_dll(clean_name))
+            remove_action.triggered.connect(lambda checked=False: self.remove_external_dll(clean_name))
 
         menu.exec(self.natives_list.mapToGlobal(position))
 
@@ -1219,6 +1259,414 @@ class ModsPage(BasePage):
             self.config_changed.emit()
         else:
             self.show_status(f"取消强制最后加载失败: {mod_name}", "error")
+
+    def set_force_load_first_native(self, dll_name: str):
+        """设置DLL强制优先加载"""
+        success = self.mod_manager.set_force_load_first_native(dll_name)
+        if success:
+            self.show_status(f"已设置 {dll_name} 强制优先加载", "success")
+            # 保存配置并更新预览
+            self.mod_manager.save_config()
+            self.update_config_preview()
+            # 发出配置变化信号
+            self.config_changed.emit()
+        else:
+            self.show_status(f"设置 {dll_name} 强制优先加载失败", "error")
+
+    def clear_force_load_first_native(self, dll_name: str):
+        """清除DLL强制优先加载"""
+        success = self.mod_manager.clear_force_load_first_native(dll_name)
+        if success:
+            self.show_status(f"已清除 {dll_name} 的强制优先加载", "success")
+            # 保存配置并更新预览
+            self.mod_manager.save_config()
+            self.update_config_preview()
+            # 发出配置变化信号
+            self.config_changed.emit()
+        else:
+            self.show_status(f"清除 {dll_name} 强制优先加载失败", "error")
+
+    def configure_nrsc_settings(self):
+        """配置SeamlessCoop设置"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QPushButton, QFormLayout
+        import configparser
+        import os
+
+        # 配置文件路径
+        config_path = os.path.join("Mods", "SeamlessCoop", "nrsc_settings.ini")
+
+        if not os.path.exists(config_path):
+            self.show_status("未找到 nrsc_settings.ini 配置文件", "error")
+            return
+
+        # 读取当前配置
+        config = configparser.ConfigParser()
+        try:
+            config.read(config_path, encoding='utf-8')
+
+            # 获取当前值
+            health_scaling = config.getint('SCALING', 'health_scaling', fallback=100)
+            damage_scaling = config.getint('SCALING', 'damage_scaling', fallback=100)
+            posture_scaling = config.getint('SCALING', 'posture_scaling', fallback=100)
+
+        except Exception as e:
+            self.show_status(f"读取配置文件失败: {e}", "error")
+            return
+
+        # 创建无边框配置对话框
+        dialog = QDialog(self)
+        dialog.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        dialog.setModal(True)
+        dialog.resize(450, 350)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: 2px solid #45475a;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #cdd6f4;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QSpinBox {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #cdd6f4;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QSpinBox:focus {
+                border-color: #a6e3a1;
+            }
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #94e2d5;
+            }
+            QPushButton:pressed {
+                background-color: #89dceb;
+            }
+            QPushButton#closeButton {
+                background-color: #f38ba8;
+                color: #1e1e2e;
+                border-radius: 15px;
+                font-weight: bold;
+                font-size: 16px;
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 30px;
+                max-height: 30px;
+            }
+            QPushButton#closeButton:hover {
+                background-color: #eba0ac;
+            }
+        """)
+
+        # 添加拖拽功能
+        dialog.mousePressEvent = lambda event: setattr(dialog, '_drag_pos', event.globalPos() - dialog.pos()) if event.button() == Qt.LeftButton else None
+        dialog.mouseMoveEvent = lambda event: dialog.move(event.globalPos() - dialog._drag_pos) if hasattr(dialog, '_drag_pos') and event.buttons() == Qt.LeftButton else None
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        # 标题栏
+        title_bar = QHBoxLayout()
+        title_label = QLabel("⚙️ SeamlessCoop 缩放设置")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #a6e3a1;")
+
+        close_button = QPushButton("×")
+        close_button.setObjectName("closeButton")
+        close_button.clicked.connect(dialog.reject)
+
+        title_bar.addWidget(title_label)
+        title_bar.addStretch()
+        title_bar.addWidget(close_button)
+        layout.addLayout(title_bar)
+
+        # 分隔线
+        separator = QLabel()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet("background-color: #45475a; margin: 10px 0;")
+        layout.addWidget(separator)
+
+        # 表单布局
+        form_layout = QFormLayout()
+
+        # 生命值缩放
+        health_spinbox = QSpinBox()
+        health_spinbox.setRange(1, 1000)
+        health_spinbox.setValue(health_scaling)
+        health_spinbox.setSuffix("%")
+        form_layout.addRow("敌人生命值缩放:", health_spinbox)
+
+        # 伤害缩放
+        damage_spinbox = QSpinBox()
+        damage_spinbox.setRange(1, 1000)
+        damage_spinbox.setValue(damage_scaling)
+        damage_spinbox.setSuffix("%")
+        form_layout.addRow("敌人伤害缩放:", damage_spinbox)
+
+        # 架势缩放
+        posture_spinbox = QSpinBox()
+        posture_spinbox.setRange(1, 1000)
+        posture_spinbox.setValue(posture_scaling)
+        posture_spinbox.setSuffix("%")
+        form_layout.addRow("敌人架势缩放:", posture_spinbox)
+
+        layout.addLayout(form_layout)
+
+        # 说明文字
+        info_label = QLabel("100% = 正常游戏缩放\n数值越高，敌人越强")
+        info_label.setStyleSheet("color: #a6adc8; font-size: 12px; margin: 10px 0;")
+        layout.addWidget(info_label)
+
+        # 按钮
+        button_layout = QHBoxLayout()
+
+        ok_button = QPushButton("保存")
+        cancel_button = QPushButton("取消")
+        reset_button = QPushButton("重置为默认")
+
+        button_layout.addWidget(reset_button)
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(ok_button)
+        layout.addLayout(button_layout)
+
+        # 连接信号
+        def reset_to_default():
+            health_spinbox.setValue(100)
+            damage_spinbox.setValue(100)
+            posture_spinbox.setValue(100)
+
+        def save_settings():
+            try:
+                # 更新配置
+                config.set('SCALING', 'health_scaling', str(health_spinbox.value()))
+                config.set('SCALING', 'damage_scaling', str(damage_spinbox.value()))
+                config.set('SCALING', 'posture_scaling', str(posture_spinbox.value()))
+
+                # 保存到文件
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    config.write(f)
+
+                self.show_status("SeamlessCoop 配置已保存", "success")
+                dialog.accept()
+
+            except Exception as e:
+                self.show_status(f"保存配置失败: {e}", "error")
+
+        ok_button.clicked.connect(save_settings)
+        cancel_button.clicked.connect(dialog.reject)
+        reset_button.clicked.connect(reset_to_default)
+
+        # 显示对话框
+        dialog.exec()
+
+    def configure_nighter_difficulty(self):
+        """配置Nighter难度"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QRadioButton, QButtonGroup
+        from PySide6.QtCore import Qt
+        import json
+        import os
+
+        # 配置文件路径
+        config_path = os.path.join("Mods", "nighter", "nighter.json")
+
+        if not os.path.exists(config_path):
+            self.show_status("未找到 nighter.json 配置文件", "error")
+            return
+
+        # 读取当前配置
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            current_level = config.get('deepNightLevel', 5)
+
+        except Exception as e:
+            self.show_status(f"读取配置文件失败: {e}", "error")
+            return
+
+        # 创建无边框配置对话框
+        dialog = QDialog(self)
+        dialog.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        dialog.setModal(True)
+        dialog.resize(500, 320)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: 2px solid #45475a;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #cdd6f4;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QRadioButton {
+                color: #cdd6f4;
+                font-size: 14px;
+                padding: 8px;
+                spacing: 10px;
+            }
+            QRadioButton::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                border: 2px solid #45475a;
+                background-color: #313244;
+            }
+            QRadioButton::indicator:hover {
+                border-color: #fab387;
+            }
+            QRadioButton::indicator:checked {
+                border-color: #fab387;
+                background-color: #fab387;
+            }
+            QRadioButton::indicator:checked:hover {
+                border-color: #f9e2af;
+                background-color: #f9e2af;
+            }
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #94e2d5;
+            }
+            QPushButton:pressed {
+                background-color: #89dceb;
+            }
+            QPushButton#closeButton {
+                background-color: #f38ba8;
+                color: #1e1e2e;
+                border-radius: 15px;
+                font-weight: bold;
+                font-size: 16px;
+                min-width: 30px;
+                max-width: 30px;
+                min-height: 30px;
+                max-height: 30px;
+            }
+            QPushButton#closeButton:hover {
+                background-color: #eba0ac;
+            }
+        """)
+
+        # 添加拖拽功能
+        dialog.mousePressEvent = lambda event: setattr(dialog, '_drag_pos', event.globalPos() - dialog.pos()) if event.button() == Qt.LeftButton else None
+        dialog.mouseMoveEvent = lambda event: dialog.move(event.globalPos() - dialog._drag_pos) if hasattr(dialog, '_drag_pos') and event.buttons() == Qt.LeftButton else None
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        # 标题栏
+        title_bar = QHBoxLayout()
+        title_label = QLabel("🌙 Nighter 深夜难度设置")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #fab387;")
+
+        close_button = QPushButton("×")
+        close_button.setObjectName("closeButton")
+        close_button.clicked.connect(dialog.reject)
+
+        title_bar.addWidget(title_label)
+        title_bar.addStretch()
+        title_bar.addWidget(close_button)
+        layout.addLayout(title_bar)
+
+        # 分隔线
+        separator = QLabel()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet("background-color: #45475a; margin: 10px 0;")
+        layout.addWidget(separator)
+
+        # 当前难度显示（固定显示调整前的难度，不会跟随用户选择变化）
+        current_label = QLabel(f"调整前难度: 等级 {current_level}")
+        current_label.setStyleSheet("font-size: 16px; color: #fab387; margin-bottom: 15px;")
+        layout.addWidget(current_label)
+
+        # 单选框组
+        radio_group = QButtonGroup()
+        radio_buttons = []
+
+        # 创建单选框
+        for level in range(1, 6):
+            radio = QRadioButton(f"难度等级 {level}")
+            radio.setChecked(level == current_level)
+            radio_buttons.append(radio)
+            radio_group.addButton(radio, level)
+            layout.addWidget(radio)
+
+        # 当前选择的难度描述
+        desc_label = QLabel(f"当前选择: 难度等级 {current_level}")
+        desc_label.setStyleSheet("font-size: 14px; color: #a6e3a1; margin: 15px 0; text-align: center;")
+        desc_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(desc_label)
+
+        # 更新描述的函数（只更新选择描述，不更新调整前难度显示）
+        def update_description(button):
+            if button.isChecked():
+                level = radio_group.id(button)
+                desc_label.setText(f"当前选择: 难度等级 {level}")
+
+        # 连接信号
+        for radio in radio_buttons:
+            radio.toggled.connect(lambda checked, btn=radio: update_description(btn) if checked else None)
+
+        # 按钮
+        button_layout = QHBoxLayout()
+
+        ok_button = QPushButton("保存")
+        cancel_button = QPushButton("取消")
+
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(ok_button)
+        layout.addLayout(button_layout)
+
+        # 连接信号
+        def save_difficulty():
+            try:
+                # 获取选中的难度等级
+                checked_button = radio_group.checkedButton()
+                if checked_button:
+                    new_level = radio_group.id(checked_button)
+                    config['deepNightLevel'] = new_level
+
+                    # 保存到文件
+                    with open(config_path, 'w', encoding='utf-8') as f:
+                        json.dump(config, f, indent=4, ensure_ascii=False)
+
+                    self.show_status(f"Nighter 难度已设置为等级 {new_level}", "success")
+                    dialog.accept()
+                else:
+                    self.show_status("请选择一个难度等级", "error")
+
+            except Exception as e:
+                self.show_status(f"保存难度设置失败: {e}", "error")
+
+        ok_button.clicked.connect(save_difficulty)
+        cancel_button.clicked.connect(dialog.reject)
+
+        # 显示对话框
+        dialog.exec()
 
     def _format_dependencies(self, dependencies):
         """格式化依赖列表为正确的TOML格式"""

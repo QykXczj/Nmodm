@@ -409,10 +409,18 @@ class ConfigPage(BasePage):
         """加载破解文件列表"""
         try:
             files = []
+            # 定义不是破解补丁的文件（排除列表）
+            excluded_files = {
+                "gconfig.ini",      # 配置文件
+                "esl2.zip",         # ESL工具包
+                "tool.zip",         # 网络优化工具包
+                "Regulations"       # 可能的文件夹
+            }
+
             for file_path in self.config_manager.onlinefix_dir.iterdir():
-                if file_path.name != "gconfig.ini" and file_path.is_file():
+                if file_path.name not in excluded_files and file_path.is_file():
                     files.append(file_path.name)
-            
+
             if files:
                 self.files_display.setText("\n".join(files))
             else:

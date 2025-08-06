@@ -120,7 +120,14 @@ class VirtualLanPage(BasePage):
                 try:
                     # 清理各种残余进程
                     self._cleanup_easytier_processes()
-                    self._cleanup_winip_processes()
+                    # 使用网络优化器的停止方法，这个方法已经验证可以成功清理管理员权限进程
+                    if hasattr(self, 'easytier_manager') and self.easytier_manager.network_optimizer:
+                        print("🧹 使用网络优化器清理WinIPBroadcast进程...")
+                        self.log_message("🧹 正在清理WinIPBroadcast进程...", "info")
+                        self.easytier_manager.network_optimizer.stop_winip_broadcast()
+                        self.log_message("✅ 后台进程清理完成", "info")
+                    else:
+                        self._cleanup_winip_processes()
                     return True
                 except Exception as e:
                     print(f"❌ 后台清理失败: {e}")
@@ -212,8 +219,10 @@ class VirtualLanPage(BasePage):
         """清理WinIPBroadcast残余进程"""
         try:
             import psutil
+            import time
+            
+            # 第一次扫描
             found_processes = []
-
             for proc in psutil.process_iter(['pid', 'name']):
                 try:
                     if proc.info['name'].lower() == 'winipbroadcast.exe':
@@ -222,31 +231,105 @@ class VirtualLanPage(BasePage):
                     continue
 
             if found_processes:
-                print(f"🔍 发现 {len(found_processes)} 个残余WinIPBroadcast进程")
+                print(f"🔍 发现 {len(found_processes)} 个残余WinIPBroadcast进程，正在清理...")
                 self.log_message(f"🔍 发现 {len(found_processes)} 个残余WinIPBroadcast进程，正在清理...", "info")
 
+                # 第一轮：尝试优雅终止
                 for proc in found_processes:
                     try:
-                        print(f"  终止WinIPBroadcast进程 PID: {proc.pid}")
+                        print(f"  优雅终止WinIPBroadcast进程 PID: {proc.pid}")
                         proc.terminate()
-                        proc.wait(timeout=3)
-                    except psutil.TimeoutExpired:
-                        try:
-                            proc.kill()
-                            print(f"  强制终止WinIPBroadcast进程 PID: {proc.pid}")
-                        except:
-                            pass
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
                     except Exception as e:
                         print(f"  终止进程 {proc.pid} 失败: {e}")
 
-                print("✅ WinIPBroadcast残余进程已清理")
+                # 等待进程结束
+                time.sleep(2)
+
+                # 第二轮：强制终止仍在运行的进程
+                remaining_processes = []
+                for proc in found_processes:
+                    try:
+                        if proc.is_running():
+                            remaining_processes.append(proc)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+
+                if remaining_processes:
+                    print(f"  仍有 {len(remaining_processes)} 个进程运行，强制终止...")
+                    for proc in remaining_processes:
+                        try:
+                            print(f"  强制终止WinIPBroadcast进程 PID: {proc.pid}")
+                            proc.kill()
+                            proc.wait(timeout=3)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                        except Exception as e:
+                            print(f"  强制终止进程 {proc.pid} 失败: {e}")
+
+                # 第三次验证：检查是否还有残余进程
+                time.sleep(1)
+                final_check = []
+                for proc in psutil.process_iter(['pid', 'name']):
+                    try:
+                        if proc.info['name'].lower() == 'winipbroadcast.exe':
+                            final_check.append(proc)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+
+                if final_check:
+                    print(f"⚠️ 仍有 {len(final_check)} 个WinIPBroadcast进程未能清理")
+                    self.log_message(f"⚠️ 检测到 {len(final_check)} 个WinIPBroadcast进程仍在运行", "warning")
+                    
+                    # 尝试使用系统命令强制终止（静默方式）
+                    try:
+                        import subprocess
+                        import sys
+                        
+                        if sys.platform == "win32":
+                            # 检查是否有管理员权限
+                            import ctypes
+                            is_admin = ctypes.windll.shell32.IsUserAnAdmin()
+                            
+                            if is_admin:
+                                # 有管理员权限，直接使用taskkill
+                                result = subprocess.run(['taskkill', '/f', '/im', 'WinIPBroadcast.exe'], 
+                                                      capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    print("✅ 使用管理员权限成功清理WinIPBroadcast进程")
+                                    self.log_message("✅ 后台进程清理完成", "info")
+                                else:
+                                    print(f"⚠️ 管理员权限清理失败: {result.stderr}")
+                                    self.log_message("⚠️ 部分后台进程可能未完全清理", "warning")
+                            else:
+                                # 没有管理员权限，静默处理，不弹窗
+                                print("⚠️ WinIPBroadcast进程以管理员权限运行，当前权限无法清理")
+                                self.log_message("⚠️ WinIPBroadcast进程以管理员权限运行，无法静默清理", "warning")
+                                self.log_message("💡 如需完全清理，请以管理员权限重启程序", "info")
+                        else:
+                            # 非Windows系统
+                            result = subprocess.run(['pkill', '-f', 'WinIPBroadcast'], 
+                                                  capture_output=True, text=True)
+                            if result.returncode == 0:
+                                print("✅ 使用pkill成功清理WinIPBroadcast进程")
+                                self.log_message("✅ 后台进程清理完成", "info")
+                            else:
+                                print(f"⚠️ pkill执行失败: {result.stderr}")
+                                self.log_message("⚠️ 部分后台进程可能未完全清理", "warning")
+                                
+                    except Exception as e:
+                        print(f"⚠️ 系统命令清理失败: {e}")
+                        self.log_message("⚠️ 部分后台进程可能未完全清理", "warning")
+                else:
+                    print("✅ 所有WinIPBroadcast进程已成功清理")
+                    self.log_message("✅ 后台进程清理完成", "info")
             else:
                 print("🔍 未发现WinIPBroadcast残余进程")
 
         except Exception as e:
             print(f"❌ 清理WinIPBroadcast进程失败: {e}")
+            self.log_message(f"❌ 进程清理失败: {e}", "error")
 
     # KCP进程清理功能已移除，因为EasyTier自带KCP支持
     
@@ -981,7 +1064,7 @@ class VirtualLanPage(BasePage):
                 background-color: #5fb3d4;
             }
         """)
-        random_name_btn.clicked.connect(lambda: self.join_player_name_edit.setText(self.generate_random_player_name()))
+        random_name_btn.clicked.connect(lambda checked=False: self.join_player_name_edit.setText(self.generate_random_player_name()))
         player_name_layout.addWidget(random_name_btn)
 
         join_layout.addLayout(player_name_layout)
@@ -1050,7 +1133,7 @@ class VirtualLanPage(BasePage):
             {"url": "tcp://gz.minebg.top:11010", "name": "广州", "enabled": False},
             {"url": "tcp://119.23.65.180:11010", "name": "深圳", "enabled": False},
             {"url": "tcp://ah.nkbpal.cn:11010", "name": "合肥", "enabled": False},
-            {"url": "tcp://turn.sc.629957.xyz:11010", "name": "成都", "enabled": False},
+            {"url": "tcp://39.108.52.138:11010", "name": "深圳", "enabled": False},
             {"url": "tcp://8.148.29.206:11010", "name": "武汉", "enabled": False},
             {"url": "tcp://turn.js.629957.xyz:11012", "name": "宿迁", "enabled": False},
             {"url": "tcp://sh.993555.xyz:11010", "name": "上海", "enabled": False},
@@ -1444,19 +1527,19 @@ class VirtualLanPage(BasePage):
 
         # 加载房间动作
         load_action = QAction("📋 加载房间", menu)
-        load_action.triggered.connect(lambda: self.load_room_from_list(room_name))
+        load_action.triggered.connect(lambda checked=False: self.load_room_from_list(room_name))
         menu.addAction(load_action)
 
         menu.addSeparator()  # 分隔线
 
         # 分享房间动作
         share_action = QAction("📤 分享房间", menu)
-        share_action.triggered.connect(lambda: self.share_room_from_list(room_name))
+        share_action.triggered.connect(lambda checked=False: self.share_room_from_list(room_name))
         menu.addAction(share_action)
 
         # 删除房间动作
         delete_action = QAction("🗑️ 删除房间", menu)
-        delete_action.triggered.connect(lambda: self.delete_room_from_list(room_name))
+        delete_action.triggered.connect(lambda checked=False: self.delete_room_from_list(room_name))
         menu.addAction(delete_action)
 
         # 显示菜单
@@ -1497,6 +1580,15 @@ class VirtualLanPage(BasePage):
                              room_config.get("joined_by") or
                              "未知玩家")
 
+            # 检查并更新房间配置文件（添加缺失的字段）
+            updated_config = self.update_room_config_compatibility(room_config)
+            if updated_config != room_config:
+                # 配置已更新，保存回文件
+                with open(room_file, 'w', encoding='utf-8') as f:
+                    json.dump(updated_config, f, indent=2, ensure_ascii=False)
+                self.log_message(f"🔄 已更新房间 '{room_name}' 的配置格式", "info")
+                room_config = updated_config
+
             # 应用房间配置到界面
             self.apply_room_config(room_config, player_name)
 
@@ -1528,7 +1620,7 @@ class VirtualLanPage(BasePage):
             with open(room_file, 'r', encoding='utf-8') as f:
                 room_config = json.load(f)
 
-            # 创建极简分享配置（只包含必要字段）
+            # 创建分享配置（包含核心字段和高级设置）
             share_config = {
                 "n": room_config["network_name"],      # 房间名称
                 "s": room_config["network_secret"],    # 房间密码
@@ -1543,6 +1635,47 @@ class VirtualLanPage(BasePage):
                 else:
                     share_config["d"] = False  # 标记为非DHCP但无有效IP
             # DHCP模式不添加任何IP相关字段（默认就是DHCP）
+
+            # 高级设置（只在非默认值时添加，减少分享代码长度）
+            # 加密设置（默认禁用，只在启用时添加）
+            if not room_config.get("disable_encryption", True):
+                share_config["e"] = True  # 启用加密
+
+            # IPv6设置（默认启用，只在禁用时添加）
+            if room_config.get("disable_ipv6", False):
+                share_config["6"] = False  # 禁用IPv6
+
+            # 延迟优先（默认启用，只在禁用时添加）
+            if not room_config.get("latency_first", True):
+                share_config["l"] = False  # 禁用延迟优先
+
+            # 多线程（默认启用，只在禁用时添加）
+            if not room_config.get("multi_thread", True):
+                share_config["m"] = False  # 禁用多线程
+
+            # EasyTier网络加速选项
+            # KCP代理（默认启用，只在禁用时添加）
+            if not room_config.get("enable_kcp_proxy", True):
+                share_config["k"] = False  # 禁用KCP代理
+
+            # QUIC代理（默认启用，只在禁用时添加）
+            if not room_config.get("enable_quic_proxy", True):
+                share_config["q"] = False  # 禁用QUIC代理
+
+            # 用户态网络栈（默认禁用，只在启用时添加）
+            if room_config.get("use_smoltcp", False):
+                share_config["u"] = True  # 启用用户态网络栈
+
+            # 压缩算法（默认启用，只在禁用时添加）
+            if not room_config.get("enable_compression", True):
+                share_config["z"] = False  # 禁用压缩
+
+            # 网络优化设置（只在非默认值时添加）
+            network_opt = room_config.get("network_optimization", {})
+            if not network_opt.get("winip_broadcast", True):
+                share_config["w"] = False  # 禁用WinIP广播
+            if not network_opt.get("auto_metric", True):
+                share_config["a"] = False  # 禁用自动跃点
 
             # 公益服务器配置（只在选择了公益服务器时添加城市名）
             peers = room_config.get("peers", ["tcp://public.easytier.top:11010"])
@@ -1588,26 +1721,26 @@ class VirtualLanPage(BasePage):
         """转换极简分享配置到完整格式，兼容新旧格式"""
         # 如果是新的极简格式（只有n、s等核心字段）
         if "n" in raw_config and "s" in raw_config:
-            # 极简格式转换为完整格式，所有高级选项使用默认值（全部启用）
+            # 分享格式转换为完整格式，使用默认值并应用分享的设置
             converted = {
                 "network_name": raw_config["n"],
                 "network_secret": raw_config["s"],
                 "peers": ["tcp://public.easytier.top:11010"],  # 默认使用公共服务器
                 "dhcp": True,  # 默认使用DHCP
-                # 所有高级选项使用默认值（全部启用）
-                "disable_encryption": False,  # 启用加密
-                "disable_ipv6": False,         # 启用IPv6
-                "latency_first": True,         # 启用延迟优先
-                "multi_thread": True,          # 启用多线程
-                # EasyTier网络加速选项（全部启用）
-                "enable_kcp_proxy": True,      # 启用KCP代理
-                "enable_quic_proxy": True,     # 启用QUIC代理
-                "use_smoltcp": True,           # 启用用户态网络栈
-                "enable_compression": True,    # 启用压缩算法
-                # 网络优化配置（全部启用）
+                # 高级选项：使用默认值，然后应用分享的设置
+                "disable_encryption": not raw_config.get("e", False),  # 默认禁用加密，除非分享中启用
+                "disable_ipv6": not raw_config.get("6", True),         # 默认启用IPv6，除非分享中禁用
+                "latency_first": raw_config.get("l", True),            # 默认启用延迟优先，除非分享中禁用
+                "multi_thread": raw_config.get("m", True),             # 默认启用多线程，除非分享中禁用
+                # EasyTier网络加速选项
+                "enable_kcp_proxy": raw_config.get("k", True),         # 默认启用KCP代理，除非分享中禁用
+                "enable_quic_proxy": raw_config.get("q", True),        # 默认启用QUIC代理，除非分享中禁用
+                "use_smoltcp": raw_config.get("u", False),             # 默认禁用用户态网络栈，除非分享中启用
+                "enable_compression": raw_config.get("z", True),       # 默认启用压缩，除非分享中禁用
+                # 网络优化配置
                 "network_optimization": {
-                    "winip_broadcast": True,   # 启用IP广播
-                    "auto_metric": True        # 启用自动跃点
+                    "winip_broadcast": raw_config.get("w", True),      # 默认启用WinIP广播，除非分享中禁用
+                    "auto_metric": raw_config.get("a", True)           # 默认启用自动跃点，除非分享中禁用
                 }
             }
 
@@ -1663,9 +1796,19 @@ class VirtualLanPage(BasePage):
                 # 刷新房间列表
                 self.refresh_room_list_widget()
 
-                # 如果删除的是当前加载的房间且网络未运行，自动加载第一个房间
+                # 如果删除的是当前加载的房间且网络未运行，处理后续逻辑
                 if is_current_room and not self.easytier_manager.is_running:
-                    self.auto_load_first_room()
+                    # 检查是否还有其他房间
+                    rooms_dir = self.get_rooms_dir()
+                    remaining_rooms = [f.stem for f in rooms_dir.glob("*.json") if f.is_file()]
+
+                    if remaining_rooms:
+                        # 还有其他房间，自动加载第一个
+                        self.auto_load_first_room()
+                    else:
+                        # 没有房间了，清空界面和配置文件
+                        self.clear_all_config()
+                        self.log_message("📝 已清空所有配置，因为没有房间了", "info")
 
             else:
                 self.log_message(f"❌ 房间配置文件不存在: {room_name}", "error")
@@ -1712,10 +1855,20 @@ class VirtualLanPage(BasePage):
 
             # 重置复选框为默认状态
             self.dhcp_check.setChecked(True)
-            self.encryption_check.setChecked(True)
+            self.encryption_check.setChecked(False)  # 默认禁用加密
             self.ipv6_check.setChecked(True)
             self.latency_first_check.setChecked(True)
             self.multi_thread_check.setChecked(True)
+
+            # 重置EasyTier网络加速选项为默认状态
+            if hasattr(self, 'kcp_proxy_check'):
+                self.kcp_proxy_check.setChecked(True)
+            if hasattr(self, 'quic_proxy_check'):
+                self.quic_proxy_check.setChecked(True)
+            if hasattr(self, 'smoltcp_check'):
+                self.smoltcp_check.setChecked(False)  # 默认禁用用户态网络栈
+            if hasattr(self, 'compression_check'):
+                self.compression_check.setChecked(True)
 
             # 重置网络优化选项为默认状态
             if hasattr(self, 'winip_broadcast_check'):
@@ -1777,6 +1930,11 @@ class VirtualLanPage(BasePage):
                 "disable_ipv6": not self.ipv6_check.isChecked(),
                 "latency_first": self.latency_first_check.isChecked(),
                 "multi_thread": self.multi_thread_check.isChecked(),
+                # EasyTier网络加速选项
+                "enable_kcp_proxy": self.kcp_proxy_check.isChecked(),
+                "enable_quic_proxy": self.quic_proxy_check.isChecked(),
+                "use_smoltcp": self.smoltcp_check.isChecked(),
+                "enable_compression": self.compression_check.isChecked(),
                 # 网络优化配置
                 "network_optimization": {
                     "winip_broadcast": self.winip_broadcast_check.isChecked(),
@@ -1810,6 +1968,13 @@ class VirtualLanPage(BasePage):
             self.refresh_room_list_widget()  # 刷新房间列表控件
 
             self.log_message(f"房间 '{network_name}' 创建成功", "success")
+
+            # 自动加载刚创建的房间
+            self.load_room_from_list(network_name)
+            self.log_message(f"🔄 已自动加载房间 '{network_name}'", "info")
+            
+            # 实时更新TOML配置文件
+            self.update_toml_config_file()
 
         except Exception as e:
             self.log_message(f"创建房间失败: {str(e)}", "error")
@@ -1929,19 +2094,19 @@ class VirtualLanPage(BasePage):
                 self.peer_ip_edit.setText(room_config.get("ipv4", "10.126.126.1"))
                 self.peer_ip_edit.setEnabled(True)
 
-            # 高级设置
-            self.encryption_check.setChecked(not room_config.get("disable_encryption", False))
+            # 高级设置（使用新的默认值）
+            self.encryption_check.setChecked(not room_config.get("disable_encryption", True))  # 默认禁用加密
             self.ipv6_check.setChecked(not room_config.get("disable_ipv6", False))
             self.latency_first_check.setChecked(room_config.get("latency_first", True))
             self.multi_thread_check.setChecked(room_config.get("multi_thread", True))
 
-            # EasyTier网络加速设置
+            # EasyTier网络加速设置（向后兼容，使用新的默认值）
             if hasattr(self, 'kcp_proxy_check'):
                 self.kcp_proxy_check.setChecked(room_config.get("enable_kcp_proxy", True))
             if hasattr(self, 'quic_proxy_check'):
                 self.quic_proxy_check.setChecked(room_config.get("enable_quic_proxy", True))
             if hasattr(self, 'smoltcp_check'):
-                self.smoltcp_check.setChecked(room_config.get("use_smoltcp", True))
+                self.smoltcp_check.setChecked(room_config.get("use_smoltcp", False))  # 默认禁用用户态网络栈
             if hasattr(self, 'compression_check'):
                 self.compression_check.setChecked(room_config.get("enable_compression", True))
 
@@ -2179,7 +2344,7 @@ class VirtualLanPage(BasePage):
 
         # 加密选项
         self.encryption_check = QCheckBox("启用加密")
-        self.encryption_check.setChecked(True)
+        self.encryption_check.setChecked(False)  # 默认禁用（提升性能）
         self.encryption_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.encryption_check, 0, 0)
 
@@ -2290,7 +2455,7 @@ class VirtualLanPage(BasePage):
 
         # 用户态网络栈选项
         self.smoltcp_check = QCheckBox("启用用户态网络栈")
-        self.smoltcp_check.setChecked(True)  # 默认启用
+        self.smoltcp_check.setChecked(False)  # 默认禁用（提升兼容性）
         self.smoltcp_check.setToolTip("为子网代理和代理启用smoltcp堆栈，提升性能")
         self.smoltcp_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.smoltcp_check, 9, 0)
@@ -2319,6 +2484,9 @@ class VirtualLanPage(BasePage):
         """)
         layout.addWidget(acceleration_hint, 10, 0, 1, 2)
 
+        # 按钮布局
+        button_layout = QHBoxLayout()
+
         # 优化状态显示按钮
         self.optimization_status_btn = QPushButton("📊 查看状态")
         self.optimization_status_btn.setToolTip("查看当前网络优化状态和详细信息")
@@ -2340,7 +2508,33 @@ class VirtualLanPage(BasePage):
                 background-color: #7c7f93;
             }
         """)
-        layout.addWidget(self.optimization_status_btn, 11, 0)
+        button_layout.addWidget(self.optimization_status_btn)
+
+        # 配置文件查看按钮
+        self.config_file_btn = QPushButton("📄 配置文件")
+        self.config_file_btn.setToolTip("查看当前EasyTier配置文件内容")
+        self.config_file_btn.clicked.connect(self.show_config_file)
+        self.config_file_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 6px;
+                margin: 1px 0px;
+                min-height: 18px;
+                max-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #74c7ec;
+            }
+        """)
+        button_layout.addWidget(self.config_file_btn)
+        button_layout.addStretch()
+
+        layout.addLayout(button_layout, 11, 0, 1, 2)
 
         # 网络优化提醒信息
         optimization_hint = QLabel("💡 游戏优化：WinIPBroadcast解决房间发现问题，网卡跃点优化确保游戏流量优先级")
@@ -2868,8 +3062,8 @@ class VirtualLanPage(BasePage):
 
         # 外部节点已固定，无需配置
 
-        # 设置高级选项（注意disable_*的逻辑转换，默认全部启用）
-        self.encryption_check.setChecked(not config.get("disable_encryption", False))  # 默认启用加密
+        # 设置高级选项（注意disable_*的逻辑转换，使用新的默认值）
+        self.encryption_check.setChecked(not config.get("disable_encryption", True))   # 默认禁用加密
         self.ipv6_check.setChecked(not config.get("disable_ipv6", False))              # 默认启用IPv6
         self.latency_first_check.setChecked(config.get("latency_first", True))         # 默认启用延迟优先
         self.multi_thread_check.setChecked(config.get("multi_thread", True))           # 默认启用多线程
@@ -2908,7 +3102,12 @@ class VirtualLanPage(BasePage):
             "enable_kcp_proxy": self.kcp_proxy_check.isChecked(),       # --enable-kcp-proxy
             "enable_quic_proxy": self.quic_proxy_check.isChecked(),     # --enable-quic-proxy
             "use_smoltcp": self.smoltcp_check.isChecked(),              # --use-smoltcp
-            "enable_compression": self.compression_check.isChecked()    # --compression
+            "enable_compression": self.compression_check.isChecked(),   # 压缩算法设置
+            # 网络优化配置
+            "network_optimization": {
+                "winip_broadcast": self.winip_broadcast_check.isChecked(),
+                "auto_metric": self.auto_metric_check.isChecked()
+            }
         }
 
         # 收集选中的公益服务器
@@ -2927,6 +3126,60 @@ class VirtualLanPage(BasePage):
             config["ipv4"] = self.peer_ip_edit.text().strip()          # --ipv4
 
         self.easytier_manager.update_config(config)
+
+    def update_toml_config_file(self):
+        """实时更新TOML配置文件，确保用户能立即看到配置变化"""
+        try:
+            # 获取当前界面配置
+            network_name = self.network_name_edit.text().strip()
+            hostname = self.machine_id_edit.text().strip()
+            network_secret = self.network_secret_edit.text().strip()
+            
+            # 如果基本信息不完整，使用默认值
+            if not network_name:
+                network_name = "未设置房间"
+            if not hostname:
+                hostname = "未设置玩家名"
+            if not network_secret:
+                network_secret = "未设置密码"
+            
+            # 构建flags配置
+            flags = {
+                "enable_kcp_proxy": self.kcp_proxy_check.isChecked(),
+                "enable_quic_proxy": self.quic_proxy_check.isChecked(),
+                "latency_first": self.latency_first_check.isChecked(),
+                "multi_thread": self.multi_thread_check.isChecked(),
+                "enable_encryption": self.encryption_check.isChecked(),
+                "disable_ipv6": not self.ipv6_check.isChecked(),
+                "use_smoltcp": self.smoltcp_check.isChecked(),
+                "enable_compression": self.compression_check.isChecked()
+            }
+            
+            # 收集选中的公益服务器
+            selected_peers = ["tcp://public.easytier.top:11010"]
+            if hasattr(self, 'server_list'):
+                for server in self.server_list:
+                    if server['enabled']:
+                        selected_peers.append(server['url'])
+            
+            # 生成并保存TOML配置文件
+            success = self.easytier_manager.config_generator.generate_and_save(
+                network_name=network_name,
+                network_secret=network_secret,
+                hostname=hostname,
+                peers=selected_peers,
+                dhcp=self.dhcp_check.isChecked(),
+                ipv4=self.peer_ip_edit.text().strip() if not self.dhcp_check.isChecked() else "",
+                flags=flags
+            )
+            
+            if success:
+                print(f"✅ TOML配置文件已实时更新")
+            else:
+                print(f"❌ TOML配置文件更新失败")
+                
+        except Exception as e:
+            print(f"❌ 更新TOML配置文件时出错: {e}")
 
     def start_network(self):
         """启动网络"""
@@ -2975,6 +3228,18 @@ class VirtualLanPage(BasePage):
                 if server['enabled']:
                     selected_peers.append(server['url'])
 
+        # 构建flags配置
+        flags = {
+            "enable_kcp_proxy": self.kcp_proxy_check.isChecked(),
+            "enable_quic_proxy": self.quic_proxy_check.isChecked(),
+            "latency_first": self.latency_first_check.isChecked(),
+            "multi_thread": self.multi_thread_check.isChecked(),
+            "enable_encryption": self.encryption_check.isChecked(),  # 注意：这里是enable_encryption
+            "disable_ipv6": not self.ipv6_check.isChecked(),
+            "use_smoltcp": self.smoltcp_check.isChecked(),
+            "enable_compression": self.compression_check.isChecked()
+        }
+
         # 检查是否启用网络优化
         winip_enabled = hasattr(self, 'winip_broadcast_check') and self.winip_broadcast_check.isChecked()
         metric_enabled = hasattr(self, 'auto_metric_check') and self.auto_metric_check.isChecked()
@@ -3006,18 +3271,20 @@ class VirtualLanPage(BasePage):
                 peers=selected_peers,
                 hostname=machine_id,
                 dhcp=use_dhcp,
-                network_optimization=network_optimization
+                network_optimization=network_optimization,
+                flags=flags  # 传递高级设置flags
             )
         else:
-            # 使用标准版本启动
-            self.log_text.append("🌐 启动网络（未启用优化）...")
-            success = self.easytier_manager.start_network(
+            # 使用配置文件模式启动（未启用优化）
+            self.log_text.append("🌐 启动网络（配置文件模式，未启用优化）...")
+            success = self.easytier_manager.start_network_with_config_file(
                 network_name=network_name,
                 network_secret=network_secret,
                 ipv4=peer_ip,
                 peers=selected_peers,
                 hostname=machine_id,
-                dhcp=use_dhcp
+                dhcp=use_dhcp,
+                flags=flags  # 传递高级设置flags
             )
 
         if success:
@@ -3038,15 +3305,62 @@ class VirtualLanPage(BasePage):
 
         enable_optimization = winip_enabled or metric_enabled
 
+        # 禁用停止按钮，防止重复点击
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.setText("停止中...")
+
         if enable_optimization:
             self.log_text.append("🛑 正在停止网络和优化...")
-            # 使用优化版本停止
-            success = self.easytier_manager.stop_network_with_optimization()
+            # 使用后台线程停止，避免UI卡顿
+            self._stop_network_async(with_optimization=True)
         else:
             self.log_text.append("🛑 正在停止网络...")
-            # 使用标准版本停止
-            success = self.easytier_manager.stop_network()
+            # 使用后台线程停止，避免UI卡顿
+            self._stop_network_async(with_optimization=False)
 
+    def _stop_network_async(self, with_optimization=False):
+        """异步停止网络，避免UI卡顿"""
+        from PySide6.QtCore import QThread, QObject, Signal
+        
+        class StopNetworkWorker(QObject):
+            finished = Signal(bool)  # 停止结果
+            
+            def __init__(self, easytier_manager, with_optimization):
+                super().__init__()
+                self.easytier_manager = easytier_manager
+                self.with_optimization = with_optimization
+            
+            def run(self):
+                try:
+                    if self.with_optimization:
+                        success = self.easytier_manager.stop_network_with_optimization()
+                    else:
+                        success = self.easytier_manager.stop_network()
+                    self.finished.emit(success)
+                except Exception as e:
+                    print(f"停止网络异常: {e}")
+                    self.finished.emit(False)
+        
+        # 创建工作线程
+        self.stop_thread = QThread()
+        self.stop_worker = StopNetworkWorker(self.easytier_manager, with_optimization)
+        self.stop_worker.moveToThread(self.stop_thread)
+        
+        # 连接信号
+        self.stop_thread.started.connect(self.stop_worker.run)
+        self.stop_worker.finished.connect(self._on_stop_network_finished)
+        self.stop_worker.finished.connect(self.stop_thread.quit)
+        self.stop_worker.finished.connect(self.stop_worker.deleteLater)
+        self.stop_thread.finished.connect(self.stop_thread.deleteLater)
+        
+        # 启动线程
+        self.stop_thread.start()
+
+    def _on_stop_network_finished(self, success):
+        """停止网络完成回调"""
+        # 恢复停止按钮状态
+        self.stop_btn.setText("停止网络")
+        
         if success:
             self.log_text.append("✅ 网络已停止")
             # 更新按钮状态
@@ -3060,6 +3374,8 @@ class VirtualLanPage(BasePage):
             self.stop_status_monitoring()
         else:
             self.log_text.append("❌ 停止网络失败")
+            # 恢复停止按钮
+            self.stop_btn.setEnabled(True)
 
     # 信号处理方法
 
@@ -3281,7 +3597,7 @@ class VirtualLanPage(BasePage):
             if hasattr(self, 'quic_proxy_check'):
                 self.quic_proxy_check.setChecked(easytier_config.get("enable_quic_proxy", True))
             if hasattr(self, 'smoltcp_check'):
-                self.smoltcp_check.setChecked(easytier_config.get("use_smoltcp", True))
+                self.smoltcp_check.setChecked(easytier_config.get("use_smoltcp", False))
             if hasattr(self, 'compression_check'):
                 self.compression_check.setChecked(easytier_config.get("enable_compression", True))
 
@@ -3300,7 +3616,7 @@ class VirtualLanPage(BasePage):
             if hasattr(self, 'quic_proxy_check'):
                 self.quic_proxy_check.setChecked(True)
             if hasattr(self, 'smoltcp_check'):
-                self.smoltcp_check.setChecked(True)
+                self.smoltcp_check.setChecked(False)  # 新默认值
             if hasattr(self, 'compression_check'):
                 self.compression_check.setChecked(True)
 
@@ -3409,6 +3725,268 @@ class VirtualLanPage(BasePage):
 
         except Exception as e:
             print(f"❌ 显示优化状态失败: {e}")
+
+    def show_config_file(self):
+        """显示EasyTier配置文件内容"""
+        try:
+            # 先更新内存配置
+            self.save_config()
+
+            # 强制生成最新的TOML配置文件
+            self.log_message("🔄 正在生成最新的配置文件...", "info")
+
+            # 从当前配置生成TOML配置文件
+            config = self.easytier_manager.config
+
+            # 构建flags配置
+            flags = {
+                "enable_kcp_proxy": config.get("enable_kcp_proxy", True),
+                "enable_quic_proxy": config.get("enable_quic_proxy", True),
+                "latency_first": config.get("latency_first", True),
+                "multi_thread": config.get("multi_thread", True),
+                "enable_encryption": not config.get("disable_encryption", True),  # 转换为enable_encryption格式
+                "disable_ipv6": config.get("disable_ipv6", False),
+                "use_smoltcp": config.get("use_smoltcp", False),
+                "enable_compression": config.get("enable_compression", True)
+            }
+
+            # 生成并保存配置文件
+            success = self.easytier_manager.config_generator.generate_and_save(
+                network_name=config.get("network_name", ""),
+                network_secret=config.get("network_secret", ""),
+                hostname=config.get("hostname", ""),
+                peers=config.get("peers", ["tcp://public.easytier.top:11010"]),
+                dhcp=config.get("dhcp", True),
+                ipv4=config.get("ipv4", ""),
+                listeners=["udp://0.0.0.0:11010"],
+                rpc_portal="0.0.0.0:0",
+                flags=flags
+            )
+
+            if not success:
+                self.log_message("❌ 生成配置文件失败", "error")
+                return
+
+            # 获取配置文件路径
+            config_file_path = self.easytier_manager.config_generator.get_config_file_path()
+
+            if not config_file_path.exists():
+                self.log_message("❌ 配置文件生成后仍不存在", "error")
+                return
+
+            # 读取配置文件内容
+            with open(config_file_path, 'r', encoding='utf-8') as f:
+                config_content = f.read()
+
+            # 创建配置文件查看对话框
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit
+            from PySide6.QtCore import Qt
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("EasyTier配置文件")
+            dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            dialog.setFixedSize(600, 500)
+
+            # 设置对话框样式
+            dialog.setStyleSheet("""
+                QDialog {
+                    background-color: #1e1e2e;
+                    border: 2px solid #89b4fa;
+                    border-radius: 12px;
+                }
+            """)
+
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(20, 20, 20, 20)
+
+            # 标题
+            title_label = QLabel("📄 EasyTier配置文件")
+            title_label.setStyleSheet("""
+                QLabel {
+                    color: #89b4fa;
+                    font-size: 16px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                }
+            """)
+            layout.addWidget(title_label)
+
+            # 文件路径
+            path_label = QLabel(f"文件路径: {config_file_path}")
+            path_label.setStyleSheet("""
+                QLabel {
+                    color: #bac2de;
+                    font-size: 11px;
+                    margin-bottom: 10px;
+                    font-family: 'Consolas', 'Monaco', monospace;
+                }
+            """)
+            layout.addWidget(path_label)
+
+            # 配置内容
+            content_text = QTextEdit()
+            content_text.setPlainText(config_content)
+            content_text.setReadOnly(True)
+            content_text.setStyleSheet("""
+                QTextEdit {
+                    color: #cdd6f4;
+                    font-size: 12px;
+                    font-family: 'Consolas', 'Monaco', monospace;
+                    background-color: #313244;
+                    border: 1px solid #45475a;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+            """)
+            layout.addWidget(content_text)
+
+            # 提示信息
+            hint_label = QLabel("💡 提示: 配置文件在每次启动网络时自动生成，使用TOML格式")
+            hint_label.setStyleSheet("""
+                QLabel {
+                    color: #f9e2af;
+                    font-size: 11px;
+                    font-style: italic;
+                    margin-top: 5px;
+                }
+            """)
+            layout.addWidget(hint_label)
+
+            # 关闭按钮
+            close_btn = QPushButton("关闭")
+            close_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #89b4fa;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    margin-top: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #74c7ec;
+                }
+            """)
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn)
+
+            # 显示对话框
+            dialog.exec()
+
+        except Exception as e:
+            self.log_message(f"读取配置文件失败: {e}", "error")
+
+    def generate_config_file(self) -> bool:
+        """生成配置文件"""
+        try:
+            # 更新当前配置
+            self.save_config()
+
+            # 生成TOML配置文件
+            success = self.easytier_manager.config_generator.generate_config(self.easytier_manager.config)
+            if success:
+                self.log_message("✅ 配置文件生成成功", "success")
+                return True
+            else:
+                self.log_message("❌ 配置文件生成失败", "error")
+                return False
+        except Exception as e:
+            self.log_message(f"❌ 生成配置文件异常: {e}", "error")
+            return False
+
+    def update_room_config_compatibility(self, room_config: dict) -> dict:
+        """更新房间配置的兼容性，添加缺失的字段"""
+        updated_config = room_config.copy()
+        config_updated = False
+
+        # 检查并添加EasyTier高级设置字段
+        easytier_fields = {
+            "enable_kcp_proxy": True,      # 默认启用KCP代理
+            "enable_quic_proxy": True,     # 默认启用QUIC代理
+            "use_smoltcp": False,          # 默认禁用用户态网络栈
+            "enable_compression": True,    # 默认启用压缩
+        }
+
+        for field, default_value in easytier_fields.items():
+            if field not in updated_config:
+                updated_config[field] = default_value
+                config_updated = True
+
+        # 检查并更新加密设置的默认值
+        if "disable_encryption" not in updated_config:
+            updated_config["disable_encryption"] = True  # 新默认值：禁用加密
+            config_updated = True
+
+        # 确保peers字段存在
+        if "peers" not in updated_config:
+            updated_config["peers"] = ["tcp://public.easytier.top:11010"]
+            config_updated = True
+
+        # 确保network_optimization字段存在
+        if "network_optimization" not in updated_config:
+            updated_config["network_optimization"] = {
+                "winip_broadcast": True,
+                "auto_metric": True
+            }
+            config_updated = True
+
+        if config_updated:
+            print(f"🔄 房间配置已更新兼容性: {updated_config.get('network_name', '未知房间')}")
+
+        return updated_config
+
+    def clear_all_config(self):
+        """清空所有配置（当没有房间时调用）"""
+        try:
+            # 清空界面
+            self.network_name_edit.clear()
+            self.machine_id_edit.clear()
+            self.network_secret_edit.clear()
+            self.peer_ip_edit.clear()
+
+            # 重置复选框为默认状态
+            self.dhcp_check.setChecked(True)
+            self.encryption_check.setChecked(False)  # 默认禁用加密
+            self.ipv6_check.setChecked(True)
+            self.latency_first_check.setChecked(True)
+            self.multi_thread_check.setChecked(True)
+
+            # 重置EasyTier网络加速选项为默认状态
+            if hasattr(self, 'kcp_proxy_check'):
+                self.kcp_proxy_check.setChecked(True)
+            if hasattr(self, 'quic_proxy_check'):
+                self.quic_proxy_check.setChecked(True)
+            if hasattr(self, 'smoltcp_check'):
+                self.smoltcp_check.setChecked(False)  # 默认禁用用户态网络栈
+            if hasattr(self, 'compression_check'):
+                self.compression_check.setChecked(True)
+
+            # 重置网络优化选项
+            self.winip_broadcast_check.setChecked(True)
+            self.auto_metric_check.setChecked(True)
+
+            # 重置公益服务器选择
+            if hasattr(self, 'server_list'):
+                for server in self.server_list:
+                    server['enabled'] = False
+                # 更新复选框状态
+                for checkbox in self.server_checkboxes:
+                    checkbox.setChecked(False)
+
+            # 清空easytier_config.json
+            config_file = self.easytier_manager.esr_dir / "easytier_config.json"
+            if config_file.exists():
+                config_file.unlink()
+                self.log_message("🗑️ 已清空 easytier_config.json", "info")
+
+            # 清空EasyTier管理器的配置
+            self.easytier_manager.config.clear()
+
+            self.log_message("✅ 所有配置已清空", "success")
+
+        except Exception as e:
+            self.log_message(f"❌ 清空配置失败: {e}", "error")
 
     def refresh_optimization_tools_status(self):
         """刷新网络优化工具状态"""

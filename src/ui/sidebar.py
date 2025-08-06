@@ -232,7 +232,7 @@ class Sidebar(QWidget):
         
         for page_id, icon, text in menu_items:
             btn = SidebarButton(f"  {icon}  {text}")
-            btn.clicked.connect(lambda checked, p=page_id: self.switch_page(p))
+            btn.clicked.connect(lambda checked=False, p=page_id: self.switch_page(p))
             self.buttons[page_id] = btn
             nav_layout.addWidget(btn)
         
@@ -249,7 +249,7 @@ class Sidebar(QWidget):
         footer_layout.setContentsMargins(15, 10, 15, 0)
         
         # 版本信息
-        version_label = QLabel("v3.0.3")
+        version_label = QLabel("v3.0.5")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;
