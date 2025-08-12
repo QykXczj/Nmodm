@@ -184,15 +184,173 @@ class ProcessCleaner:
             return False
     
     def _request_admin_cleanup(self, log_func) -> bool:
-        """静默处理管理员权限清理（不弹窗）"""
+        """请求管理员权限进行清理（模拟启动网络时的机制）"""
         try:
-            log_func("⚠️ WinIPBroadcast进程以管理员权限运行，当前权限无法清理", "warning")
-            log_func("💡 如需完全清理，请以管理员权限重启程序", "info")
-            log_func("💡 或运行项目根目录下的'清理WinIPBroadcast进程.bat'文件", "info")
-            return False
-                    
+            log_func("🔐 检测到管理员权限进程，正在请求管理员权限清理...", "info")
+
+            if sys.platform == "win32":
+                import ctypes
+
+                # 使用ShellExecute以管理员权限运行taskkill命令
+                shell32 = ctypes.windll.shell32
+
+                # 构建清理命令
+                cmd = "taskkill /f /im WinIPBroadcast.exe"
+
+                result = shell32.ShellExecuteW(
+                    None,                    # hwnd
+                    "runas",                 # lpOperation (以管理员身份运行)
+                    "cmd.exe",               # lpFile
+                    f"/c {cmd}",             # lpParameters
+                    None,                    # lpDirectory
+                    0                        # nShowCmd (隐藏窗口)
+                )
+
+                if result > 32:  # 成功
+                    log_func("✅ 管理员权限请求成功，正在清理进程...", "info")
+                    # 等待命令执行完成
+                    time.sleep(3)
+
+                    # 验证清理效果
+                    final_check = []
+                    import psutil
+                    for proc in psutil.process_iter(['pid', 'name']):
+                        try:
+                            if proc.info['name'].lower() == 'winipbroadcast.exe':
+                                final_check.append(proc)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+
+                    if final_check:
+                        log_func(f"⚠️ 仍有 {len(final_check)} 个进程未能清理", "warning")
+                        log_func("💡 可能需要手动结束进程", "info")
+                        return False
+                    else:
+                        log_func("✅ 所有WinIPBroadcast进程已成功清理", "info")
+                        return True
+                else:
+                    log_func(f"❌ 管理员权限请求失败，错误代码: {result}", "error")
+                    if result == 5:
+                        log_func("   用户取消了UAC提示", "warning")
+                    elif result == 2:
+                        log_func("   系统文件未找到", "error")
+                    elif result == 31:
+                        log_func("   没有关联的应用程序", "error")
+
+                    # 回退到原来的提示
+                    log_func("💡 如需完全清理，请以管理员权限重启程序", "info")
+                    log_func("💡 或运行项目根目录下的'清理WinIPBroadcast进程.bat'文件", "info")
+                    return False
+            else:
+                # 非Windows系统，使用sudo
+                log_func("🔐 请求sudo权限清理WinIPBroadcast进程...", "info")
+                result = subprocess.run(['sudo', 'pkill', '-f', 'WinIPBroadcast'],
+                                      capture_output=True, text=True)
+                if result.returncode == 0:
+                    log_func("✅ 使用sudo成功清理WinIPBroadcast进程", "info")
+                    return True
+                else:
+                    log_func(f"❌ sudo清理失败: {result.stderr}", "error")
+                    return False
+
         except Exception as e:
-            log_func(f"❌ 权限检查失败: {e}", "error")
+            log_func(f"❌ 管理员权限清理失败: {e}", "error")
+            return False
+
+    def cleanup_winip_processes_with_admin_request(self, callback=None) -> bool:
+        """
+        启动时清理WinIPBroadcast进程（主动请求管理员权限）
+
+        Args:
+            callback: 回调函数，用于更新UI状态
+
+        Returns:
+            bool: 清理是否成功
+        """
+        try:
+            import psutil
+
+            def log(message, level="info"):
+                print(message)
+                if callback:
+                    callback(message, level)
+
+            # 第一次扫描
+            found_processes = []
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() == 'winipbroadcast.exe':
+                        found_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if not found_processes:
+                log("🔍 未发现WinIPBroadcast进程")
+                return True
+
+            log(f"🔍 发现 {len(found_processes)} 个WinIPBroadcast进程，正在清理...", "info")
+
+            # 第一轮：优雅终止
+            log("第一阶段：尝试优雅终止进程...")
+            for proc in found_processes:
+                try:
+                    log(f"  终止进程 PID: {proc.pid}")
+                    proc.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+                except Exception as e:
+                    log(f"  终止进程 {proc.pid} 失败: {e}", "warning")
+
+            # 等待进程结束
+            time.sleep(2)
+
+            # 第二轮：强制终止仍在运行的进程
+            remaining_processes = []
+            for proc in found_processes:
+                try:
+                    if proc.is_running():
+                        remaining_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            if remaining_processes:
+                log(f"第二阶段：强制终止 {len(remaining_processes)} 个进程...")
+                for proc in remaining_processes:
+                    try:
+                        log(f"  强制终止进程 PID: {proc.pid}")
+                        proc.kill()
+                        proc.wait(timeout=3)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                    except Exception as e:
+                        log(f"  强制终止进程 {proc.pid} 失败: {e}", "warning")
+
+            # 最终验证
+            time.sleep(1)
+            final_check = []
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() == 'winipbroadcast.exe':
+                        final_check.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if final_check:
+                log(f"⚠️ 仍有 {len(final_check)} 个WinIPBroadcast进程未能清理", "warning")
+
+                # 直接尝试管理员权限清理（不再检查当前权限）
+                log("第三阶段：请求管理员权限清理残余进程...", "info")
+                success = self._request_admin_cleanup(log)
+                return success
+            else:
+                log("✅ 所有WinIPBroadcast进程已成功清理", "info")
+                return True
+
+        except ImportError:
+            print("❌ psutil未安装，无法进行进程清理")
+            return False
+        except Exception as e:
+            print(f"❌ 进程清理失败: {e}")
             return False
 
 

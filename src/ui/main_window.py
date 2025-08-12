@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 
         # 局域网模式状态
         self.is_lan_mode = False
-        self.base_title = "Nmodm v3.0.5"
+        self.base_title = "Nmodm v3.0.6"
 
         self.setup_window()
         self.setup_ui()
@@ -179,16 +179,19 @@ class MainWindow(QMainWindow):
         
     def setup_window(self):
         """设置窗口属性"""
-        # 无边框窗口
-        self.setWindowFlags(Qt.FramelessWindowHint)
+        # 无边框窗口，但保留任务栏交互
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinMaxButtonsHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        
+
         # 窗口大小和位置
         self.setMinimumSize(900, 600)
         self.resize(1200, 800)
-        
+
         # 居中显示
         self.center_window()
+
+        # 确保窗口在任务栏中正确显示
+        self.setWindowTitle("Nmodm v3.0.6")
         
     def setup_ui(self):
         """设置UI"""
@@ -270,6 +273,59 @@ class MainWindow(QMainWindow):
             self.width() - self.size_grip.width(),
             self.height() - self.size_grip.height()
         )
+
+    def changeEvent(self, event):
+        """窗口状态改变事件 - 处理任务栏点击恢复"""
+        if event.type() == event.Type.WindowStateChange:
+            # 处理窗口状态变化
+            if self.windowState() & Qt.WindowMinimized:
+                # 窗口被最小化
+                pass
+            elif event.oldState() & Qt.WindowMinimized:
+                # 从最小化状态恢复
+                self.showNormal()
+                self.raise_()
+                self.activateWindow()
+
+        super().changeEvent(event)
+
+    def showEvent(self, event):
+        """窗口显示事件"""
+        super().showEvent(event)
+        # 确保窗口能够获得焦点
+        self.raise_()
+        self.activateWindow()
+
+    def hideEvent(self, event):
+        """窗口隐藏事件"""
+        super().hideEvent(event)
+
+    def nativeEvent(self, eventType, message):
+        """处理原生Windows事件 - 用于任务栏交互"""
+        try:
+            # 在Windows上处理任务栏点击事件
+            if eventType == "windows_generic_MSG":
+                import ctypes
+                from ctypes import wintypes
+
+                # 获取消息结构
+                msg = ctypes.cast(int(message), ctypes.POINTER(wintypes.MSG)).contents
+
+                # WM_SYSCOMMAND = 0x0112
+                # SC_RESTORE = 0xF120
+                if msg.message == 0x0112 and (msg.wParam & 0xFFF0) == 0xF120:
+                    # 任务栏点击恢复
+                    if self.isMinimized():
+                        self.showNormal()
+                        self.raise_()
+                        self.activateWindow()
+                        return True, 0
+
+        except Exception as e:
+            # 静默处理异常，避免影响正常功能
+            pass
+
+        return super().nativeEvent(eventType, message)
 
     def set_lan_mode(self, is_lan_mode: bool):
         """设置局域网模式状态"""

@@ -10,11 +10,12 @@ import configparser
 import time
 import shutil
 from pathlib import Path
+from typing import Dict
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFrame, QGroupBox, QLineEdit,
                                QTextEdit, QFileDialog, QMessageBox, QProgressBar,
                                QGridLayout, QScrollArea, QSplitter)
-from PySide6.QtCore import Qt, Signal, QProcess, QThread
+from PySide6.QtCore import Qt, Signal, QProcess, QThread, QTimer
 from .base_page import BasePage
 
 
@@ -85,11 +86,40 @@ class LanGamingPage(BasePage):
 
         self.setup_content()
 
-        # 初始化ESL工具
-        self.initialize_esl()
+        # 显示初始化状态
+        self.show_initialization_status()
 
-        # 检测局域网模式并更新UI
-        self.check_and_update_lan_mode()
+        # 异步执行所有耗时的初始化操作
+        QTimer.singleShot(50, self.async_initialize_page)
+
+    def show_initialization_status(self):
+        """显示初始化状态提示"""
+        try:
+            # 更新ESL状态显示
+            self.update_esl_status("🚀 正在初始化ESL工具...", "info")
+
+        except Exception as e:
+            print(f"显示初始化状态失败: {e}")
+
+    def async_initialize_page(self):
+        """异步初始化页面 - 使用QThread执行耗时操作"""
+        try:
+            # 创建初始化工作线程
+            self.init_worker = LanGamingInitWorker(self)
+            self.init_worker.progress_updated.connect(self.on_init_progress)
+            self.init_worker.initialization_complete.connect(self.on_initialization_complete)
+            self.init_worker.initialization_error.connect(self.on_initialization_error)
+
+            # 启动工作线程
+            self.init_worker.start()
+
+        except Exception as e:
+            print(f"启动异步初始化失败: {e}")
+            self.update_esl_status(f"❌ 初始化失败: {e}", "error")
+
+    def on_init_progress(self, message, msg_type):
+        """初始化进度更新"""
+        self.update_esl_status(message, msg_type)
 
     def setup_content(self):
         """设置页面内容 - 使用优化的网格布局"""
@@ -580,56 +610,281 @@ class LanGamingPage(BasePage):
         help_group.setLayout(help_layout)
         parent_layout.addWidget(help_group, row, col, row_span, col_span)
 
-    def initialize_esl(self):
-        """初始化ESL工具"""
+    def initialize_esl_sync(self):
+        """同步初始化ESL工具 - 在后台线程中执行"""
         try:
             # 1. 检查是否已有解压完成标志
             if self.esl_extracted_flag.exists() and self.validate_esl_structure():
-                self.update_esl_status("✅ ESL工具已就绪", "success")
-                self.load_current_settings()
-                return True
+                return {
+                    'status': 'success',
+                    'message': '✅ ESL工具已就绪',
+                    'ready': True,
+                    'need_extract': False
+                }
 
             # 2. 检查OnlineFix文件夹中的esl2.zip
             if self.esl_zip_path.exists():
-                self.update_esl_status("📦 发现ESL压缩包，准备解压...", "info")
-                self.extract_esl_package()
-                return True
+                return {
+                    'status': 'need_extract',
+                    'message': '📦 发现ESL压缩包，准备解压...',
+                    'ready': False,
+                    'need_extract': True,
+                    'zip_path': str(self.esl_zip_path)
+                }
 
             # 3. 检查ESL文件夹中是否有旧的esl2.zip（向后兼容）
             old_esl_zip = self.steamclient_dir / "esl2.zip"
             if old_esl_zip.exists():
-                self.update_esl_status("📦 发现旧版ESL压缩包，准备迁移并解压...", "info")
                 # 迁移到OnlineFix文件夹
                 self.onlinefix_dir.mkdir(exist_ok=True)
                 if self.esl_zip_path.exists():
                     self.esl_zip_path.unlink()
                 shutil.move(str(old_esl_zip), str(self.esl_zip_path))
                 print(f"✅ ESL压缩包已迁移到OnlineFix文件夹")
-                self.extract_esl_package()
-                return True
+
+                return {
+                    'status': 'need_extract',
+                    'message': '📦 发现旧版ESL压缩包，已迁移，准备解压...',
+                    'ready': False,
+                    'need_extract': True,
+                    'zip_path': str(self.esl_zip_path)
+                }
 
             # 4. 都不存在，错误状态
-            self.update_esl_status("❌ ESL工具缺失，请重新下载程序", "error")
-            return False
+            return {
+                'status': 'error',
+                'message': '❌ ESL工具缺失，请重新下载程序',
+                'ready': False,
+                'need_extract': False
+            }
 
         except Exception as e:
             print(f"ESL初始化失败: {e}")
-            self.update_esl_status(f"❌ ESL初始化失败: {e}", "error")
-            return False
+            return {
+                'status': 'error',
+                'message': f'❌ ESL初始化失败: {e}',
+                'ready': False,
+                'need_extract': False,
+                'error': str(e)
+            }
+
+    def initialize_esl(self):
+        """初始化ESL工具 - 保持向后兼容"""
+        result = self.initialize_esl_sync()
+        self.update_esl_initialization_ui(result)
+        return result.get('ready', False)
 
     def validate_esl_structure(self):
-        """验证ESL文件结构完整性"""
+        """验证ESL文件结构完整性（增强版本）"""
         try:
-            required_files = [
-                self.steamclient_dir / "steamclient_loader.exe",
-                self.steam_settings_dir,
-            ]
+            # 定义必需的文件和目录（基于实际ESL结构）
+            required_items = {
+                "steamclient_loader.exe": {
+                    "path": self.steamclient_dir / "steamclient_loader.exe",
+                    "type": "file",
+                    "check_pe": True
+                },
+                "steam_settings目录": {
+                    "path": self.steam_settings_dir,
+                    "type": "directory",
+                    "check_pe": False
+                },
+                "steamclient64.dll": {
+                    "path": self.steamclient_dir / "steamclient64.dll",
+                    "type": "file",
+                    "check_pe": True
+                },
+                "unsteam64.dll": {
+                    "path": self.steamclient_dir / "unsteam64.dll",
+                    "type": "file",
+                    "check_pe": True
+                },
+                "steam_api64.dll": {
+                    "path": self.steamclient_dir / "steam_api64.dll",
+                    "type": "file",
+                    "check_pe": True
+                }
+            }
 
-            return all(path.exists() for path in required_files)
+            all_valid = True
+
+            for item_name, item_info in required_items.items():
+                path = item_info["path"]
+                item_type = item_info["type"]
+                check_pe = item_info["check_pe"]
+
+                if not path.exists():
+                    print(f"⚠️ ESL缺失项目: {item_name}")
+                    all_valid = False
+                    continue
+
+                if item_type == "file":
+                    # 检查文件大小
+                    try:
+                        file_size = path.stat().st_size
+                        if file_size == 0:
+                            print(f"⚠️ ESL文件大小为0: {item_name}")
+                            all_valid = False
+                            continue
+
+                        # 检查PE头（对于exe和dll文件）
+                        if check_pe:
+                            with open(path, 'rb') as f:
+                                header = f.read(1024)
+                                if not header.startswith(b'MZ'):
+                                    print(f"⚠️ ESL文件PE头损坏: {item_name}")
+                                    all_valid = False
+                                    continue
+
+                    except Exception as e:
+                        print(f"⚠️ 检查ESL文件时出错 {item_name}: {e}")
+                        all_valid = False
+                        continue
+
+                elif item_type == "directory":
+                    if not path.is_dir():
+                        print(f"⚠️ ESL目录无效: {item_name}")
+                        all_valid = False
+                        continue
+
+            return all_valid
 
         except Exception as e:
             print(f"验证ESL结构失败: {e}")
             return False
+
+    def get_esl_integrity_report(self) -> Dict[str, Dict]:
+        """获取ESL详细完整性报告"""
+        required_items = {
+            "steamclient_loader.exe": {
+                "path": self.steamclient_dir / "steamclient_loader.exe",
+                "type": "file",
+                "check_pe": True,
+                "description": "ESL主程序"
+            },
+            "steam_settings目录": {
+                "path": self.steam_settings_dir,
+                "type": "directory",
+                "check_pe": False,
+                "description": "Steam设置目录"
+            },
+            "steamclient64.dll": {
+                "path": self.steamclient_dir / "steamclient64.dll",
+                "type": "file",
+                "check_pe": True,
+                "description": "Steam客户端库"
+            },
+            "unsteam64.dll": {
+                "path": self.steamclient_dir / "unsteam64.dll",
+                "type": "file",
+                "check_pe": True,
+                "description": "Unsteam核心库"
+            },
+            "steam_api64.dll": {
+                "path": self.steamclient_dir / "steam_api64.dll",
+                "type": "file",
+                "check_pe": True,
+                "description": "Steam API库"
+            }
+        }
+
+        detailed_report = {}
+
+        for item_name, item_info in required_items.items():
+            path = item_info["path"]
+            item_type = item_info["type"]
+            check_pe = item_info["check_pe"]
+            description = item_info["description"]
+
+            report = {
+                "description": description,
+                "type": item_type,
+                "exists": False,
+                "size": 0,
+                "readable": False,
+                "valid_format": False,
+                "status": "missing"
+            }
+
+            try:
+                if path.exists():
+                    report["exists"] = True
+
+                    if item_type == "file":
+                        # 检查文件
+                        if path.is_file():
+                            file_size = path.stat().st_size
+                            report["size"] = file_size
+
+                            if file_size > 0:
+                                try:
+                                    with open(path, 'rb') as f:
+                                        header = f.read(1024)
+                                        if len(header) > 0:
+                                            report["readable"] = True
+
+                                            if check_pe:
+                                                if header.startswith(b'MZ'):
+                                                    report["valid_format"] = True
+                                                    report["status"] = "healthy"
+                                                else:
+                                                    report["status"] = "corrupted"
+                                            else:
+                                                report["valid_format"] = True
+                                                report["status"] = "healthy"
+                                        else:
+                                            report["status"] = "empty_content"
+                                except Exception as e:
+                                    report["status"] = f"read_error: {str(e)}"
+                            else:
+                                report["status"] = "zero_size"
+                        else:
+                            report["status"] = "not_file"
+
+                    elif item_type == "directory":
+                        if path.is_dir():
+                            report["status"] = "healthy"
+                            report["valid_format"] = True
+                        else:
+                            report["status"] = "not_directory"
+                else:
+                    report["status"] = "missing"
+
+            except Exception as e:
+                report["status"] = f"check_error: {str(e)}"
+
+            detailed_report[item_name] = report
+
+        return detailed_report
+
+    def print_esl_integrity_report(self):
+        """打印ESL详细完整性报告"""
+        print("📋 ESL完整性详细报告:")
+        print("=" * 60)
+
+        detailed_report = self.get_esl_integrity_report()
+
+        for item_name, report in detailed_report.items():
+            status_icon = {
+                "healthy": "✅",
+                "missing": "❌",
+                "corrupted": "⚠️",
+                "zero_size": "⚠️",
+                "empty_content": "⚠️",
+                "not_file": "⚠️",
+                "not_directory": "⚠️"
+            }.get(report["status"], "❓")
+
+            print(f"{status_icon} {item_name}")
+            print(f"   描述: {report['description']}")
+            print(f"   类型: {report['type']}")
+            print(f"   状态: {report['status']}")
+            if report['type'] == 'file':
+                print(f"   大小: {report['size']} 字节")
+                print(f"   可读: {report['readable']}")
+                print(f"   格式: {report['valid_format']}")
+            print(f"   存在: {report['exists']}")
+            print()
 
     def extract_esl_package(self):
         """解压ESL压缩包"""
@@ -1017,22 +1272,94 @@ ip_country=CN
         except Exception as e:
             print(f"关闭窗口失败: {e}")
 
-    def check_and_update_lan_mode(self):
-        """检测局域网模式并更新UI"""
+    def check_and_update_lan_mode_sync(self):
+        """同步检测局域网模式 - 在后台线程中执行"""
         try:
             from src.utils.lan_mode_detector import get_lan_mode_detector
             detector = get_lan_mode_detector()
 
-            if detector.is_lan_mode:
-                # 当前处于局域网模式
-                self.update_ui_for_lan_mode(True)
-                self.update_status("🌐 当前处于局域网联机模式", "success")
-            else:
-                # 当前处于正常模式
-                self.update_ui_for_lan_mode(False)
+            return {
+                'status': 'success',
+                'is_lan_mode': detector.is_lan_mode
+            }
 
         except Exception as e:
             print(f"检测局域网模式失败: {e}")
+            return {
+                'status': 'error',
+                'is_lan_mode': False,
+                'error': str(e)
+            }
+
+    def check_and_update_lan_mode(self):
+        """检测局域网模式并更新UI - 保持向后兼容"""
+        result = self.check_and_update_lan_mode_sync()
+        self.update_lan_mode_ui(result)
+
+    def on_initialization_complete(self, esl_result, lan_mode_result):
+        """初始化完成处理"""
+        try:
+            # 更新ESL状态UI
+            self.update_esl_initialization_ui(esl_result)
+
+            # 更新局域网模式UI
+            self.update_lan_mode_ui(lan_mode_result)
+
+            # 如果ESL已就绪，加载当前设置
+            if esl_result.get('ready', False):
+                self.load_current_settings()
+
+            # 如果需要解压，启动解压过程
+            if esl_result.get('need_extract', False):
+                self.extract_esl_package()
+
+            print("✅ 局域网配置页面初始化完成")
+
+        except Exception as e:
+            print(f"初始化完成处理失败: {e}")
+
+    def on_initialization_error(self, error_msg):
+        """初始化错误处理"""
+        try:
+            self.update_esl_status(f"❌ 页面初始化失败: {error_msg}", "error")
+        except Exception as e:
+            print(f"初始化错误处理失败: {e}")
+
+    def update_esl_initialization_ui(self, result):
+        """更新ESL初始化UI"""
+        try:
+            status = result.get('status', 'error')
+            message = result.get('message', '未知状态')
+
+            if status == 'success':
+                self.update_esl_status(message, "success")
+            elif status == 'need_extract':
+                self.update_esl_status(message, "info")
+            else:
+                self.update_esl_status(message, "error")
+
+        except Exception as e:
+            print(f"更新ESL初始化UI失败: {e}")
+
+    def update_lan_mode_ui(self, result):
+        """更新局域网模式UI"""
+        try:
+            if result.get('status') == 'success':
+                is_lan_mode = result.get('is_lan_mode', False)
+
+                if is_lan_mode:
+                    # 当前处于局域网模式
+                    self.update_ui_for_lan_mode(True)
+                    self.update_status("🌐 当前处于局域网联机模式", "success")
+                else:
+                    # 当前处于正常模式
+                    self.update_ui_for_lan_mode(False)
+            else:
+                error_msg = result.get('error', '未知错误')
+                print(f"局域网模式检测失败: {error_msg}")
+
+        except Exception as e:
+            print(f"更新局域网模式UI失败: {e}")
 
     def update_ui_for_lan_mode(self, is_lan_mode: bool):
         """根据局域网模式更新UI"""
@@ -1282,3 +1609,33 @@ ip_country=CN
                 border-radius: 6px;
             }}
         """)
+
+
+class LanGamingInitWorker(QThread):
+    """局域网配置页面初始化工作线程"""
+
+    progress_updated = Signal(str, str)  # message, msg_type
+    initialization_complete = Signal(dict, dict)  # esl_result, lan_mode_result
+    initialization_error = Signal(str)  # error_message
+
+    def __init__(self, page):
+        super().__init__()
+        self.page = page
+
+    def run(self):
+        """在后台线程中执行初始化"""
+        try:
+            # 1. 初始化ESL工具
+            self.progress_updated.emit("🔧 正在初始化ESL工具...", "info")
+            esl_result = self.page.initialize_esl_sync()
+
+            # 2. 检测局域网模式
+            self.progress_updated.emit("🌐 正在检测局域网模式...", "info")
+            lan_mode_result = self.page.check_and_update_lan_mode_sync()
+
+            # 发送完成信号
+            self.initialization_complete.emit(esl_result, lan_mode_result)
+
+        except Exception as e:
+            print(f"初始化工作线程异常: {e}")
+            self.initialization_error.emit(str(e))
