@@ -286,7 +286,7 @@ class WelcomePage(BasePage):
         contact_layout.addWidget(qq_label)
 
         # QQ群号（可点击复制）
-        qq_number = ClickableLabel("908596561")
+        qq_number = ClickableLabel("726070139")
         qq_number.setStyleSheet("""
             QLabel {
                 color: #89b4fa;
@@ -304,7 +304,7 @@ class WelcomePage(BasePage):
         """)
         qq_number.setCursor(QCursor(Qt.PointingHandCursor))
         qq_number.setToolTip("点击复制QQ群号")
-        qq_number.clicked.connect(lambda checked=False: self.copy_to_clipboard("908596561", "QQ群号"))
+        qq_number.clicked.connect(lambda checked=False: self.copy_to_clipboard("726070139", "QQ群号"))
         contact_layout.addWidget(qq_number)
 
         layout.addWidget(contact_widget)

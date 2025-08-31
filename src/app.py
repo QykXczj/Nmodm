@@ -62,7 +62,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("3.0.6")
+        self.app.setApplicationVersion("3.0.7")
         self.app.setOrganizationName("Nmodm Team")
 
         # 初始化局域网模式检测器

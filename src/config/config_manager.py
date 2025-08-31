@@ -5,8 +5,9 @@
 import os
 import sys
 import shutil
+import struct
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 
 class ConfigManager:
@@ -154,3 +155,469 @@ class ConfigManager:
         except Exception as e:
             print(f"检查破解状态失败: {e}")
             return False
+
+    def get_nightreign_version(self) -> Optional[str]:
+        """获取nightreign.exe的版本信息"""
+        try:
+            game_path = self.get_game_path()
+            if not game_path or not os.path.exists(game_path):
+                return None
+
+            # 方法1: 使用Windows API获取文件版本信息
+            version = self._get_version_with_win32api(game_path)
+            if version:
+                return version
+
+            # 方法2: 使用pefile库解析PE文件
+            version = self._get_version_with_pefile(game_path)
+            if version:
+                return version
+
+            # 方法3: 使用文件属性作为备用方案
+            return self._get_version_from_file_info(game_path)
+
+        except Exception as e:
+            print(f"获取nightreign.exe版本失败: {e}")
+            return None
+
+    def _get_version_with_win32api(self, file_path: str) -> Optional[str]:
+        """使用Windows API获取版本信息"""
+        try:
+            import win32api
+            info = win32api.GetFileVersionInfo(file_path, "\\")
+            ms = info['FileVersionMS']
+            ls = info['FileVersionLS']
+            version = f"{win32api.HIWORD(ms)}.{win32api.LOWORD(ms)}.{win32api.HIWORD(ls)}.{win32api.LOWORD(ls)}"
+            # 移除末尾的.0
+            version = version.rstrip('.0')
+            return version if version != "0.0.0" else None
+        except (ImportError, Exception):
+            return None
+
+    def _get_version_with_pefile(self, file_path: str) -> Optional[str]:
+        """使用pefile库获取版本信息"""
+        try:
+            import pefile
+            pe = pefile.PE(file_path)
+
+            if hasattr(pe, 'VS_VERSIONINFO'):
+                for file_info in pe.FileInfo[0]:
+                    if file_info.Key.decode() == 'StringFileInfo':
+                        for st in file_info.StringTable:
+                            for entry in st.entries.items():
+                                if entry[0].decode() in ['FileVersion', 'ProductVersion']:
+                                    version = entry[1].decode().strip()
+                                    if version and version != "0.0.0.0":
+                                        return version.rstrip('.0')
+            return None
+        except (ImportError, Exception):
+            return None
+
+    def _get_version_from_file_info(self, file_path: str) -> Optional[str]:
+        """从文件信息获取版本标识（备用方法）"""
+        try:
+            stat = os.stat(file_path)
+            file_size = stat.st_size
+
+            # 使用文件大小和修改时间生成版本标识
+            import time
+            import hashlib
+
+            # 创建基于文件属性的版本标识
+            file_info = f"{file_size}_{int(stat.st_mtime)}"
+            version_hash = hashlib.md5(file_info.encode()).hexdigest()[:8]
+
+            # 格式化为版本号样式
+            modification_time = time.strftime("%Y.%m.%d", time.localtime(stat.st_mtime))
+            return f"{modification_time}.{version_hash}"
+
+        except Exception as e:
+            print(f"从文件信息获取版本失败: {e}")
+            return None
+
+    def get_nightreign_file_info(self) -> Dict[str, Any]:
+        """获取nightreign.exe的详细文件信息"""
+        try:
+            game_path = self.get_game_path()
+            if not game_path or not os.path.exists(game_path):
+                return {"error": "游戏文件不存在"}
+
+            stat = os.stat(game_path)
+            import time
+
+            return {
+                "file_path": game_path,
+                "file_size": stat.st_size,
+                "file_size_mb": round(stat.st_size / (1024 * 1024), 2),
+                "creation_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_ctime)),
+                "modification_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
+                "access_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_atime)),
+                "version": self.get_nightreign_version()
+            }
+
+        except Exception as e:
+            return {"error": f"获取文件信息失败: {e}"}
+
+    def get_steam_api_size(self) -> Optional[int]:
+        """获取steam_api64.dll的文件大小（字节）"""
+        try:
+            game_path = self.get_game_path()
+            if not game_path or not os.path.exists(game_path):
+                return None
+
+            # 获取游戏目录
+            game_dir = os.path.dirname(game_path)
+            steam_dll_path = os.path.join(game_dir, "steam_api64.dll")
+
+            if os.path.exists(steam_dll_path):
+                return os.path.getsize(steam_dll_path)
+            else:
+                return None
+
+        except Exception as e:
+            print(f"获取steam_api64.dll大小失败: {e}")
+            return None
+
+    def get_desteam_api_size(self) -> Optional[int]:
+        """获取desteam_api64.dll的文件大小（字节）- 保持向后兼容"""
+        return self.get_steam_api_size()
+
+    def get_game_info(self) -> Dict[str, Any]:
+        """获取游戏相关信息的综合方法"""
+        try:
+            game_path = self.get_game_path()
+            if not game_path:
+                return {
+                    "game_path": None,
+                    "game_exists": False,
+                    "nightreign_version": None,
+                    "steam_api_size": None,
+                    "steam_api_exists": False,
+                    "steam_api_size_mb": None,
+                    # 保持向后兼容
+                    "desteam_api_size": None,
+                    "desteam_api_exists": False,
+                    "desteam_api_size_mb": None,
+                    "error": "游戏路径未配置"
+                }
+
+            game_exists = os.path.exists(game_path)
+            if not game_exists:
+                return {
+                    "game_path": game_path,
+                    "game_exists": False,
+                    "nightreign_version": None,
+                    "steam_api_size": None,
+                    "steam_api_exists": False,
+                    "steam_api_size_mb": None,
+                    # 保持向后兼容
+                    "desteam_api_size": None,
+                    "desteam_api_exists": False,
+                    "desteam_api_size_mb": None,
+                    "error": "游戏文件不存在"
+                }
+
+            # 获取版本信息
+            version = self.get_nightreign_version()
+
+            # 获取steam_api64.dll信息
+            steam_api_size = self.get_steam_api_size()
+            steam_api_exists = steam_api_size is not None
+
+            return {
+                "game_path": game_path,
+                "game_exists": True,
+                "nightreign_version": version,
+                "steam_api_size": steam_api_size,
+                "steam_api_exists": steam_api_exists,
+                "steam_api_size_mb": round(steam_api_size / (1024 * 1024), 2) if steam_api_size else None,
+                # 保持向后兼容的字段名
+                "desteam_api_size": steam_api_size,
+                "desteam_api_exists": steam_api_exists,
+                "desteam_api_size_mb": round(steam_api_size / (1024 * 1024), 2) if steam_api_size else None,
+                "error": None
+            }
+
+        except Exception as e:
+            return {
+                "game_path": None,
+                "game_exists": False,
+                "nightreign_version": None,
+                "steam_api_size": None,
+                "steam_api_exists": False,
+                "steam_api_size_mb": None,
+                # 保持向后兼容
+                "desteam_api_size": None,
+                "desteam_api_exists": False,
+                "desteam_api_size_mb": None,
+                "error": f"获取游戏信息失败: {e}"
+            }
+
+    def check_nmodm_path_chinese(self) -> Dict[str, Any]:
+        """检测Nmodm软件本身路径是否包含中文字符"""
+        try:
+            # 获取Nmodm软件的根目录路径
+            nmodm_path = str(self.root_dir)
+
+            # 检测是否包含中文字符
+            has_chinese = self._contains_chinese(nmodm_path)
+
+            # 如果包含中文，提取中文字符
+            chinese_chars = []
+            if has_chinese:
+                chinese_chars = self._extract_chinese_chars(nmodm_path)
+
+            return {
+                "nmodm_path": nmodm_path,
+                "has_chinese": has_chinese,
+                "chinese_characters": chinese_chars,
+                "is_safe": not has_chinese,
+                "warning": "路径包含中文字符，可能导致某些功能异常" if has_chinese else None,
+                "recommendation": "建议将软件移动到纯英文路径下" if has_chinese else "路径安全，无中文字符",
+                "error": None
+            }
+
+        except Exception as e:
+            return {
+                "nmodm_path": None,
+                "has_chinese": None,
+                "chinese_characters": [],
+                "is_safe": None,
+                "warning": None,
+                "recommendation": None,
+                "error": f"检测路径失败: {e}"
+            }
+
+    def _contains_chinese(self, text: str) -> bool:
+        """检测文本是否包含中文字符"""
+        try:
+            for char in text:
+                # 检测中文字符范围
+                if '\u4e00' <= char <= '\u9fff':  # 基本中文字符
+                    return True
+                elif '\u3400' <= char <= '\u4dbf':  # 扩展A
+                    return True
+                elif '\u20000' <= char <= '\u2a6df':  # 扩展B
+                    return True
+                elif '\u2a700' <= char <= '\u2b73f':  # 扩展C
+                    return True
+                elif '\u2b740' <= char <= '\u2b81f':  # 扩展D
+                    return True
+                elif '\u2b820' <= char <= '\u2ceaf':  # 扩展E
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def _extract_chinese_chars(self, text: str) -> list:
+        """提取文本中的中文字符"""
+        try:
+            chinese_chars = []
+            for char in text:
+                if '\u4e00' <= char <= '\u9fff':  # 基本中文字符
+                    if char not in chinese_chars:
+                        chinese_chars.append(char)
+                elif '\u3400' <= char <= '\u4dbf':  # 扩展A
+                    if char not in chinese_chars:
+                        chinese_chars.append(char)
+                elif '\u20000' <= char <= '\u2a6df':  # 扩展B
+                    if char not in chinese_chars:
+                        chinese_chars.append(char)
+                elif '\u2b740' <= char <= '\u2b81f':  # 扩展D
+                    if char not in chinese_chars:
+                        chinese_chars.append(char)
+                elif '\u2b820' <= char <= '\u2ceaf':  # 扩展E
+                    if char not in chinese_chars:
+                        chinese_chars.append(char)
+            return chinese_chars
+        except Exception:
+            return []
+
+    def get_nmodm_info(self) -> Dict[str, Any]:
+        """获取Nmodm软件的完整信息"""
+        try:
+            # 基本路径信息
+            nmodm_path = str(self.root_dir)
+            path_info = self.check_nmodm_path_chinese()
+
+            # 获取路径统计信息
+            import time
+            try:
+                stat = os.stat(nmodm_path)
+                creation_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_ctime))
+                modification_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime))
+            except:
+                creation_time = "未知"
+                modification_time = "未知"
+
+            # 检测是否为打包环境
+            is_frozen = getattr(sys, 'frozen', False)
+
+            # 检测是否在桌面
+            desktop_info = self.check_nmodm_on_desktop()
+
+            # 综合安全性评估
+            overall_safe = path_info["is_safe"] and desktop_info["is_safe"]
+
+            # 综合警告信息
+            warnings = []
+            if path_info["warning"]:
+                warnings.append(path_info["warning"])
+            if desktop_info["warning"]:
+                warnings.append(desktop_info["warning"])
+
+            # 综合建议信息
+            recommendations = []
+            if path_info["recommendation"] and "建议" in path_info["recommendation"]:
+                recommendations.append(path_info["recommendation"])
+            if desktop_info["recommendation"] and "建议" in desktop_info["recommendation"]:
+                recommendations.append(desktop_info["recommendation"])
+
+            return {
+                "nmodm_path": nmodm_path,
+                "is_frozen": is_frozen,
+                "environment": "打包环境" if is_frozen else "开发环境",
+                "creation_time": creation_time,
+                "modification_time": modification_time,
+                "path_length": len(nmodm_path),
+                # 中文路径相关
+                "has_chinese": path_info["has_chinese"],
+                "chinese_characters": path_info["chinese_characters"],
+                "is_path_safe": path_info["is_safe"],
+                "path_warning": path_info["warning"],
+                "path_recommendation": path_info["recommendation"],
+                # 桌面位置相关
+                "is_on_desktop": desktop_info["is_on_desktop"],
+                "matched_desktop_path": desktop_info["matched_desktop_path"],
+                "is_desktop_safe": desktop_info["is_safe"],
+                "desktop_warning": desktop_info["warning"],
+                "desktop_recommendation": desktop_info["recommendation"],
+                # 综合评估
+                "overall_safe": overall_safe,
+                "all_warnings": warnings,
+                "all_recommendations": recommendations,
+                "error": None
+            }
+
+        except Exception as e:
+            return {
+                "nmodm_path": None,
+                "is_frozen": None,
+                "environment": None,
+                "creation_time": None,
+                "modification_time": None,
+                "path_length": None,
+                "has_chinese": None,
+                "chinese_characters": [],
+                "is_path_safe": None,
+                "path_warning": None,
+                "path_recommendation": None,
+                "error": f"获取Nmodm信息失败: {e}"
+            }
+
+    def check_nmodm_on_desktop(self) -> Dict[str, Any]:
+        """检测Nmodm是否在桌面上"""
+        try:
+            nmodm_path = str(self.root_dir).lower()
+
+            # 获取桌面路径的多种可能位置
+            desktop_paths = self._get_desktop_paths()
+
+            # 检查是否在任何桌面路径下
+            is_on_desktop = False
+            matched_desktop_path = None
+
+            for desktop_path in desktop_paths:
+                if desktop_path and nmodm_path.startswith(desktop_path.lower()):
+                    is_on_desktop = True
+                    matched_desktop_path = desktop_path
+                    break
+
+            return {
+                "nmodm_path": str(self.root_dir),
+                "is_on_desktop": is_on_desktop,
+                "matched_desktop_path": matched_desktop_path,
+                "desktop_paths_checked": desktop_paths,
+                "is_safe": not is_on_desktop,  # 桌面通常不是最佳位置
+                "warning": "软件位于桌面，可能影响性能和整理" if is_on_desktop else None,
+                "recommendation": "建议将软件移动到专门的程序目录（如 C:\\Program Files 或 D:\\Software）" if is_on_desktop else "软件位置合适",
+                "error": None
+            }
+
+        except Exception as e:
+            return {
+                "nmodm_path": None,
+                "is_on_desktop": None,
+                "matched_desktop_path": None,
+                "desktop_paths_checked": [],
+                "is_safe": None,
+                "warning": None,
+                "recommendation": None,
+                "error": f"检测桌面位置失败: {e}"
+            }
+
+    def _get_desktop_paths(self) -> list:
+        """获取可能的桌面路径"""
+        desktop_paths = []
+
+        try:
+            # 方法1: 使用环境变量
+            userprofile = os.environ.get('USERPROFILE')
+            if userprofile:
+                desktop_paths.append(os.path.join(userprofile, 'Desktop'))
+                desktop_paths.append(os.path.join(userprofile, '桌面'))  # 中文系统
+
+            # 方法2: 使用公共桌面
+            public = os.environ.get('PUBLIC')
+            if public:
+                desktop_paths.append(os.path.join(public, 'Desktop'))
+                desktop_paths.append(os.path.join(public, '桌面'))
+
+            # 方法3: 使用Windows Shell API（如果可用）
+            try:
+                import winreg
+                # 从注册表获取桌面路径
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                  r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders") as key:
+                    desktop_path = winreg.QueryValueEx(key, "Desktop")[0]
+                    if desktop_path:
+                        desktop_paths.append(desktop_path)
+            except:
+                pass
+
+            # 方法4: 常见的桌面路径
+            common_paths = [
+                "C:\\Users\\Public\\Desktop",
+                "C:\\Users\\Public\\桌面",
+            ]
+
+            # 添加当前用户的常见路径
+            username = os.environ.get('USERNAME')
+            if username:
+                common_paths.extend([
+                    f"C:\\Users\\{username}\\Desktop",
+                    f"C:\\Users\\{username}\\桌面",
+                ])
+
+            desktop_paths.extend(common_paths)
+
+            # 去重并过滤存在的路径
+            unique_paths = []
+            for path in desktop_paths:
+                if path and path not in unique_paths:
+                    unique_paths.append(path)
+
+            # 只返回实际存在的路径
+            existing_paths = []
+            for path in unique_paths:
+                try:
+                    if os.path.exists(path):
+                        existing_paths.append(path)
+                except:
+                    continue
+
+            return existing_paths
+
+        except Exception as e:
+            print(f"获取桌面路径失败: {e}")
+            return []

@@ -185,8 +185,546 @@ class HelpDialog(QDialog):
             super().mouseReleaseEvent(event)
 
 
+class StatusBar(QFrame):
+    """紧凑状态栏组件 - 专业UI设计"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置紧凑状态栏UI"""
+        self.setFixedHeight(45)  # 固定高度，紧凑设计
+        self.setStyleSheet("""
+            StatusBar {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1e1e2e, stop:1 #2a2a3e);
+                border: 0.5px solid #45475a;
+                border-radius: 6px;
+                padding: 0px;
+            }
+        """)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(20)
+
+        # 状态指示器
+        self.crack_indicator = self.create_status_indicator("🔓", "破解状态")
+        self.game_indicator = self.create_status_indicator("🎮", "游戏配置")
+        self.me3_indicator = self.create_status_indicator("🔧", "ME3工具")
+
+        layout.addWidget(self.crack_indicator)
+        layout.addWidget(self.game_indicator)
+        layout.addWidget(self.me3_indicator)
+        layout.addStretch()
+
+        self.setLayout(layout)
+
+    def create_status_indicator(self, icon, name):
+        """创建状态指示器"""
+        container = QWidget()
+        container.setStyleSheet("QWidget { background-color: transparent; }")  # 设置透明背景
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+
+        status_label = QLabel("检查中...")
+        status_label.setStyleSheet("""
+            QLabel {
+                color: #cdd6f4;
+                font-size: 12px;
+                font-weight: 500;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+
+        layout.addWidget(icon_label)
+        layout.addWidget(status_label)
+        container.setLayout(layout)
+
+        # 存储引用以便更新 - 直接映射到英文属性名
+        name_mapping = {
+            "破解状态": "crack",
+            "游戏配置": "game",
+            "ME3工具": "me3"
+        }
+        attr_name = name_mapping.get(name, name.lower().replace(' ', '_'))
+        setattr(self, f"{attr_name}_label", status_label)
+
+        return container
+
+    def update_status(self, crack_status, game_status, me3_status):
+        """更新所有状态"""
+        self.crack_label.setText(crack_status)
+        self.game_label.setText(game_status)
+        self.me3_label.setText(me3_status)
+
+
+class NighterCard(QFrame):
+    """深夜模式专用卡片 - 包含等级控制和启动按钮"""
+
+    def __init__(self, title, mod_manager, parent=None):
+        super().__init__(parent)
+        self.title = title
+        self.mod_manager = mod_manager
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置深夜模式卡片UI"""
+        self.setStyleSheet("""
+            NighterCard {
+                background-color: #1e1e2e;
+                border: 0.5px solid #313244;
+                border-radius: 6px;
+                padding: 4px;
+                min-height: 60px;
+            }
+            NighterCard:hover {
+                border-color: #45475a;
+                background-color: #252537;
+            }
+        """)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+
+        # 标题
+        title_label = QLabel(self.title)
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 14px;
+                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+
+        # 内容描述
+        content_text = """包含：
+• Deepfix mod包 - 深度修复
+• nighter.dll - 深夜解锁
+• nrsc.dll - 无缝联机"""
+
+        content_label = QLabel(content_text)
+        content_label.setStyleSheet("""
+            QLabel {
+                color: #cdd6f4;
+                font-size: 12px;
+                line-height: 1.4;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+
+        # 深夜等级控制
+        level_container = QWidget()
+        level_container.setStyleSheet("QWidget { background-color: transparent; }")  # 设置透明背景
+        level_layout = QHBoxLayout()
+        level_layout.setContentsMargins(0, 4, 0, 4)
+        level_layout.setSpacing(6)
+
+        level_label = QLabel("深夜等级:")
+        level_label.setStyleSheet("color: #cdd6f4; font-size: 12px; background-color: transparent;")
+
+        self.level_display = QLabel("4")
+        self.level_display.setStyleSheet("""
+            QLabel {
+                color: #f9e2af;
+                font-size: 14px;
+                font-weight: bold;
+                background-color: transparent;
+                min-width: 20px;
+            }
+        """)
+
+        # 等级调整按钮
+        self.level_down_btn = QPushButton("-")
+        self.level_down_btn.setFixedSize(20, 20)
+        self.level_down_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f38ba8;
+                border: none;
+                border-radius: 10px;
+                color: #1e1e2e;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #f2708a; }
+        """)
+        self.level_down_btn.clicked.connect(lambda: self.adjust_night_level(-1))
+
+        self.level_up_btn = QPushButton("+")
+        self.level_up_btn.setFixedSize(20, 20)
+        self.level_up_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                border: none;
+                border-radius: 10px;
+                color: #1e1e2e;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #94d3a2; }
+        """)
+        self.level_up_btn.clicked.connect(lambda: self.adjust_night_level(1))
+
+        level_layout.addWidget(level_label)
+        level_layout.addWidget(self.level_down_btn)
+        level_layout.addWidget(self.level_display)
+        level_layout.addWidget(self.level_up_btn)
+        level_layout.addStretch()
+        level_container.setLayout(level_layout)
+
+        # 启动按钮
+        self.launch_btn = QPushButton("🌙 深夜模式启动")
+        self.launch_btn.setFixedHeight(28)  # 只固定高度，宽度自适应
+        self.launch_btn.setMinimumWidth(160)  # 设置最小宽度
+        self.launch_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #89b4fa;
+                border: none;
+                border-radius: 4px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #7aa2f7;
+            }
+            QPushButton:pressed {
+                background-color: #6c7ce0;
+            }
+        """)
+
+        layout.addWidget(title_label)
+        layout.addWidget(content_label)
+        layout.addWidget(level_container)
+        layout.addWidget(self.launch_btn)
+        self.setLayout(layout)
+
+        # 初始化等级显示和按钮状态
+        self.update_level_display()
+        self.update_launch_button_state()
+
+    def get_night_level(self):
+        """获取当前深夜等级"""
+        import os
+        import json
+
+        try:
+            nighter_json_path = os.path.join(self.mod_manager.mods_dir, "nighter", "nighter.json")
+            if os.path.exists(nighter_json_path):
+                with open(nighter_json_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get("deepNightLevel", 4)
+            return None  # 返回None表示没有nighter.json文件
+        except Exception:
+            return None
+
+    def set_night_level(self, level):
+        """设置深夜等级 - 只修改现有的nighter.json，不创建新文件"""
+        import os
+        import json
+
+        try:
+            nighter_json_path = os.path.join(self.mod_manager.mods_dir, "nighter", "nighter.json")
+
+            # 只有文件存在时才允许修改
+            if not os.path.exists(nighter_json_path):
+                return False
+
+            # 读取现有配置
+            with open(nighter_json_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # 更新深夜等级
+            config["deepNightLevel"] = level
+
+            # 保存配置
+            with open(nighter_json_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+
+            return True
+        except Exception:
+            return False
+
+    def adjust_night_level(self, delta):
+        """调整深夜等级"""
+        current_level = self.get_night_level()
+        new_level = max(1, min(5, current_level + delta))
+
+        if new_level != current_level:
+            if self.set_night_level(new_level):
+                self.update_level_display()
+
+    def update_level_display(self):
+        """更新深夜等级显示"""
+        current_level = self.get_night_level()
+
+        if current_level is None:
+            # 没有nighter.json文件，显示不可用状态
+            self.level_display.setText("N/A")
+            self.level_down_btn.setEnabled(False)
+            self.level_up_btn.setEnabled(False)
+        else:
+            # 有nighter.json文件，正常显示和控制
+            self.level_display.setText(str(current_level))
+            self.level_down_btn.setEnabled(current_level > 1)
+            self.level_up_btn.setEnabled(current_level < 5)
+
+    def update_launch_button_state(self):
+        """更新启动按钮状态 - 检测对应mod是否存在"""
+        # 检测深夜模式相关mod
+        nighter_available = self.check_nighter_mod_available()
+        self.launch_btn.setEnabled(nighter_available)
+
+        if not nighter_available:
+            # 按钮不可用时的样式
+            self.launch_btn.setText("🌙 深夜模式启动 (缺少mod)")
+            self.launch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #6c7086;
+                    border: none;
+                    border-radius: 4px;
+                    color: #1e1e2e;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #6c7086;
+                }
+            """)
+            self.launch_btn.setToolTip("缺少必要的mod文件：nighter目录、nighter.json或nighter.dll")
+        else:
+            # 按钮可用时的样式
+            self.launch_btn.setText("🌙 深夜模式启动")
+            self.launch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #89b4fa;
+                    border: none;
+                    border-radius: 4px;
+                    color: #1e1e2e;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #7aa2f7;
+                }
+                QPushButton:pressed {
+                    background-color: #6c7ce0;
+                }
+            """)
+            self.launch_btn.setToolTip("启动深夜模式配置")
+
+    def check_nighter_mod_available(self):
+        """检查深夜模式mod是否可用"""
+        import os
+
+        try:
+            # 检查nighter目录是否存在
+            nighter_dir = os.path.join(self.mod_manager.mods_dir, "nighter")
+            if not os.path.exists(nighter_dir):
+                return False
+
+            # 检查nighter.json是否存在
+            nighter_json_path = os.path.join(nighter_dir, "nighter.json")
+            if not os.path.exists(nighter_json_path):
+                return False
+
+            # 检查nighter.dll是否存在
+            nighter_dll_path = os.path.join(nighter_dir, "nighter.dll")
+            if not os.path.exists(nighter_dll_path):
+                return False
+
+            return True
+        except Exception:
+            return False
+
+
+class VinsCard(QFrame):
+    """VINS大修mod专用卡片 - 包含启动按钮"""
+
+    def __init__(self, title, parent=None):
+        super().__init__(parent)
+        self.title = title
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置VINS卡片UI"""
+        self.setStyleSheet("""
+            VinsCard {
+                background-color: #1e1e2e;
+                border: 0.5px solid #313244;
+                border-radius: 6px;
+                padding: 4px;
+                min-height: 60px;
+            }
+            VinsCard:hover {
+                border-color: #45475a;
+                background-color: #252537;
+            }
+        """)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+
+        # 标题
+        title_label = QLabel(self.title)
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 14px;
+                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+
+        # 内容描述
+        content_text = """包含：
+• VINS mod包 (多版本)
+• VINSnightfix 夜晚修复
+• FPS/FOV优化DLL
+• 无缝联机支持"""
+
+        content_label = QLabel(content_text)
+        content_label.setStyleSheet("""
+            QLabel {
+                color: #cdd6f4;
+                font-size: 12px;
+                line-height: 1.4;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+
+        # 启动按钮
+        self.launch_btn = QPushButton("🎯 VINS大修mod启动")
+        self.launch_btn.setFixedHeight(28)  # 只固定高度，宽度自适应
+        self.launch_btn.setMinimumWidth(160)  # 设置最小宽度
+        self.launch_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                border: none;
+                border-radius: 4px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #94d3a2;
+            }
+            QPushButton:pressed {
+                background-color: #82c991;
+            }
+        """)
+
+        layout.addWidget(title_label)
+        layout.addWidget(content_label)
+        layout.addWidget(self.launch_btn)
+        self.setLayout(layout)
+
+        # 初始化按钮状态
+        self.update_launch_button_state()
+
+    def update_launch_button_state(self):
+        """更新启动按钮状态 - 检测VINS mod是否存在"""
+        vins_available = self.check_vins_mod_available()
+        self.launch_btn.setEnabled(vins_available)
+
+        if not vins_available:
+            # 按钮不可用时的样式
+            self.launch_btn.setText("🎯 VINS大修mod启动 (缺少mod)")
+            self.launch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #6c7086;
+                    border: none;
+                    border-radius: 4px;
+                    color: #1e1e2e;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #6c7086;
+                }
+            """)
+            self.launch_btn.setToolTip("缺少VINS相关mod文件，请检查Mods目录中是否有VINS开头的mod包")
+        else:
+            # 按钮可用时的样式
+            self.launch_btn.setText("🎯 VINS大修mod启动")
+            self.launch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #a6e3a1;
+                    border: none;
+                    border-radius: 4px;
+                    color: #1e1e2e;
+                    font-size: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #94d3a2;
+                }
+                QPushButton:pressed {
+                    background-color: #82c991;
+                }
+            """)
+            self.launch_btn.setToolTip("启动VINS大修mod配置")
+
+    def check_vins_mod_available(self):
+        """检查VINS mod是否可用"""
+        import os
+
+        try:
+            # 获取mod管理器实例
+            from src.config.mod_config_manager import ModConfigManager
+            mod_manager = ModConfigManager()
+
+            # 检查是否有VINS相关的mod包
+            mods_dir = mod_manager.mods_dir
+            if not os.path.exists(mods_dir):
+                return False
+
+            # 扫描VINS相关包
+            has_vins = False
+            for item in os.listdir(mods_dir):
+                item_path = os.path.join(mods_dir, item)
+                if os.path.isdir(item_path) and item.startswith("VINS"):
+                    has_vins = True
+                    break
+
+            return has_vins
+        except Exception:
+            return False
+
+
 class InfoCard(QFrame):
-    """信息卡片组件"""
+    """优化的信息卡片组件"""
 
     def __init__(self, title, content="", parent=None):
         super().__init__(parent)
@@ -201,18 +739,20 @@ class InfoCard(QFrame):
         self.setStyleSheet("""
             InfoCard {
                 background-color: #1e1e2e;
-                border: 1px solid #313244;
-                border-radius: 12px;
-                padding: 15px;
+                border: 0.5px solid #313244;
+                border-radius: 6px;
+                padding: 4px;
+                min-height: 60px;
             }
             InfoCard:hover {
                 border-color: #45475a;
+                background-color: #252537;
             }
         """)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 6, 8, 6)  # 专业设计间距
+        layout.setSpacing(4)  # 4px基准间距系统
 
         # 标题
         title_label = QLabel(self.title)
@@ -221,6 +761,10 @@ class InfoCard(QFrame):
                 color: #89b4fa;
                 font-size: 14px;
                 font-weight: bold;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
             }
         """)
 
@@ -231,6 +775,10 @@ class InfoCard(QFrame):
                 color: #cdd6f4;
                 font-size: 12px;
                 line-height: 1.4;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
             }
         """)
         self.content_label.setWordWrap(True)
@@ -246,208 +794,8 @@ class InfoCard(QFrame):
         self.content_label.setText(content)
 
 
-class ModInfoCard(QFrame):
-    """Mod信息卡片组件 - 水平布局"""
-
-    def __init__(self, title, content="", parent=None):
-        super().__init__(parent)
-        self.title = title
-        self.content = content
-        self.setup_ui()
-
-    def setup_ui(self):
-        """设置UI - 水平布局"""
-        self.setFrameStyle(QFrame.Box)
-        self.setStyleSheet("""
-            ModInfoCard {
-                background-color: #1e1e2e;
-                border: 1px solid #313244;
-                border-radius: 12px;
-                padding: 15px;
-            }
-            ModInfoCard:hover {
-                border-color: #45475a;
-            }
-        """)
-
-        # 主要水平布局
-        main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(20)
-
-        # 左侧：标题和统计信息
-        left_section = QVBoxLayout()
-        left_section.setSpacing(8)
-
-        # 标题
-        title_label = QLabel(self.title)
-        title_label.setStyleSheet("""
-            QLabel {
-                color: #89b4fa;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
-
-        # 统计信息标签
-        self.stats_label = QLabel("📦 Mod包: 0/0 个启用\n🔧 DLL: 0/0 个启用")
-        self.stats_label.setStyleSheet("""
-            QLabel {
-                color: #cdd6f4;
-                font-size: 14px;
-                line-height: 1.4;
-            }
-        """)
-
-        left_section.addWidget(title_label)
-        left_section.addWidget(self.stats_label)
-        left_section.addStretch()
-
-        # 右侧：详细mod列表
-        right_section = QVBoxLayout()
-        right_section.setSpacing(8)
-
-        # mod列表标签
-        self.mod_list_label = QLabel("💡 当前没有启用任何mod")
-        self.mod_list_label.setStyleSheet("""
-            QLabel {
-                color: #cdd6f4;
-                font-size: 14px;
-                line-height: 1.4;
-            }
-        """)
-        self.mod_list_label.setWordWrap(True)
-
-        right_section.addWidget(self.mod_list_label)
-        right_section.addStretch()
-
-        # 添加到主布局
-        main_layout.addLayout(left_section, 1)  # 左侧占1份
-        main_layout.addLayout(right_section, 2)  # 右侧占2份
-
-        self.setLayout(main_layout)
-
-    def update_content(self, content):
-        """更新内容 - 解析并分别显示统计和详细信息"""
-        self.content = content
-        lines = content.split('\n')
-
-        # 提取统计信息（前两行）
-        stats_lines = []
-        mod_list_lines = []
-
-        for line in lines:
-            if line.startswith('📦 Mod包:') or line.startswith('🔧 DLL:'):
-                stats_lines.append(line)
-            elif line.strip() and not line.startswith('💡'):
-                mod_list_lines.append(line)
-
-        # 更新统计信息
-        if stats_lines:
-            self.stats_label.setText('\n'.join(stats_lines))
-        else:
-            self.stats_label.setText("📦 Mod包: 0/0 个启用\n🔧 DLL: 0/0 个启用")
-
-        # 更新mod列表
-        if mod_list_lines:
-            self.mod_list_label.setText('\n'.join(mod_list_lines))
-        else:
-            self.mod_list_label.setText("💡 当前没有启用任何mod")
 
 
-class LaunchParametersWidget(QFrame):
-    """启动参数编辑组件"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setup_ui()
-
-    def setup_ui(self):
-        """设置UI"""
-        self.setFrameStyle(QFrame.Box)
-        self.setStyleSheet("""
-            LaunchParametersWidget {
-                background-color: #1e1e2e;
-                border: 1px solid #313244;
-                border-radius: 12px;
-                padding: 15px;
-            }
-        """)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
-
-        # 标题
-        title_label = QLabel("🚀 启动参数")
-        title_label.setStyleSheet("""
-            QLabel {
-                color: #89b4fa;
-                font-size: 14px;
-                font-weight: bold;
-            }
-        """)
-
-        # 参数编辑框
-        self.params_edit = QLineEdit()
-        self.params_edit.setPlaceholderText("输入ME3启动参数...")
-        # 设置默认启动参数
-        default_params = "--exe \"%gameExe%\" --skip-steam-init --game nightreign -p \"%essentialsConfig%\""
-        self.params_edit.setText(default_params)
-        self.params_edit.setStyleSheet("""
-            QLineEdit {
-                background-color: #313244;
-                border: 1px solid #45475a;
-                border-radius: 8px;
-                color: #cdd6f4;
-                font-size: 12px;
-                padding: 8px 12px;
-            }
-            QLineEdit:focus {
-                border-color: #89b4fa;
-            }
-        """)
-
-        # 按钮容器
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-
-        # 获取帮助按钮
-        self.help_btn = QPushButton("📖 获取参数帮助")
-        self.help_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #313244;
-                border: 1px solid #45475a;
-                border-radius: 8px;
-                color: #cdd6f4;
-                font-size: 12px;
-                padding: 8px 15px;
-            }
-            QPushButton:hover {
-                background-color: #45475a;
-                border-color: #6c7086;
-            }
-            QPushButton:pressed {
-                background-color: #6c7086;
-            }
-        """)
-
-        button_layout.addWidget(self.help_btn)
-        button_layout.addStretch()
-
-        layout.addWidget(title_label)
-        layout.addWidget(self.params_edit)
-        layout.addLayout(button_layout)
-
-        self.setLayout(layout)
-
-    def get_parameters(self):
-        """获取启动参数"""
-        return self.params_edit.text().strip()
-
-    def set_parameters(self, params):
-        """设置启动参数"""
-        self.params_edit.setText(params)
 
 
 class HomePage(BasePage):
@@ -472,306 +820,312 @@ class HomePage(BasePage):
         main_widget = QWidget()
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(20)
+        main_layout.setSpacing(4)  # 专业4px间距系统
 
         # 状态概览区域
         self.create_status_section(main_layout)
 
-        # mod配置信息区域
-        self.create_mod_info_section(main_layout)
+        # 添加启动参数说明区域
+        self.create_blank_section_1(main_layout)
 
-        # 启动参数区域
-        self.create_launch_params_section(main_layout)
-
-        # 启动按钮区域
-        self.create_launch_button_section(main_layout)
+        # 添加水平布局的区域2和区域3
+        self.create_horizontal_sections(main_layout)
 
         main_widget.setLayout(main_layout)
         self.add_content(main_widget)
         self.add_stretch()
     
     def create_status_section(self, layout):
-        """创建状态概览区域"""
-        # 状态卡片容器
-        status_container = QWidget()
-        status_layout = QHBoxLayout()
-        status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(15)
+        """创建状态概览区域 - 使用专业设计的紧凑状态栏"""
+        self.status_bar = StatusBar()
+        layout.addWidget(self.status_bar)
 
-        # 破解状态卡片
-        self.crack_status_card = InfoCard("🔓 破解状态", "检查中...")
+    def create_blank_section_1(self, layout):
+        """创建启动参数说明区域"""
+        params_content = """🚀 默认启动参数说明：
+--exe "%gameExe%" --skip-steam-init --game nightreign -p "%essentialsConfig%"
 
-        # 游戏配置状态卡片
-        self.game_status_card = InfoCard("🎮 游戏配置", "检查中...")
+📝 详细参数解释：
+• --exe: 指定游戏可执行文件路径，通常指向游戏主程序
+• --skip-steam-init: 跳过Steam初始化过程，避免Steam相关检查
+• --game nightreign: 指定游戏类型为夜之王朝(Night Reign)
+• -p: 指定ME3配置文件路径，包含mod和DLL配置信息
 
-        # ME3工具状态卡片
-        self.me3_status_card = InfoCard("🔧 ME3工具", "检查中...")
+💡 使用说明：
+如需启动游戏，请前往"Mod配置"页面使用启动功能。
+参数中的占位符会自动替换为实际路径。"""
+        params_card = InfoCard("🎮 启动参数说明", params_content)
+        layout.addWidget(params_card)
 
-        status_layout.addWidget(self.crack_status_card)
-        status_layout.addWidget(self.game_status_card)
-        status_layout.addWidget(self.me3_status_card)
 
-        status_container.setLayout(status_layout)
-        layout.addWidget(status_container)
-    
-    def create_mod_info_section(self, layout):
-        """创建mod配置信息区域"""
-        # mod信息卡片 - 使用水平布局的ModInfoCard
-        self.mod_info_card = ModInfoCard("📦 当前Mod配置", "正在加载...")
-        layout.addWidget(self.mod_info_card)
 
-    def create_launch_params_section(self, layout):
-        """创建启动参数区域"""
-        self.launch_params_widget = LaunchParametersWidget()
-        self.launch_params_widget.help_btn.clicked.connect(self.get_launch_help)
-        layout.addWidget(self.launch_params_widget)
+    def create_horizontal_sections(self, layout):
+        """创建水平布局的区域2和区域3"""
+        # 创建水平容器
+        horizontal_container = QWidget()
+        horizontal_layout = QHBoxLayout()
+        horizontal_layout.setContentsMargins(0, 0, 0, 0)
+        horizontal_layout.setSpacing(6)  # 专业设计：6px水平间距
 
-    def create_launch_button_section(self, layout):
-        """创建启动按钮区域"""
-        button_container = QWidget()
-        button_layout = QHBoxLayout()
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(15)
+        # 区域2 - 深夜模式配置
+        section2_card = NighterCard("🌙 深夜模式", self.mod_manager)
+        section2_card.launch_btn.clicked.connect(self.launch_nighter_config)
 
-        # 启动游戏按钮
-        self.launch_btn = QPushButton("🚀 启动游戏")
-        self.launch_btn.setFixedHeight(50)
-        self.launch_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #a6e3a1;
-                border: none;
-                border-radius: 12px;
-                color: #1e1e2e;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #94d3a2;
-            }
-            QPushButton:pressed {
-                background-color: #82c991;
-            }
-            QPushButton:disabled {
-                background-color: #45475a;
-                color: #6c7086;
-            }
-        """)
-        self.launch_btn.clicked.connect(self.launch_game)
+        # 区域3 - VINS大修mod配置
+        section3_card = VinsCard("🎯 VINS大修mod")
+        section3_card.launch_btn.clicked.connect(self.launch_vins_config)
 
-        button_layout.addWidget(self.launch_btn)
-        button_container.setLayout(button_layout)
-        layout.addWidget(button_container)
+        # 保存引用以便后续更新状态
+        self.vins_card = section3_card
+
+        horizontal_layout.addWidget(section2_card, 1)  # stretch factor = 1，等宽分配
+        horizontal_layout.addWidget(section3_card, 1)  # stretch factor = 1，等宽分配
+
+        horizontal_container.setLayout(horizontal_layout)
+        layout.addWidget(horizontal_container)
+
+    def launch_nighter_config(self):
+        """启动Nighter预设配置"""
+        try:
+            # 检查基本启动条件
+            if not self.check_launch_conditions():
+                return
+
+            # 创建nighter.me3配置内容
+            nighter_config = '''profileVersion = "v1"
+
+# Mod包配置
+[[packages]]
+id = "Deepfix"
+source = "Deepfix/"
+
+# Native DLL配置
+[[natives]]
+path = "nighter/nighter.dll"
+load_before = [{id = "nrsc.dll", optional = false}]
+
+[[natives]]
+path = "SeamlessCoop/nrsc.dll"
+'''
+
+            # 保存配置并启动
+            self.launch_with_config(nighter_config, "nighter.me3", "🌙 深夜模式")
+
+        except Exception as e:
+            self.show_status_message(f"❌ 启动深夜模式失败: {str(e)}", error=True)
+
+    def launch_vins_config(self):
+        """启动VINS预设配置"""
+        try:
+            # 检查基本启动条件
+            if not self.check_launch_conditions():
+                return
+
+            # 动态检测VINS版本
+            vins_packages = self.detect_vins_packages()
+            if not vins_packages:
+                self.show_status_message("❌ 未找到VINS mod包，请检查Mods目录", error=True)
+                return
+
+            # 创建vins.me3配置内容
+            vins_config = self.generate_vins_config(vins_packages)
+
+            # 保存配置并启动
+            self.launch_with_config(vins_config, "vins.me3", "🎯 VINS大修mod")
+
+        except Exception as e:
+            self.show_status_message(f"❌ 启动VINS大修mod失败: {str(e)}", error=True)
+
+    def check_launch_conditions(self):
+        """检查启动条件"""
+        # 检查游戏路径
+        if not self.config_manager.validate_game_path():
+            self.show_status_message("❌ 请先配置有效的游戏路径", error=True)
+            return False
+
+        # 检查ME3工具
+        me3_exe = self.mod_manager.get_me3_executable_path()
+        if not me3_exe:
+            self.show_status_message("❌ 未找到ME3可执行文件", error=True)
+            return False
+
+        return True
+
+    def detect_vins_packages(self):
+        """动态检测VINS包版本"""
+        import os
+        mods_dir = self.mod_manager.mods_dir
+        vins_packages = []
+
+        if not os.path.exists(mods_dir):
+            return vins_packages
+
+        # 扫描Mods目录
+        for item in os.listdir(mods_dir):
+            item_path = os.path.join(mods_dir, item)
+            if os.path.isdir(item_path):
+                # 检测VINS包
+                if item.startswith("VINS") and not item.startswith("VINSnightfix"):
+                    vins_packages.append({"id": item, "type": "vins"})
+                # 检测VINSnightfix包
+                elif item.startswith("VINSnightfix"):
+                    vins_packages.append({"id": item, "type": "nightfix"})
+
+        return vins_packages
+
+    def generate_vins_config(self, vins_packages):
+        """生成VINS配置内容"""
+        config_lines = ['profileVersion = "v1"', '', '# Mod包配置']
+
+        # 添加VINS包
+        vins_mods = [pkg for pkg in vins_packages if pkg["type"] == "vins"]
+        nightfix_mods = [pkg for pkg in vins_packages if pkg["type"] == "nightfix"]
+
+        for pkg in vins_mods:
+            config_lines.extend([
+                '[[packages]]',
+                f'id = "{pkg["id"]}"',
+                f'source = "{pkg["id"]}/"',
+                ''
+            ])
+
+        for pkg in nightfix_mods:
+            # 构建load_after依赖
+            load_after = []
+            for vins_pkg in vins_mods:
+                load_after.append(f'{{id = "{vins_pkg["id"]}", optional = true}}')
+
+            config_lines.extend([
+                '[[packages]]',
+                f'id = "{pkg["id"]}"',
+                f'source = "{pkg["id"]}/"',
+                f'load_after = [{", ".join(load_after)}]' if load_after else '',
+                ''
+            ])
+
+        # 添加Native DLL配置
+        config_lines.extend([
+            '# Native DLL配置',
+            '[[natives]]',
+            'path = "SeamlessCoop/nrsc.dll"',
+            '',
+            '[[natives]]',
+            'path = "nighter/nighter.dll"',
+            'load_before = [{id = "nrsc.dll", optional = false}]',
+            ''
+        ])
+
+        # 添加VINS DLL
+        for pkg in vins_mods:
+            config_lines.extend([
+                '[[natives]]',
+                f'path = "{pkg["id"]}/dll/NightreignFPSFOV.dll"',
+                ''
+            ])
+
+        return '\n'.join(config_lines)
+
+    def launch_with_config(self, config_content, config_filename, config_name):
+        """使用指定配置启动游戏"""
+        import os
+        import subprocess
+
+        try:
+            # 获取配置目录
+            config_dir = os.path.dirname(self.mod_manager.config_file)
+            config_path = os.path.join(config_dir, config_filename)
+
+            # 保存配置文件
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(config_content)
+
+            # 获取启动参数
+            game_path = self.config_manager.get_game_path()
+            me3_exe = self.mod_manager.get_me3_executable_path()
+
+            # 构建启动命令
+            cmd_args = [
+                me3_exe,
+                "launch",
+                "--exe", str(game_path),
+                "--skip-steam-init",
+                "--game", "nightreign",
+                "-p", config_path
+            ]
+
+            # 启动游戏
+            self.show_status_message(f"🚀 正在使用{config_name}启动游戏...")
+            subprocess.Popen(cmd_args, cwd=os.path.dirname(me3_exe))
+            self.show_status_message(f"✅ {config_name}启动成功！")
+
+        except Exception as e:
+            self.show_status_message(f"❌ {config_name}启动失败: {str(e)}", error=True)
+
+
+
+
+
+
+
+
+
+
+
     
     def refresh_status(self):
-        """刷新状态显示"""
+        """刷新状态显示 - 适配新的专业StatusBar组件"""
         # 检查破解状态
         crack_applied = self.config_manager.is_crack_applied()
-        if crack_applied:
-            self.crack_status_card.update_content("✅ 已应用\n破解文件已复制到游戏目录")
-        else:
-            self.crack_status_card.update_content("❌ 未应用\n需要先应用破解文件")
+        crack_status = "✅ 已应用" if crack_applied else "❌ 未应用"
 
         # 检查游戏配置状态
         game_configured = self.config_manager.validate_game_path()
-        if game_configured:
-            game_path = self.config_manager.get_game_path()
-            self.game_status_card.update_content(f"✅ 已配置\n{game_path}")
-        else:
-            self.game_status_card.update_content("❌ 未配置\n请先配置游戏路径")
+        game_status = "✅ 已配置" if game_configured else "❌ 未配置"
 
         # 检查ME3工具状态
         me3_path = self.mod_manager.get_me3_executable_path()
-        if me3_path:
-            self.me3_status_card.update_content("✅ 已安装\nME3工具可用")
-        else:
-            self.me3_status_card.update_content("❌ 未安装\n请下载ME3工具")
+        me3_status = "✅ 已安装" if me3_path else "❌ 未安装"
 
-        # 更新mod配置信息
-        self.update_mod_info()
+        # 更新专业状态栏
+        self.status_bar.update_status(crack_status, game_status, me3_status)
 
-        # 更新启动按钮状态
-        self.update_launch_button_state()
+        # 更新mod相关按钮状态
+        self.update_mod_buttons_state()
 
-    def update_mod_info(self):
-        """更新mod配置信息"""
+    def update_mod_buttons_state(self):
+        """更新mod相关按钮状态"""
         try:
-            # 先加载配置文件
-            self.mod_manager.load_config()
+            # 更新深夜模式相关按钮和等级显示
+            if hasattr(self, 'level_display'):
+                self.update_level_display()
 
-            # 获取配置摘要
-            summary = self.mod_manager.get_config_summary()
+            # 更新深夜模式启动按钮（在NighterCard中）
+            nighter_card = None
+            for child in self.findChildren(NighterCard):
+                nighter_card = child
+                break
 
-            # 构建信息文本
-            info_lines = []
-            info_lines.append(f"📦 Mod包: {summary['enabled_packages']}/{summary['total_packages']} 个启用")
-            info_lines.append(f"🔧 DLL: {summary['enabled_natives']}/{summary['total_natives']} 个启用")
+            if nighter_card and hasattr(nighter_card, 'update_launch_button_state'):
+                nighter_card.update_launch_button_state()
 
-            # 显示启用的mod名称
-            if summary['packages']:
-                info_lines.append("\n📋 启用的Mod包:")
-                for pkg in summary['packages']:
-                    # 获取备注
-                    comment = self.mod_manager.mod_comments.get(pkg.id, "")
-                    display_name = f"{pkg.id}-{comment}" if comment else pkg.id
-                    status = "(外部)" if pkg.is_external else "(内部)"
-                    info_lines.append(f"  • {display_name} {status}")
-
-            if summary['natives']:
-                info_lines.append("\n🔧 启用的DLL:")
-                for native in summary['natives']:
-                    # 获取备注
-                    comment = self.mod_manager.native_comments.get(native.path, "")
-                    display_name = f"{native.path}-{comment}" if comment else native.path
-                    status = "(外部)" if native.is_external else "(内部)"
-                    info_lines.append(f"  • {display_name} {status}")
-
-            if not summary['packages'] and not summary['natives']:
-                info_lines.append("\n💡 当前没有启用任何mod")
-
-            self.mod_info_card.update_content("\n".join(info_lines))
+            # 更新VINS启动按钮
+            if hasattr(self, 'vins_card') and hasattr(self.vins_card, 'update_launch_button_state'):
+                self.vins_card.update_launch_button_state()
 
         except Exception as e:
-            self.mod_info_card.update_content(f"❌ 获取mod信息失败: {e}")
-
-    def update_launch_button_state(self):
-        """更新启动按钮状态"""
-        # 检查启动条件 - 与Mod配置页面保持一致
-        game_configured = self.config_manager.validate_game_path()
-        me3_installed = self.mod_manager.get_me3_executable_path() is not None
-
-        # 基本条件：游戏路径和ME3工具
-        can_launch = game_configured and me3_installed
-
-        self.launch_btn.setEnabled(can_launch)
-
-        if not can_launch:
-            missing = []
-            if not game_configured:
-                missing.append("游戏配置")
-            if not me3_installed:
-                missing.append("ME3工具")
-
-            self.launch_btn.setText(f"🚫 缺少: {', '.join(missing)}")
-        else:
-            self.launch_btn.setText("🚀 启动游戏")
-
-    def get_launch_help(self):
-        """获取启动参数帮助"""
-        try:
-            me3_path = self.mod_manager.get_me3_executable_path()
-            if not me3_path:
-                self.show_status_message("❌ ME3工具未安装，无法获取帮助信息", error=True)
-                return
-
-            # 执行me3.exe launch -h命令
-            process = QProcess()
-            process.setProgram(me3_path)
-            process.setArguments(["launch", "-h"])
-
-            # 启动进程并等待完成
-            process.start()
-            if process.waitForFinished(5000):  # 等待5秒
-                output = process.readAllStandardOutput().data().decode('utf-8', errors='ignore')
-                error_output = process.readAllStandardError().data().decode('utf-8', errors='ignore')
-
-                if output or error_output:
-                    help_text = output + error_output
-                    # 使用无边框弹窗显示帮助信息
-                    help_dialog = HelpDialog(help_text, self)
-                    help_dialog.exec()
-                else:
-                    self.show_status_message("❌ 未获取到帮助信息", error=True)
-            else:
-                self.show_status_message("❌ 获取帮助信息超时", error=True)
-
-        except Exception as e:
-            self.show_status_message(f"❌ 获取帮助失败: {e}", error=True)
+            print(f"更新mod按钮状态失败: {e}")
 
 
 
-    def launch_game(self):
-        """启动游戏 - 与Mod配置页面保持一致的逻辑"""
-        try:
-            # 检查启动条件
-            if not self.launch_btn.isEnabled():
-                return
 
-            # 检查游戏路径
-            game_path = self.config_manager.get_game_path()
-            if not game_path or not self.config_manager.validate_game_path():
-                self.show_status_message("❌ 请先配置有效的游戏路径", error=True)
-                return
 
-            # 检查ME3可执行文件
-            me3_exe = self.mod_manager.get_me3_executable_path()
-            if not me3_exe:
-                self.show_status_message("❌ 未找到ME3可执行文件，请确保ME3已正确安装", error=True)
-                return
 
-            # 保存当前配置
-            if not self.mod_manager.save_config():
-                self.show_status_message("❌ 保存配置失败", error=True)
-                return
 
-            # 获取启动参数
-            custom_params = self.launch_params_widget.get_parameters()
 
-            if custom_params:
-                # 使用自定义参数，替换占位符
-                config_file = str(self.mod_manager.config_file)
-                processed_params = custom_params.replace("%gameExe%", str(game_path))
-                processed_params = processed_params.replace("%essentialsConfig%", config_file)
 
-                # 构建命令
-                cmd_args = [me3_exe, "launch"]
 
-                # 分割参数并添加到命令中
-                param_list = []
-                parts = processed_params.split()
-                i = 0
-                while i < len(parts):
-                    part = parts[i]
-                    # 处理带引号的参数
-                    if part.startswith('"') and not part.endswith('"'):
-                        # 查找结束引号
-                        quoted_part = part
-                        i += 1
-                        while i < len(parts) and not parts[i].endswith('"'):
-                            quoted_part += " " + parts[i]
-                            i += 1
-                        if i < len(parts):
-                            quoted_part += " " + parts[i]
-                        # 移除引号
-                        param_list.append(quoted_part.strip('"'))
-                    else:
-                        # 移除引号（如果有）
-                        param_list.append(part.strip('"'))
-                    i += 1
 
-                cmd_args.extend(param_list)
-            else:
-                # 使用默认参数 - 与Mod配置页面相同
-                config_file = str(self.mod_manager.config_file)
-                cmd_args = [
-                    me3_exe,
-                    "launch",
-                    "--exe", game_path,
-                    "--skip-steam-init",
-                    "--game", "nightreign",
-                    "-p", config_file
-                ]
 
-            # 启动游戏 - 使用与Mod配置页面相同的方式
-            self.show_status_message("🚀 正在启动游戏...")
-
-            import subprocess
-            import os
-            subprocess.Popen(cmd_args, cwd=os.path.dirname(me3_exe))
-
-            self.show_status_message("✅ 游戏启动成功！")
-
-        except Exception as e:
-            self.show_status_message(f"❌ 启动失败: {str(e)}", error=True)
 
     def show_status_message(self, message, error=False):
         """显示状态消息"""
