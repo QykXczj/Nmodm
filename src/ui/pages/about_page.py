@@ -53,7 +53,7 @@ class AboutPage(BasePage):
         layout.setSpacing(10)
         
         # 应用名称和版本
-        app_name = QLabel("Nmodm v3.0.7")
+        app_name = QLabel("Nmodm v3.0.8")
         app_name.setStyleSheet("""
             QLabel {
                 color: #89b4fa;
@@ -96,7 +96,7 @@ class AboutPage(BasePage):
     
     def create_update_info(self):
         """创建更新说明区域"""
-        section = QGroupBox("v3.0.6 更新说明")
+        section = QGroupBox("v3.0.8 更新说明")
         section.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -133,35 +133,29 @@ class AboutPage(BasePage):
             }
         """)
 
-        update_content = """🚀 网络优化功能全面升级
+        update_content = """🔧 破解功能重要修复
+• 修复应用破解时复制多余文件的问题
+• 改为白名单模式，只复制必需的4个破解文件
+• 不再意外复制OnlineFix.zip和标志文件
+• 破解应用和移除逻辑完全一致
+
+✅ 精确破解文件管理
+• OnlineFix.ini - 破解配置文件
+• OnlineFix64.dll - 主破解DLL
+• dlllist.txt - DLL列表文件
+• winmm.dll - Windows多媒体API钩子
+
+🎯 技术改进
+• 白名单模式更安全可靠
+• 避免复制工具包和压缩文件
+• 完善的文件验证机制
+• 统一的错误处理和日志输出
+
+🚀 网络优化功能（v3.0.6继承）
 • 网络优化配置完整集成到房间系统
-• 房间配置文件现在包含网络优化选项
-• 分享房间时自动包含网络优化设置
-• 加入房间时自动继承网络优化配置
-
-🔧 配置管理体系完善
-• easytier_config.json 现在同步网络优化配置
-• 程序重启时自动恢复网络优化设置
-• 三层配置管理：全局配置、活动配置、房间配置
-• 配置间智能同步，确保一致性
-
-🛡️ 安全保护机制增强
-• 网络运行时禁止切换到不同房间
-• 删除当前房间时检查网络状态
-• 智能提示用户先停止网络再操作
-• 允许重新加载当前房间刷新配置
-
-⚡ 网络优化自动提权
-• WinIPBroadcast 直接使用管理员权限启动
-• 网卡跃点优化自动请求管理员权限
-• 简化权限处理逻辑，提高成功率
-• 用户无需手动以管理员身份运行
-
-✨ 用户体验优化
-• 房间管理更加智能和安全
-• 网络优化设置持久化保存
-• 清晰的错误提示和操作建议
-• 完整的配置继承和同步机制"""
+• 三层配置管理体系完善
+• 安全保护机制和自动提权
+• 智能的用户体验优化"""
 
         update_text.setText(update_content)
         layout.addWidget(update_text)

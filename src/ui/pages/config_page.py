@@ -268,11 +268,30 @@ class ConfigPage(BasePage):
             }
         """)
 
+        # 破解详细信息显示（多行）
+        self.crack_detail_label = QLabel()
+        self.crack_detail_label.setStyleSheet("""
+            QLabel {
+                color: #fab387;
+                font-size: 11px;
+                background-color: #313244;
+                border: 1px solid #fab387;
+                border-radius: 4px;
+                padding: 6px;
+                margin-top: 4px;
+            }
+        """)
+        self.crack_detail_label.setWordWrap(True)
+        self.crack_detail_label.setVisible(False)
+
         header_layout.addWidget(info_label)
         header_layout.addStretch()
         header_layout.addWidget(self.crack_status_label)
         header_row.setLayout(header_layout)
         layout.addWidget(header_row)
+
+        # 添加破解详细信息标签
+        layout.addWidget(self.crack_detail_label)
 
         # 按钮区域
         button_container = QWidget()
@@ -360,18 +379,20 @@ class ConfigPage(BasePage):
         """创建系统检查与修复区域widget"""
         section = ConfigSection("系统检查与修复")
         # 设置尺寸策略：最小化空间占用
-        from PySide6.QtWidgets import QSizePolicy
+        from PySide6.QtWidgets import QSizePolicy, QGridLayout
         section.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
 
-        layout = QVBoxLayout()
-        layout.setSpacing(15)  # 增加间距，与其他区域保持一致
-        layout.setContentsMargins(8, 8, 8, 8)  # 添加内边距
+        # 使用网格布局替代垂直布局
+        layout = QGridLayout()
+        layout.setSpacing(15)  # 增加网格间距，让布局更整齐
+        layout.setContentsMargins(12, 12, 12, 12)  # 增加内边距
 
         # 上半部分：软件路径检测提醒
         path_check_container = QWidget()
+        path_check_container.setFixedHeight(120)  # 设置固定高度，保持整齐
         path_check_layout = QVBoxLayout()
-        path_check_layout.setContentsMargins(0, 0, 0, 0)
-        path_check_layout.setSpacing(6)
+        path_check_layout.setContentsMargins(8, 8, 8, 8)
+        path_check_layout.setSpacing(8)
 
         # 软件路径检测标题
         path_check_title = QLabel("📍 软件路径检测")
@@ -397,6 +418,16 @@ class ConfigPage(BasePage):
             }
         """)
 
+        # 路径检测详细信息（与OnlineFix区域对齐）
+        self.path_check_info = QLabel("路径状态: 检测中...")
+        self.path_check_info.setStyleSheet("""
+            QLabel {
+                color: #6c7086;
+                font-size: 10px;
+                margin-top: 2px;
+            }
+        """)
+
         # 路径检测提醒文本
         self.path_check_warning = QLabel("⚠️ 游戏路径包含中文字符或位于桌面，可能导致运行异常")
         self.path_check_warning.setStyleSheet("""
@@ -414,29 +445,92 @@ class ConfigPage(BasePage):
 
         path_check_layout.addWidget(path_check_title)
         path_check_layout.addWidget(self.path_check_status)
+        path_check_layout.addWidget(self.path_check_info)
         path_check_layout.addWidget(self.path_check_warning)
         path_check_container.setLayout(path_check_layout)
-        layout.addWidget(path_check_container)
+        layout.addWidget(path_check_container, 0, 0)  # 第一行，第一列
 
-        # 分隔线
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setStyleSheet("""
-            QFrame {
-                color: #45475a;
-                background-color: #45475a;
-                border: none;
-                max-height: 1px;
-                margin: 8px 0px;
+        # 中间部分：OnlineFix完整性检测区域
+        onlinefix_check_container = QWidget()
+        onlinefix_check_container.setFixedHeight(120)  # 设置固定高度，与路径检查保持一致
+        onlinefix_check_layout = QVBoxLayout()
+        onlinefix_check_layout.setContentsMargins(8, 8, 8, 8)
+        onlinefix_check_layout.setSpacing(8)
+
+        # OnlineFix检测标题
+        onlinefix_check_title = QLabel("📦 OnlineFix完整性检测")
+        onlinefix_check_title.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 13px;
+                font-weight: bold;
+                margin-bottom: 4px;
             }
         """)
-        layout.addWidget(separator)
+
+        # OnlineFix状态
+        self.onlinefix_check_status = QLabel("检测中...")
+        self.onlinefix_check_status.setStyleSheet("""
+            QLabel {
+                color: #fab387;
+                font-size: 11px;
+                padding: 4px 8px;
+                background-color: #313244;
+                border-radius: 4px;
+                border: 1px solid #fab387;
+            }
+        """)
+
+        # OnlineFix文件信息
+        self.onlinefix_file_info = QLabel("文件状态: 检测中...")
+        self.onlinefix_file_info.setStyleSheet("""
+            QLabel {
+                color: #6c7086;
+                font-size: 10px;
+                margin-top: 2px;
+            }
+        """)
+
+        # OnlineFix修复按钮
+        self.onlinefix_restore_btn = QPushButton("🔧 一键修复 OnlineFix文件")
+        self.onlinefix_restore_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                border: none;
+                border-radius: 5px;
+                color: #1e1e2e;
+                font-weight: bold;
+                font-size: 11px;
+                padding: 8px 12px;
+                margin-top: 4px;
+            }
+            QPushButton:hover {
+                background-color: #94d3a2;
+            }
+            QPushButton:pressed {
+                background-color: #7dc4a0;
+            }
+            QPushButton:disabled {
+                background-color: #45475a;
+                color: #6c7086;
+            }
+        """)
+        self.onlinefix_restore_btn.clicked.connect(self.restore_onlinefix_files)
+        self.onlinefix_restore_btn.setVisible(False)  # 默认隐藏，检测到问题时显示
+
+        onlinefix_check_layout.addWidget(onlinefix_check_title)
+        onlinefix_check_layout.addWidget(self.onlinefix_check_status)
+        onlinefix_check_layout.addWidget(self.onlinefix_file_info)
+        onlinefix_check_layout.addWidget(self.onlinefix_restore_btn)
+        onlinefix_check_container.setLayout(onlinefix_check_layout)
+        layout.addWidget(onlinefix_check_container, 0, 1)  # 第一行，第二列
 
         # 下半部分：steam_api64.dll检测区域
         dll_check_container = QWidget()
+        dll_check_container.setFixedHeight(100)  # 设置固定高度，稍低于上方区域
         dll_check_layout = QVBoxLayout()
-        dll_check_layout.setContentsMargins(0, 0, 0, 0)
-        dll_check_layout.setSpacing(6)
+        dll_check_layout.setContentsMargins(8, 8, 8, 8)
+        dll_check_layout.setSpacing(8)
 
         # DLL检测标题
         dll_check_title = QLabel("🔧 steam_api64.dll检测")
@@ -507,7 +601,19 @@ class ConfigPage(BasePage):
         dll_check_layout.addWidget(self.dll_size_info)
         dll_check_layout.addWidget(self.dll_restore_btn)
         dll_check_container.setLayout(dll_check_layout)
-        layout.addWidget(dll_check_container)
+        layout.addWidget(dll_check_container, 1, 0, 1, 2)  # 第二行，跨两列
+
+        # 设置列的拉伸比例（让两列等宽）
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+
+        # 设置行的拉伸策略 - 所有行都固定高度，不拉伸
+        layout.setRowStretch(0, 0)  # 第一行：路径检查和OnlineFix检查，固定高度
+        layout.setRowStretch(1, 0)  # 第二行：DLL检查，固定高度
+
+        # 设置最小列宽，确保布局整齐
+        layout.setColumnMinimumWidth(0, 200)
+        layout.setColumnMinimumWidth(1, 200)
 
         section.setLayout(layout)
         return section
@@ -554,9 +660,87 @@ class ConfigPage(BasePage):
         except Exception as e:
             self.show_status(f"恢复失败: {str(e)}", "error")
 
+    def restore_onlinefix_files(self):
+        """一键修复OnlineFix文件"""
+        try:
+            onlinefix_dir = self.config_manager.onlinefix_dir
+            onlinefix_zip = onlinefix_dir / "OnlineFix.zip"
+
+            if not onlinefix_zip.exists():
+                self.show_status("OnlineFix.zip文件不存在，无法修复", "warning")
+                return
+
+            # 执行解压
+            if self.extract_onlinefix_zip():
+                self.show_status("OnlineFix文件修复成功", "success")
+                self.onlinefix_restore_btn.setVisible(False)  # 隐藏修复按钮
+                self.check_onlinefix_integrity()  # 重新检测状态
+                self.check_steam_api_dll()  # 重新检测DLL状态
+            else:
+                self.show_status("OnlineFix文件修复失败", "error")
+
+        except Exception as e:
+            self.show_status(f"修复失败: {str(e)}", "error")
+
+    def extract_onlinefix_zip(self):
+        """解压OnlineFix.zip文件"""
+        try:
+            import zipfile
+            import time
+            from pathlib import Path
+
+            onlinefix_dir = self.config_manager.onlinefix_dir
+            onlinefix_zip = onlinefix_dir / "OnlineFix.zip"
+            extracted_flag = onlinefix_dir / ".onlinefix_extracted"
+
+            if not onlinefix_zip.exists():
+                print("❌ OnlineFix.zip文件不存在")
+                return False
+
+            print(f"📦 开始解压OnlineFix.zip: {onlinefix_zip}")
+
+            # 解压文件到OnlineFix目录
+            with zipfile.ZipFile(onlinefix_zip, 'r') as zip_ref:
+                # 获取压缩包内的文件列表
+                file_list = zip_ref.namelist()
+                print(f"📋 压缩包包含 {len(file_list)} 个文件")
+
+                # 解压所有文件
+                for file_info in zip_ref.infolist():
+                    # 跳过目录
+                    if file_info.is_dir():
+                        continue
+
+                    # 获取文件名（去除路径）
+                    filename = Path(file_info.filename).name
+                    target_path = onlinefix_dir / filename
+
+                    # 如果文件已存在，先删除
+                    if target_path.exists():
+                        target_path.unlink()
+
+                    # 解压文件
+                    with zip_ref.open(file_info) as source, open(target_path, 'wb') as target:
+                        import shutil
+                        shutil.copyfileobj(source, target)
+
+                    print(f"✅ 解压完成: {filename}")
+
+            # 创建解压完成标志
+            extracted_flag.write_text(f"OnlineFix extracted at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("🎉 OnlineFix解压完成")
+            print("📦 原压缩包已保留")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ OnlineFix解压失败: {e}")
+            return False
+
     def check_system_status(self):
-        """检查系统状态（软件路径和DLL文件）"""
+        """检查系统状态（软件路径、OnlineFix完整性和DLL文件）"""
         self.check_software_path()
+        self.check_onlinefix_integrity()
         self.check_steam_api_dll()
 
     def check_software_path(self):
@@ -575,6 +759,7 @@ class ConfigPage(BasePage):
                         border: 1px solid #6c7086;
                     }
                 """)
+                self.path_check_info.setText("路径状态: 请先配置游戏路径")
                 self.path_check_warning.setVisible(False)
                 return
 
@@ -604,6 +789,12 @@ class ConfigPage(BasePage):
                         border: 1px solid #f38ba8;
                     }
                 """)
+                issues = []
+                if has_chinese_path:
+                    issues.append("包含中文字符")
+                if is_on_desktop:
+                    issues.append("位于桌面")
+                self.path_check_info.setText(f"问题: {', '.join(issues)}")
                 self.path_check_warning.setVisible(True)
             else:
                 self.path_check_status.setText("✅ 路径合规")
@@ -617,11 +808,87 @@ class ConfigPage(BasePage):
                         border: 1px solid #a6e3a1;
                     }
                 """)
+                self.path_check_info.setText("路径状态: 符合要求，无中文字符")
                 self.path_check_warning.setVisible(False)
 
         except Exception as e:
             self.path_check_status.setText("检测失败")
+            self.path_check_info.setText(f"检测失败: {str(e)}")
             self.path_check_warning.setVisible(False)
+
+    def check_onlinefix_integrity(self):
+        """检查OnlineFix文件夹完整性"""
+        try:
+            # 定义必需的OnlineFix文件
+            required_files = {
+                "steam_api64.dll": "Steam API库文件",
+                "OnlineFix.ini": "破解配置文件",
+                "OnlineFix64.dll": "主破解DLL",
+                "winmm.dll": "多媒体API钩子",
+                "dlllist.txt": "DLL列表文件"
+            }
+
+            onlinefix_dir = self.config_manager.onlinefix_dir
+            missing_files = []
+
+            # 检查每个必需文件
+            for filename in required_files.keys():
+                file_path = onlinefix_dir / filename
+                if not file_path.exists():
+                    missing_files.append(filename)
+
+            if missing_files:
+                # 有文件缺失
+                self.onlinefix_check_status.setText(f"❌ 缺失{len(missing_files)}个文件")
+                self.onlinefix_check_status.setStyleSheet("""
+                    QLabel {
+                        color: #f38ba8;
+                        font-size: 11px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #f38ba8;
+                    }
+                """)
+                self.onlinefix_file_info.setText(f"缺失文件: {', '.join(missing_files[:3])}{'...' if len(missing_files) > 3 else ''}")
+
+                # 检查是否存在OnlineFix.zip用于修复
+                onlinefix_zip = onlinefix_dir / "OnlineFix.zip"
+                if onlinefix_zip.exists():
+                    self.onlinefix_restore_btn.setVisible(True)
+                else:
+                    self.onlinefix_restore_btn.setVisible(False)
+                    self.onlinefix_file_info.setText(f"缺失文件: {', '.join(missing_files[:3])} (无修复包)")
+            else:
+                # 所有文件完整
+                self.onlinefix_check_status.setText("✅ 文件完整")
+                self.onlinefix_check_status.setStyleSheet("""
+                    QLabel {
+                        color: #a6e3a1;
+                        font-size: 11px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #a6e3a1;
+                    }
+                """)
+                self.onlinefix_file_info.setText(f"所有{len(required_files)}个必需文件完整")
+                self.onlinefix_restore_btn.setVisible(False)
+
+        except Exception as e:
+            self.onlinefix_check_status.setText("检测失败")
+            self.onlinefix_check_status.setStyleSheet("""
+                QLabel {
+                    color: #f38ba8;
+                    font-size: 11px;
+                    padding: 4px 8px;
+                    background-color: #313244;
+                    border-radius: 4px;
+                    border: 1px solid #f38ba8;
+                }
+            """)
+            self.onlinefix_file_info.setText(f"检测失败: {str(e)}")
+            self.onlinefix_restore_btn.setVisible(False)
 
     def check_steam_api_dll(self):
         """检查steam_api64.dll文件状态"""
@@ -809,16 +1076,31 @@ class ConfigPage(BasePage):
             self.path_status_label.setStyleSheet("QLabel { color: #f38ba8; font-size: 12px; margin-top: 5px; }")
         
         # 更新破解状态
-        is_applied = self.config_manager.is_crack_applied()
+        is_applied, status_info = self.config_manager.get_crack_status_info()
         game_valid = self.config_manager.validate_game_path()
-        
+
         if is_applied:
             self.crack_status_label.setText("✅ 破解已应用")
             self.crack_status_label.setStyleSheet("QLabel { color: #a6e3a1; font-size: 14px; font-weight: bold; margin-bottom: 10px; }")
+            self.crack_detail_label.setVisible(False)
         else:
             self.crack_status_label.setText("❌ 破解未应用")
             self.crack_status_label.setStyleSheet("QLabel { color: #f38ba8; font-size: 14px; font-weight: bold; margin-bottom: 10px; }")
-        
+
+            # 显示详细的缺失信息
+            if "缺失文件:" in status_info:
+                # 格式化缺失文件信息为多行显示
+                missing_files = status_info.replace("缺失文件: ", "").split(", ")
+                detail_text = "⚠️ 检测到破解文件缺失：\n"
+                for file in missing_files:
+                    detail_text += f"• {file}\n"
+                detail_text += "\n💡 建议点击'应用破解'按钮来修复缺失的文件"
+
+                self.crack_detail_label.setText(detail_text)
+                self.crack_detail_label.setVisible(True)
+            else:
+                self.crack_detail_label.setVisible(False)
+
         # 更新按钮状态
         self.apply_crack_btn.setEnabled(game_valid and not is_applied)
         self.remove_crack_btn.setEnabled(game_valid and is_applied)

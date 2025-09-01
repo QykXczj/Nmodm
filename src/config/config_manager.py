@@ -79,24 +79,66 @@ class ConfigManager:
         try:
             game_dir = self.get_game_directory()
             if not game_dir:
+                print("❌ 无法获取游戏目录")
                 return False
 
-            # 定义不是破解补丁的文件（排除列表）
-            excluded_files = {
-                "gconfig.ini",      # 配置文件
-                "esl2.zip",         # ESL工具包
-                "tool.zip",         # 网络优化工具包
-                "Regulations"       # 可能的文件夹
+            # 检查游戏目录写入权限
+            game_dir_path = Path(game_dir)
+            if not os.access(game_dir_path, os.W_OK):
+                print(f"❌ 游戏目录无写入权限: {game_dir}")
+                return False
+
+            # 定义需要复制的破解文件（白名单模式）
+            required_crack_files = {
+                "OnlineFix.ini",    # 破解配置文件
+                "OnlineFix64.dll",  # 主破解DLL
+                "dlllist.txt",      # DLL列表文件
+                "winmm.dll"         # Windows多媒体API钩子
             }
 
-            # 复制OnlineFix文件夹中的破解文件到游戏目录
-            for file_path in self.onlinefix_dir.iterdir():
-                if file_path.name not in excluded_files and file_path.is_file():
-                    dest_path = Path(game_dir) / file_path.name
-                    shutil.copy2(file_path, dest_path)
-                    print(f"✅ 应用破解文件: {file_path.name}")
+            # 记录操作结果
+            success_files = []
+            failed_files = []
 
-            return True
+            # 只复制白名单中的破解文件到游戏目录
+            for crack_filename in required_crack_files:
+                file_path = self.onlinefix_dir / crack_filename
+                if file_path.exists() and file_path.is_file():
+                    try:
+                        dest_path = Path(game_dir) / crack_filename
+                        shutil.copy2(file_path, dest_path)
+
+                        # 验证文件是否成功复制
+                        if dest_path.exists() and dest_path.stat().st_size == file_path.stat().st_size:
+                            success_files.append(crack_filename)
+                            print(f"✅ 应用破解文件: {crack_filename}")
+                        else:
+                            failed_files.append(crack_filename)
+                            print(f"❌ 文件复制验证失败: {crack_filename}")
+                    except Exception as e:
+                        failed_files.append(crack_filename)
+                        print(f"❌ 复制文件失败 {crack_filename}: {e}")
+                else:
+                    failed_files.append(crack_filename)
+                    print(f"❌ 源文件不存在: {crack_filename}")
+
+            # 检查操作结果
+            if failed_files:
+                print(f"❌ 部分文件应用失败: {', '.join(failed_files)}")
+                return False
+
+            if not success_files:
+                print("❌ 没有找到需要应用的破解文件")
+                return False
+
+            # 最终验证：检查破解状态
+            if self.is_crack_applied():
+                print(f"✅ 破解应用成功，共处理 {len(success_files)} 个文件")
+                return True
+            else:
+                print("❌ 破解应用后验证失败")
+                return False
+
         except Exception as e:
             print(f"应用破解失败: {e}")
             return False
@@ -106,25 +148,61 @@ class ConfigManager:
         try:
             game_dir = self.get_game_directory()
             if not game_dir:
+                print("❌ 无法获取游戏目录")
                 return False
 
-            # 定义不是破解补丁的文件（排除列表）
-            excluded_files = {
-                "gconfig.ini",      # 配置文件
-                "esl2.zip",         # ESL工具包
-                "tool.zip",         # 网络优化工具包
-                "Regulations"       # 可能的文件夹
+            # 检查游戏目录写入权限
+            game_dir_path = Path(game_dir)
+            if not os.access(game_dir_path, os.W_OK):
+                print(f"❌ 游戏目录无写入权限: {game_dir}")
+                return False
+
+            # 定义需要移除的破解文件（与apply_crack保持一致）
+            required_crack_files = {
+                "OnlineFix.ini",    # 破解配置文件
+                "OnlineFix64.dll",  # 主破解DLL
+                "dlllist.txt",      # DLL列表文件
+                "winmm.dll"         # Windows多媒体API钩子
             }
 
-            # 删除游戏目录中的破解文件
-            for file_path in self.onlinefix_dir.iterdir():
-                if file_path.name not in excluded_files and file_path.is_file():
-                    crack_file = Path(game_dir) / file_path.name
-                    if crack_file.exists():
-                        crack_file.unlink()
-                        print(f"✅ 移除破解文件: {file_path.name}")
+            # 记录操作结果
+            success_files = []
+            failed_files = []
 
-            return True
+            # 删除游戏目录中的破解文件
+            for crack_filename in required_crack_files:
+                crack_file = Path(game_dir) / crack_filename
+                if crack_file.exists():
+                    try:
+                        crack_file.unlink()
+
+                        # 验证文件是否成功删除
+                        if not crack_file.exists():
+                            success_files.append(crack_filename)
+                            print(f"✅ 移除破解文件: {crack_filename}")
+                        else:
+                            failed_files.append(crack_filename)
+                            print(f"❌ 文件删除验证失败: {crack_filename}")
+                    except Exception as e:
+                        failed_files.append(crack_filename)
+                        print(f"❌ 删除文件失败 {crack_filename}: {e}")
+
+            # 检查操作结果
+            if failed_files:
+                print(f"❌ 部分文件移除失败: {', '.join(failed_files)}")
+                return False
+
+            # 最终验证：检查破解状态
+            if not self.is_crack_applied():
+                if success_files:
+                    print(f"✅ 破解移除成功，共处理 {len(success_files)} 个文件")
+                else:
+                    print("✅ 破解文件已不存在，无需移除")
+                return True
+            else:
+                print("❌ 破解移除后验证失败，仍检测到破解文件")
+                return False
+
         except Exception as e:
             print(f"移除破解失败: {e}")
             return False
@@ -136,25 +214,62 @@ class ConfigManager:
             if not game_dir:
                 return False
 
-            # 定义不是破解补丁的文件（排除列表）
-            excluded_files = {
-                "gconfig.ini",      # 配置文件
-                "esl2.zip",         # ESL工具包
-                "tool.zip",         # 网络优化工具包
-                "Regulations"       # 可能的文件夹
+            # 定义必需的破解补丁文件（所有文件都必须存在）
+            required_crack_files = {
+                "dlllist.txt",      # DLL列表文件
+                "OnlineFix.ini",    # 破解配置文件
+                "OnlineFix64.dll",  # 主破解DLL
+                "winmm.dll"         # Windows多媒体API钩子
             }
 
-            # 检查是否存在破解文件
-            for file_path in self.onlinefix_dir.iterdir():
-                if file_path.name not in excluded_files and file_path.is_file():
-                    crack_file = Path(game_dir) / file_path.name
-                    if crack_file.exists():
-                        return True
+            # 检查所有必需的破解文件是否都存在
+            missing_files = []
+            for crack_filename in required_crack_files:
+                crack_file = Path(game_dir) / crack_filename
+                if not crack_file.exists():
+                    missing_files.append(crack_filename)
 
-            return False
+            # 如果有文件缺失，返回False（UI会显示详细信息）
+            if missing_files:
+                return False
+
+            # 所有必需文件都存在才认为已应用破解
+            return True
         except Exception as e:
             print(f"检查破解状态失败: {e}")
             return False
+
+    def get_crack_status_info(self) -> tuple[bool, str]:
+        """获取破解状态和详细信息"""
+        try:
+            game_dir = self.get_game_directory()
+            if not game_dir:
+                return False, "无法获取游戏目录"
+
+            # 定义必需的破解补丁文件
+            required_crack_files = {
+                "dlllist.txt",      # DLL列表文件
+                "OnlineFix.ini",    # 破解配置文件
+                "OnlineFix64.dll",  # 主破解DLL
+                "winmm.dll"         # Windows多媒体API钩子
+            }
+
+            # 检查所有必需的破解文件是否都存在
+            missing_files = []
+            for crack_filename in required_crack_files:
+                crack_file = Path(game_dir) / crack_filename
+                if not crack_file.exists():
+                    missing_files.append(crack_filename)
+
+            # 返回状态和详细信息
+            if missing_files:
+                missing_info = f"缺失文件: {', '.join(missing_files)}"
+                return False, missing_info
+            else:
+                return True, "所有破解文件完整"
+
+        except Exception as e:
+            return False, f"检查失败: {str(e)}"
 
     def get_nightreign_version(self) -> Optional[str]:
         """获取nightreign.exe的版本信息"""

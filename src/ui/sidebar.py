@@ -224,7 +224,6 @@ class Sidebar(QWidget):
             ("config", "⚙️", "基础配置"),
             ("me3", "📥", "工具下载"),
             ("mods", "🔧", "Mod配置"),
-            ("bin_merge", "🔗", "BIN合并"),
             ("lan_gaming", "🌐", "局域网配置"),
             ("virtual_lan", "🌍", "虚拟局域网"),
             ("about", "ℹ️", "关于")
@@ -249,7 +248,7 @@ class Sidebar(QWidget):
         footer_layout.setContentsMargins(15, 10, 15, 0)
         
         # 版本信息
-        version_label = QLabel("v3.0.7")
+        version_label = QLabel("v3.0.8")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;

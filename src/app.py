@@ -62,7 +62,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("3.0.7")
+        self.app.setApplicationVersion("3.0.8")
         self.app.setOrganizationName("Nmodm Team")
 
         # 初始化局域网模式检测器
@@ -139,10 +139,9 @@ class NmodmApp:
             "config": (2, None),
             "me3": (3, None),
             "mods": (4, None),
-            "bin_merge": (5, None),
-            "lan_gaming": (6, None),
-            "virtual_lan": (7, None),
-            "about": (8, None)
+            "lan_gaming": (5, None),
+            "virtual_lan": (6, None),
+            "about": (7, None)
         }
 
     def get_or_create_page(self, page_name):
@@ -198,11 +197,6 @@ class NmodmApp:
                 from .ui.pages.mods_page import ModsPage
                 page = ModsPage()
                 page.config_changed.connect(self.update_home_status)
-                return page
-
-            elif page_name == "bin_merge":
-                from .ui.pages.bin_merge_page import BinMergePage
-                page = BinMergePage()
                 return page
 
             elif page_name == "lan_gaming":

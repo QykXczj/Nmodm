@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 
         # 局域网模式状态
         self.is_lan_mode = False
-        self.base_title = "Nmodm v3.0.7"
+        self.base_title = "Nmodm v3.0.8"
 
         self.setup_window()
         self.setup_ui()
