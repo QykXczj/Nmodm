@@ -225,60 +225,61 @@ jobs:
           exit 1
         }
 
-    - name: 安装 Inno Setup (备用方案)
-      run: |
-        Write-Host "📦 使用 Chocolatey 安装 Inno Setup"
-        choco install innosetup -y
-
-    - name: 手动构建 Windows 安装包
-      run: |
-        Write-Host "🔨 使用命令行编译 Inno Setup 脚本"
-        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
-          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-        } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
-          $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
-        } else {
-          Write-Host "❌ 找不到 Inno Setup 编译器"
-          exit 1
-        }
-
-        Write-Host "✅ 找到编译器: $isccPath"
-        & "$isccPath" "setup.iss"
-
-        if ($LASTEXITCODE -eq 0) {
-          Write-Host "✅ 编译成功"
-        } else {
-          Write-Host "❌ 编译失败，退出代码: $LASTEXITCODE"
-          exit 1
-        }
+    - name: 构建 Windows 安装包 (使用 Action)
+      uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+      with:
+        path: setup.iss
+        options: /O+
 
     - name: 验证并移动安装包
       run: |
-        if (Test-Path "Output") {
-          Write-Host "✅ Output 目录存在"
-          $exeFiles = Get-ChildItem "Output\*.exe"
-          if ($exeFiles.Count -gt 0) {
-            Write-Host "✅ 找到 $($exeFiles.Count) 个安装包文件"
-            foreach ($file in $exeFiles) {
-              Write-Host "  - $($file.Name) ($($file.Length) 字节)"
+        Write-Host "📋 检查可能的输出位置..."
+
+        # 检查多个可能的输出位置
+        $possiblePaths = @("Output", "release", ".")
+        $foundExe = $false
+
+        foreach ($path in $possiblePaths) {
+          if (Test-Path $path) {
+            Write-Host "✅ 检查目录: $path"
+            $exeFiles = Get-ChildItem "$path\*.exe" -ErrorAction SilentlyContinue
+            if ($exeFiles.Count -gt 0) {
+              Write-Host "✅ 在 $path 中找到 $($exeFiles.Count) 个 .exe 文件"
+              foreach ($file in $exeFiles) {
+                Write-Host "  - $($file.Name) ($($file.Length) 字节)"
+                # 如果不在 release 目录，移动到 release 目录
+                if ($path -ne "release") {
+                  if (-not (Test-Path "release")) {
+                    New-Item -ItemType Directory -Path "release" -Force
+                  }
+                  Move-Item $file.FullName "release\" -Force
+                  Write-Host "  ✅ 已移动到 release 目录"
+                }
+              }
+              $foundExe = $true
+              break
+            } else {
+              Write-Host "  ❌ 在 $path 中未找到 .exe 文件"
             }
-            Move-Item "Output\*.exe" "release\"
-            Write-Host "✅ 安装包已移动到发布目录"
           } else {
-            Write-Host "❌ Output 目录中没有找到 .exe 文件"
-            Get-ChildItem "Output" -Recurse | Write-Host
-            exit 1
+            Write-Host "  ❌ 目录 $path 不存在"
           }
-        } else {
-          Write-Host "❌ Output 目录不存在"
-          Write-Host "📋 当前目录内容:"
-          Get-ChildItem | Write-Host
+        }
+
+        if (-not $foundExe) {
+          Write-Host "❌ 在所有可能位置都未找到安装包文件"
+          Write-Host "📋 当前目录完整内容:"
+          Get-ChildItem -Recurse | Where-Object { $_.Extension -eq ".exe" } | Select-Object FullName, Length | Format-Table
           exit 1
         }
 
         # 显示最终发布目录内容
         Write-Host "📦 发布目录最终内容:"
-        Get-ChildItem "release" | Select-Object Name, Length, LastWriteTime | Format-Table
+        if (Test-Path "release") {
+          Get-ChildItem "release" | Select-Object Name, Length, LastWriteTime | Format-Table
+        } else {
+          Write-Host "❌ release 目录不存在"
+        }
         
     - name: 创建发行版
       uses: softprops/action-gh-release@v1
