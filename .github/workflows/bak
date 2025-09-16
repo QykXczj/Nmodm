@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '发行版本号 (例如: v1.0.0)'
+        description: '发行版本号 (例如: 1.0.0)'
         required: true
         default: 'v1.0.0'
       prerelease:
@@ -82,20 +82,55 @@ jobs:
         New-Item -ItemType Directory -Force -Path "release"
 
         # 查找 Nuitka 构建输出目录
+        Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
-          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
-        } elseif (Test-Path "Builds/Nuitka/main.dist") {
-          $nuitkaDir = "Builds/Nuitka/main.dist"
+        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+
+        # 可能的目录名称
+        $possibleDirs = @(
+          "Builds/Nuitka/Nmodm_v$version",
+          "Builds/Nuitka/main.dist",
+          "Builds/Nuitka/Nmodm_nuitka_standalone"
+        )
+
+        foreach ($dir in $possibleDirs) {
+          if (Test-Path $dir) {
+            $nuitkaDir = $dir
+            Write-Host "✅ 找到构建目录: $nuitkaDir"
+            break
+          }
+        }
+
+        # 如果还没找到，搜索所有包含exe文件的目录
+        if (-not $nuitkaDir -and (Test-Path "Builds/Nuitka")) {
+          Write-Host "🔍 搜索包含exe文件的目录..."
+          $exeDirs = Get-ChildItem "Builds/Nuitka" -Directory | Where-Object {
+            (Get-ChildItem $_.FullName -Filter "*.exe" -ErrorAction SilentlyContinue).Count -gt 0
+          }
+          if ($exeDirs.Count -gt 0) {
+            $nuitkaDir = $exeDirs[0].FullName -replace [regex]::Escape((Get-Location).Path + "\"), ""
+            Write-Host "✅ 找到包含exe的目录: $nuitkaDir"
+          }
         }
 
         if ($nuitkaDir) {
-          Write-Host "Found Nuitka build directory: $nuitkaDir"
-          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip"
-          Write-Host "Main release package created: Nmodm-v${{ github.event.inputs.version }}.zip"
+          Write-Host "📦 创建发布包: $nuitkaDir"
+
+          # 显示目录内容
+          Write-Host "📋 目录内容:"
+          Get-ChildItem $nuitkaDir | Select-Object Name, Length, LastWriteTime | Format-Table
+
+          # 创建压缩包
+          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm_v${{ github.event.inputs.version }}.zip" -Force
+          Write-Host "✅ 主发布包已创建: Nmodm_v${{ github.event.inputs.version }}.zip"
         } else {
-          Write-Host "Nuitka build output not found"
-          Get-ChildItem "Builds" -Recurse | Write-Host
+          Write-Host "❌ 未找到 Nuitka 构建输出"
+          Write-Host "📋 Builds 目录结构:"
+          if (Test-Path "Builds") {
+            Get-ChildItem "Builds" -Recurse | Select-Object FullName, Length | Format-Table
+          } else {
+            Write-Host "Builds 目录不存在"
+          }
           exit 1
         }
 
@@ -108,40 +143,68 @@ jobs:
           }
         }
         if ($existingFiles.Count -gt 0) {
-          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip"
-          Write-Host "Source code package created: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm_Source_v${{ github.event.inputs.version }}.zip"
+          Write-Host "Source code package created: Nmodm_Source_v${{ github.event.inputs.version }}.zip"
         }
 
     - name: 创建 Inno Setup 脚本
       run: |
-        # 查找 Nuitka 构建输出目录
+        # 查找 Nuitka 构建输出目录 (与发布包创建步骤保持一致)
+        Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
-          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
-        } elseif (Test-Path "Builds/Nuitka/main.dist") {
-          $nuitkaDir = "Builds/Nuitka/main.dist"
+        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+
+        # 可能的目录名称
+        $possibleDirs = @(
+          "Builds/Nuitka/Nmodm_v$version",
+          "Builds/Nuitka/main.dist",
+          "Builds/Nuitka/Nmodm_nuitka_standalone"
+        )
+
+        foreach ($dir in $possibleDirs) {
+          if (Test-Path $dir) {
+            $nuitkaDir = $dir
+            Write-Host "✅ 找到构建目录: $nuitkaDir"
+            break
+          }
+        }
+
+        # 如果还没找到，搜索所有包含exe文件的目录
+        if (-not $nuitkaDir -and (Test-Path "Builds/Nuitka")) {
+          Write-Host "🔍 搜索包含exe文件的目录..."
+          $exeDirs = Get-ChildItem "Builds/Nuitka" -Directory | Where-Object {
+            (Get-ChildItem $_.FullName -Filter "*.exe" -ErrorAction SilentlyContinue).Count -gt 0
+          }
+          if ($exeDirs.Count -gt 0) {
+            $nuitkaDir = $exeDirs[0].FullName -replace [regex]::Escape((Get-Location).Path + "\"), ""
+            Write-Host "✅ 找到包含exe的目录: $nuitkaDir"
+          }
         }
 
         if (-not $nuitkaDir) {
-          Write-Host "❌ 找不到 Nuitka 构建输出目录"
-          Get-ChildItem "Builds" -Recurse | Write-Host
+          Write-Host "❌ 未找到 Nuitka 构建输出目录"
+          Write-Host "📋 Builds 目录结构:"
+          if (Test-Path "Builds") {
+            Get-ChildItem "Builds" -Recurse | Select-Object FullName | Format-Table
+          } else {
+            Write-Host "Builds 目录不存在"
+          }
           exit 1
         }
 
-        Write-Host "✅ 找到 Nuitka 构建目录: $nuitkaDir"
+        Write-Host "✅ 使用构建目录: $nuitkaDir"
 
-        # 动态创建 Inno Setup 脚本
-        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+        # 动态创建 Inno Setup 脚本 (版本已在上面定义)
 
         # 创建脚本内容
         $setupSection = "[Setup]"
         $setupSection += "`nAppName=Nmodm"
         $setupSection += "`nAppVersion=$version"
         $setupSection += "`nAppPublisher=QykXczj"
-        $setupSection += "`nDefaultDirName={autopf}\Nmodm"
+        $setupSection += "`nDefaultDirName={src}\Nmodm_v$version"
         $setupSection += "`nDefaultGroupName=Nmodm"
         $setupSection += "`nOutputDir=release"
-        $setupSection += "`nOutputBaseFilename=Nmodm-v$version-Setup"
+        $setupSection += "`nOutputBaseFilename=Nmodm_v$version-Setup"
         $setupSection += "`nCompression=lzma2"
         $setupSection += "`nSolidCompression=yes"
         $setupSection += "`nUninstallDisplayName=Nmodm v$version"
