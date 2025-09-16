@@ -162,44 +162,46 @@ jobs:
 
         # 动态创建 Inno Setup 脚本
         $version = "${{ github.event.inputs.version }}".TrimStart('v')
-        $issContent = @'
-[Setup]
-AppName=Nmodm
-AppVersion={VERSION}
-AppPublisher=QykXczj
-DefaultDirName={autopf}\Nmodm
-DefaultGroupName=Nmodm
-OutputDir=release
-OutputBaseFilename=Nmodm-v{VERSION}-Setup
-Compression=lzma2
-SolidCompression=yes
-UninstallDisplayName=Nmodm v{VERSION}
-UninstallDisplayIcon={app}\Nmodm.exe
-CreateUninstallRegKey=yes
-MinVersion=6.1sp1
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
 
-[Files]
-Source: "{NUITKA_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+        # 创建脚本内容
+        $setupSection = "[Setup]"
+        $setupSection += "`nAppName=Nmodm"
+        $setupSection += "`nAppVersion=$version"
+        $setupSection += "`nAppPublisher=QykXczj"
+        $setupSection += "`nDefaultDirName={autopf}\Nmodm"
+        $setupSection += "`nDefaultGroupName=Nmodm"
+        $setupSection += "`nOutputDir=release"
+        $setupSection += "`nOutputBaseFilename=Nmodm-v$version-Setup"
+        $setupSection += "`nCompression=lzma2"
+        $setupSection += "`nSolidCompression=yes"
+        $setupSection += "`nUninstallDisplayName=Nmodm v$version"
+        $setupSection += "`nUninstallDisplayIcon={app}\Nmodm.exe"
+        $setupSection += "`nCreateUninstallRegKey=yes"
+        $setupSection += "`nMinVersion=6.1sp1"
+        $setupSection += "`nArchitecturesAllowed=x64"
+        $setupSection += "`nArchitecturesInstallIn64BitMode=x64"
 
-[Icons]
-Name: "{group}\Nmodm"; Filename: "{app}\Nmodm.exe"
-Name: "{autodesktop}\Nmodm"; Filename: "{app}\Nmodm.exe"; Tasks: desktopicon
+        $filesSection = "`n`n[Files]"
+        $filesSection += "`nSource: `"$nuitkaDir\*`"; DestDir: `"{app}`"; Flags: ignoreversion recursesubdirs createallsubdirs"
 
-[Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: unchecked
+        $iconsSection = "`n`n[Icons]"
+        $iconsSection += "`nName: `"{group}\Nmodm`"; Filename: `"{app}\Nmodm.exe`""
+        $iconsSection += "`nName: `"{autodesktop}\Nmodm`"; Filename: `"{app}\Nmodm.exe`"; Tasks: desktopicon"
 
-[Run]
-Filename: "{app}\Nmodm.exe"; Description: "启动 Nmodm"; Flags: nowait postinstall skipifsilent
+        $tasksSection = "`n`n[Tasks]"
+        $tasksSection += "`nName: `"desktopicon`"; Description: `"创建桌面快捷方式`"; GroupDescription: `"附加图标:`"; Flags: unchecked"
 
-[Messages]
-WelcomeLabel1=欢迎使用 Nmodm 安装向导
-WelcomeLabel2=这将在您的计算机上安装 Nmodm v{VERSION}
-'@
-        # 替换占位符
-        $issContent = $issContent -replace '{VERSION}', $version
-        $issContent = $issContent -replace '{NUITKA_DIR}', $nuitkaDir
+        $runSection = "`n`n[Run]"
+        $runSection += "`nFilename: `"{app}\Nmodm.exe`"; Description: `"启动 Nmodm`"; Flags: nowait postinstall skipifsilent"
+
+        $messagesSection = "`n`n[Messages]"
+        $messagesSection += "`nWelcomeLabel1=欢迎使用 Nmodm 安装向导"
+        $messagesSection += "`nWelcomeLabel2=这将在您的计算机上安装 Nmodm v$version"
+
+        # 组合所有部分
+        $issContent = $setupSection + $filesSection + $iconsSection + $tasksSection + $runSection + $messagesSection
+
+        # 写入文件
         $issContent | Out-File -FilePath "setup.iss" -Encoding UTF8
         Write-Host "✅ Inno Setup 脚本已创建"
 
