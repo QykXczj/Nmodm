@@ -214,6 +214,20 @@ jobs:
         $setupSection += "`nArchitecturesAllowed=x64"
         $setupSection += "`nArchitecturesInstallIn64BitMode=x64"
 
+        # 添加图标支持
+        if (Test-Path "zwnr.png") {
+          $setupSection += "`nSetupIconFile=zwnr.png"
+        }
+
+        # 添加中文语言支持
+        $setupSection += "`n"
+        $setupSection += "`n; 中文语言支持"
+        $setupSection += "`nShowLanguageDialog=no"
+        $setupSection += "`nDefaultLanguage=ChineseSimplified"
+
+        $languagesSection = "`n`n[Languages]"
+        $languagesSection += "`nName: `"ChineseSimplified`"; MessagesFile: `"compiler:Languages\ChineseSimplified.isl`""
+
         $filesSection = "`n`n[Files]"
         $filesSection += "`nSource: `"$nuitkaDir\*`"; DestDir: `"{app}`"; Flags: ignoreversion recursesubdirs createallsubdirs"
 
@@ -232,7 +246,7 @@ jobs:
         $messagesSection += "`nWelcomeLabel2=这将在您的计算机上安装 Nmodm v$version"
 
         # 组合所有部分
-        $issContent = $setupSection + $filesSection + $iconsSection + $tasksSection + $runSection + $messagesSection
+        $issContent = $setupSection + $languagesSection + $filesSection + $iconsSection + $tasksSection + $runSection + $messagesSection
 
         # 写入文件
         $issContent | Out-File -FilePath "setup.iss" -Encoding UTF8
