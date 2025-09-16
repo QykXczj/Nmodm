@@ -121,8 +121,8 @@ jobs:
           Get-ChildItem $nuitkaDir | Select-Object Name, Length, LastWriteTime | Format-Table
 
           # 创建压缩包
-          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip" -Force
-          Write-Host "✅ 主发布包已创建: Nmodm-v${{ github.event.inputs.version }}.zip"
+          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm_v${{ github.event.inputs.version }}.zip" -Force
+          Write-Host "✅ 主发布包已创建: Nmodm_v${{ github.event.inputs.version }}.zip"
         } else {
           Write-Host "❌ 未找到 Nuitka 构建输出"
           Write-Host "📋 Builds 目录结构:"
@@ -143,8 +143,8 @@ jobs:
           }
         }
         if ($existingFiles.Count -gt 0) {
-          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip"
-          Write-Host "Source code package created: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm_Source_v${{ github.event.inputs.version }}.zip"
+          Write-Host "Source code package created: Nmodm_Source_v${{ github.event.inputs.version }}.zip"
         }
 
     - name: 创建 Inno Setup 脚本
@@ -201,10 +201,10 @@ jobs:
         $setupSection += "`nAppName=Nmodm"
         $setupSection += "`nAppVersion=$version"
         $setupSection += "`nAppPublisher=QykXczj"
-        $setupSection += "`nDefaultDirName={autopf}\Nmodm"
+        $setupSection += "`nDefaultDirName={sd}\Nmodm_v$version"
         $setupSection += "`nDefaultGroupName=Nmodm"
         $setupSection += "`nOutputDir=release"
-        $setupSection += "`nOutputBaseFilename=Nmodm-v$version-Setup"
+        $setupSection += "`nOutputBaseFilename=Nmodm_v$version-Setup"
         $setupSection += "`nCompression=lzma2"
         $setupSection += "`nSolidCompression=yes"
         $setupSection += "`nUninstallDisplayName=Nmodm v$version"
