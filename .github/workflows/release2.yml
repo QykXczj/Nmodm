@@ -225,7 +225,12 @@ jobs:
         $setupSection += "`nShowLanguageDialog=no"
 
         $languagesSection = "`n`n[Languages]"
-        $languagesSection += "`nName: `"chinesesimplified`"; MessagesFile: `"compiler:Languages\ChineseSimplified.isl`""
+        # 使用仓库根目录中的中文语言包
+        if (Test-Path "ChineseSimplified.isl") {
+          $languagesSection += "`nName: `"chinesesimplified`"; MessagesFile: `"ChineseSimplified.isl`""
+        } else {
+          $languagesSection += "`nName: `"chinesesimplified`"; MessagesFile: `"compiler:Languages\ChineseSimplified.isl`""
+        }
 
         $filesSection = "`n`n[Files]"
         $filesSection += "`nSource: `"$nuitkaDir\*`"; DestDir: `"{app}`"; Flags: ignoreversion recursesubdirs createallsubdirs"
