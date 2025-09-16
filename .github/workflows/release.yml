@@ -144,45 +144,75 @@ jobs:
 
     - name: 创建 Inno Setup 脚本
       run: |
+        # 查找 Nuitka 构建输出目录
+        $nuitkaDir = $null
+        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
+          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
+        } elseif (Test-Path "Builds/Nuitka/main.dist") {
+          $nuitkaDir = "Builds/Nuitka/main.dist"
+        }
+
+        if (-not $nuitkaDir) {
+          Write-Host "❌ 找不到 Nuitka 构建输出目录"
+          Get-ChildItem "Builds" -Recurse | Write-Host
+          exit 1
+        }
+
+        Write-Host "✅ 找到 Nuitka 构建目录: $nuitkaDir"
+
         # 动态创建 Inno Setup 脚本
         $version = "${{ github.event.inputs.version }}".TrimStart('v')
         $issContent = @"
-        [Setup]
-        AppName=Nmodm
-        AppVersion=$version
-        AppPublisher=QykXczj
-        DefaultDirName={autopf}\Nmodm
-        DefaultGroupName=Nmodm
-        OutputDir=release
-        OutputBaseFilename=Nmodm-v$version-Setup
-        Compression=lzma2
-        SolidCompression=yes
-        UninstallDisplayName=Nmodm v$version
-        UninstallDisplayIcon={app}\Nmodm.exe
-        CreateUninstallRegKey=yes
-        MinVersion=6.1sp1
-        ArchitecturesAllowed=x64
-        ArchitecturesInstallIn64BitMode=x64
+[Setup]
+AppName=Nmodm
+AppVersion=$version
+AppPublisher=QykXczj
+DefaultDirName={autopf}\Nmodm
+DefaultGroupName=Nmodm
+OutputDir=release
+OutputBaseFilename=Nmodm-v$version-Setup
+Compression=lzma2
+SolidCompression=yes
+UninstallDisplayName=Nmodm v$version
+UninstallDisplayIcon={app}\Nmodm.exe
+CreateUninstallRegKey=yes
+MinVersion=6.1sp1
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 
-        [Files]
-        Source: "$nuitkaDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+[Files]
+Source: "$nuitkaDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-        [Icons]
-        Name: "{group}\Nmodm"; Filename: "{app}\Nmodm.exe"
-        Name: "{autodesktop}\Nmodm"; Filename: "{app}\Nmodm.exe"; Tasks: desktopicon
+[Icons]
+Name: "{group}\Nmodm"; Filename: "{app}\Nmodm.exe"
+Name: "{autodesktop}\Nmodm"; Filename: "{app}\Nmodm.exe"; Tasks: desktopicon
 
-        [Tasks]
-        Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: unchecked
+[Tasks]
+Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: unchecked
 
-        [Run]
-        Filename: "{app}\Nmodm.exe"; Description: "启动 Nmodm"; Flags: nowait postinstall skipifsilent
+[Run]
+Filename: "{app}\Nmodm.exe"; Description: "启动 Nmodm"; Flags: nowait postinstall skipifsilent
 
-        [Messages]
-        WelcomeLabel1=欢迎使用 Nmodm 安装向导
-        WelcomeLabel2=这将在您的计算机上安装 Nmodm v$version
-        "@
+[Messages]
+WelcomeLabel1=欢迎使用 Nmodm 安装向导
+WelcomeLabel2=这将在您的计算机上安装 Nmodm v$version
+"@
         $issContent | Out-File -FilePath "setup.iss" -Encoding UTF8
         Write-Host "✅ Inno Setup 脚本已创建"
+
+        # 验证脚本内容
+        Write-Host "📋 脚本内容预览:"
+        Get-Content "setup.iss" | Select-Object -First 10 | Write-Host
+
+    - name: 验证 Inno Setup 脚本
+      run: |
+        if (Test-Path "setup.iss") {
+          Write-Host "✅ Inno Setup 脚本存在"
+          Write-Host "📋 脚本文件大小: $((Get-Item 'setup.iss').Length) 字节"
+        } else {
+          Write-Host "❌ Inno Setup 脚本不存在"
+          exit 1
+        }
 
     - name: 构建 Windows 安装包
       uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
@@ -190,15 +220,33 @@ jobs:
         path: setup.iss
         options: /O+ /Q
 
-    - name: 移动安装包到发布目录
+    - name: 验证并移动安装包
       run: |
         if (Test-Path "Output") {
-          Move-Item "Output\*.exe" "release\"
-          Write-Host "✅ 安装包已移动到发布目录"
-          Get-ChildItem "release" | Select-Object Name, Length, LastWriteTime
+          Write-Host "✅ Output 目录存在"
+          $exeFiles = Get-ChildItem "Output\*.exe"
+          if ($exeFiles.Count -gt 0) {
+            Write-Host "✅ 找到 $($exeFiles.Count) 个安装包文件"
+            foreach ($file in $exeFiles) {
+              Write-Host "  - $($file.Name) ($($file.Length) 字节)"
+            }
+            Move-Item "Output\*.exe" "release\"
+            Write-Host "✅ 安装包已移动到发布目录"
+          } else {
+            Write-Host "❌ Output 目录中没有找到 .exe 文件"
+            Get-ChildItem "Output" -Recurse | Write-Host
+            exit 1
+          }
         } else {
-          Write-Host "❌ 安装包生成失败"
+          Write-Host "❌ Output 目录不存在"
+          Write-Host "📋 当前目录内容:"
+          Get-ChildItem | Write-Host
+          exit 1
         }
+
+        # 显示最终发布目录内容
+        Write-Host "📦 发布目录最终内容:"
+        Get-ChildItem "release" | Select-Object Name, Length, LastWriteTime | Format-Table
         
     - name: 创建发行版
       uses: softprops/action-gh-release@v1
