@@ -1,4 +1,4 @@
-name: 创建发行版(带安装包)
+name: 创建发行版2
 
 on:
   workflow_dispatch:
@@ -50,6 +50,8 @@ jobs:
     - name: 使用 Nuitka 打包 (目录版)
       run: |
         Write-Host "🔨 使用 build_nuitka.py 脚本，自动选择独立模式"
+        $env:PYTHONIOENCODING = "utf-8"
+        $env:PYTHONLEGACYWINDOWSSTDIO = "1"
         echo "2" | python build_nuitka.py
 
     - name: 创建发布包
