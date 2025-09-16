@@ -82,20 +82,55 @@ jobs:
         New-Item -ItemType Directory -Force -Path "release"
 
         # 查找 Nuitka 构建输出目录
+        Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
-          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
-        } elseif (Test-Path "Builds/Nuitka/main.dist") {
-          $nuitkaDir = "Builds/Nuitka/main.dist"
+        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+
+        # 可能的目录名称
+        $possibleDirs = @(
+          "Builds/Nuitka/Nmodm_v$version",
+          "Builds/Nuitka/main.dist",
+          "Builds/Nuitka/Nmodm_nuitka_standalone"
+        )
+
+        foreach ($dir in $possibleDirs) {
+          if (Test-Path $dir) {
+            $nuitkaDir = $dir
+            Write-Host "✅ 找到构建目录: $nuitkaDir"
+            break
+          }
+        }
+
+        # 如果还没找到，搜索所有包含exe文件的目录
+        if (-not $nuitkaDir -and (Test-Path "Builds/Nuitka")) {
+          Write-Host "🔍 搜索包含exe文件的目录..."
+          $exeDirs = Get-ChildItem "Builds/Nuitka" -Directory | Where-Object {
+            (Get-ChildItem $_.FullName -Filter "*.exe" -ErrorAction SilentlyContinue).Count -gt 0
+          }
+          if ($exeDirs.Count -gt 0) {
+            $nuitkaDir = $exeDirs[0].FullName -replace [regex]::Escape((Get-Location).Path + "\"), ""
+            Write-Host "✅ 找到包含exe的目录: $nuitkaDir"
+          }
         }
 
         if ($nuitkaDir) {
-          Write-Host "Found Nuitka build directory: $nuitkaDir"
-          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip"
-          Write-Host "Main release package created: Nmodm-v${{ github.event.inputs.version }}.zip"
+          Write-Host "📦 创建发布包: $nuitkaDir"
+
+          # 显示目录内容
+          Write-Host "📋 目录内容:"
+          Get-ChildItem $nuitkaDir | Select-Object Name, Length, LastWriteTime | Format-Table
+
+          # 创建压缩包
+          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip" -Force
+          Write-Host "✅ 主发布包已创建: Nmodm-v${{ github.event.inputs.version }}.zip"
         } else {
-          Write-Host "Nuitka build output not found"
-          Get-ChildItem "Builds" -Recurse | Write-Host
+          Write-Host "❌ 未找到 Nuitka 构建输出"
+          Write-Host "📋 Builds 目录结构:"
+          if (Test-Path "Builds") {
+            Get-ChildItem "Builds" -Recurse | Select-Object FullName, Length | Format-Table
+          } else {
+            Write-Host "Builds 目录不存在"
+          }
           exit 1
         }
 
