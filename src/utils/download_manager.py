@@ -69,6 +69,7 @@ class DownloadManager(QObject):
 
     # 信号定义
     easytier_install_finished = Signal(bool, str)  # EasyTier安装完成信号(成功, 消息)
+    me3_installer_download_finished = Signal(bool, str, str)  # ME3安装程序下载完成信号(成功, 消息, 文件路径)
 
     # GitHub加速镜像地址
     DEFAULT_PROXY_URLS = [
@@ -187,17 +188,47 @@ class DownloadManager(QObject):
         except Exception as e:
             print(f"解析下载链接失败: {e}")
             return None
+
+    def get_installer_download_url(self, release_info: Dict) -> Optional[str]:
+        """获取ME3安装程序下载链接"""
+        try:
+            for asset in release_info.get('assets', []):
+                if asset['name'] == 'me3_installer.exe':
+                    return asset['browser_download_url']
+            return None
+        except Exception as e:
+            print(f"解析安装程序下载链接失败: {e}")
+            return None
     
     def get_current_version(self) -> Optional[str]:
-        """获取当前已安装版本"""
+        """获取当前已安装的便携版版本"""
         try:
+            import subprocess
+            import re
+            # 执行便携版me3.exe获取真实版本
+            me3_exe_path = self.me3_dir / "bin" / "me3.exe"
+            if me3_exe_path.exists():
+                import sys
+                creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                result = subprocess.run([str(me3_exe_path), '-V'],
+                                      capture_output=True, text=True, timeout=5,
+                                      creationflags=creation_flags)
+                if result.returncode == 0:
+                    # 解析版本输出，支持 "me3 0.8.1" 或 "0.8.1" 格式
+                    output = result.stdout.strip()
+                    version_match = re.search(r'v?(\d+\.\d+\.\d+)', output)
+                    if version_match:
+                        # 返回带v前缀的版本号，与GitHub API格式保持一致
+                        return f"v{version_match.group(1)}"
+
+            # 如果执行失败，回退到读取version.json（兼容性）
             if self.version_file.exists():
                 with open(self.version_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     return data.get('version')
             return None
         except Exception as e:
-            print(f"读取版本信息失败: {e}")
+            print(f"获取便携版版本失败: {e}")
             return None
     
     def save_version_info(self, version: str, release_info: Dict):
@@ -279,15 +310,176 @@ class DownloadManager(QObject):
                 continue
 
         return None
-    
+
+    def download_me3_installer(self, mirror_url: str = None) -> DownloadWorker:
+        """下载ME3安装程序"""
+        release_info = self.get_latest_release_info()
+        if not release_info:
+            return None
+
+        download_url = self.get_installer_download_url(release_info)
+        if not download_url:
+            return None
+
+        # 使用指定的镜像或默认镜像列表
+        mirrors_to_try = [mirror_url] if mirror_url else (self.PROXY_URLS + [""])
+
+        for proxy in mirrors_to_try:
+            try:
+                url = f"{proxy}{download_url}" if proxy else download_url
+
+                # 保存到me3p目录
+                installer_path = self.me3_dir / "me3_installer.exe"
+
+                # 如果文件已存在，先删除
+                if installer_path.exists():
+                    installer_path.unlink()
+
+                worker = DownloadWorker(url, str(installer_path))
+
+                def on_finished(success, message):
+                    if success:
+                        self.me3_installer_download_finished.emit(True, "ME3安装程序下载完成", str(installer_path))
+                    else:
+                        self.me3_installer_download_finished.emit(False, f"下载失败: {message}", "")
+
+                worker.finished.connect(on_finished)
+                return worker
+
+            except Exception as e:
+                print(f"创建ME3安装程序下载任务失败 ({proxy or 'direct'}): {e}")
+                continue
+
+        return None
+
     def is_me3_installed(self) -> bool:
-        """检查ME3是否已安装"""
+        """检查ME3是否已安装（便携版）"""
         # ME3的可执行文件在bin子目录中
         me3_exe = self.me3_dir / "bin" / "me3.exe"
         me3_launcher = self.me3_dir / "bin" / "me3-launcher.exe"
 
         # 检查主要的ME3文件是否存在
         return me3_exe.exists() and me3_launcher.exists()
+
+    def _get_system_env(self):
+        """获取系统环境变量（排除虚拟环境）"""
+        import os
+        env = os.environ.copy()
+
+        # 检测是否在虚拟环境中
+        if 'VIRTUAL_ENV' in env:
+            virtual_env = env['VIRTUAL_ENV']
+
+            # 获取原始PATH
+            original_path = env.get('PATH', '')
+
+            # 移除虚拟环境相关的路径
+            path_parts = original_path.split(os.pathsep)
+            filtered_parts = []
+
+            for part in path_parts:
+                # 检查是否为虚拟环境相关路径
+                # 只移除明确属于当前虚拟环境的路径
+                is_venv_path = False
+
+                # 更精确的虚拟环境路径检测
+                if part and virtual_env:
+                    # 标准化路径比较
+                    part_normalized = os.path.normpath(part).lower()
+                    venv_normalized = os.path.normpath(virtual_env).lower()
+
+                    # 检查是否为虚拟环境的直接子路径
+                    if (part_normalized.startswith(venv_normalized + os.sep.lower()) or
+                        part_normalized == venv_normalized):
+                        is_venv_path = True
+
+                if not is_venv_path:
+                    filtered_parts.append(part)
+
+            # 重新构造PATH
+            new_path = os.pathsep.join(filtered_parts)
+            env['PATH'] = new_path
+
+            # 移除虚拟环境变量
+            del env['VIRTUAL_ENV']
+            if 'PYTHONHOME' in env:
+                del env['PYTHONHOME']
+
+        return env
+
+    def is_me3_full_installed(self) -> bool:
+        """检查ME3完整安装版是否已安装"""
+        try:
+            import subprocess
+            # 使用系统环境变量运行me3 -V命令检测
+            system_env = self._get_system_env()
+            import sys
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            result = subprocess.run(['me3', '-V'],
+                                  capture_output=True, text=True, timeout=5,
+                                  env=system_env, creationflags=creation_flags)
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            return False
+
+
+
+    def get_me3_full_version(self) -> Optional[str]:
+        """获取ME3完整安装版版本"""
+        try:
+            import subprocess
+            import re
+            # 使用系统环境变量运行me3 -V命令获取版本
+            system_env = self._get_system_env()
+            import sys
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            result = subprocess.run(['me3', '-V'],
+                                  capture_output=True, text=True, timeout=5,
+                                  env=system_env, creationflags=creation_flags)
+            if result.returncode == 0:
+                # 解析版本输出，支持 "me3 v0.8.1" 或 "0.8.1" 格式
+                output = result.stdout.strip()
+                version_match = re.search(r'v?(\d+\.\d+\.\d+)', output)
+                if version_match:
+                    # 返回带v前缀的版本号，与GitHub API格式保持一致
+                    return f"v{version_match.group(1)}"
+        except Exception as e:
+            print(f"获取ME3完整版版本失败: {e}")
+
+        return None
+
+    def get_me3_install_type(self) -> str:
+        """获取ME3安装类型"""
+        if self.is_me3_full_installed():
+            return "full"
+        elif self.is_me3_installed():
+            return "portable"
+        else:
+            return "none"
+
+    def get_version_by_type(self, version_type: str = None) -> Optional[str]:
+        """根据版本类型获取对应版本
+
+        Args:
+            version_type: 版本类型 ("full", "portable", None)
+                         None时自动检测当前安装类型
+
+        Returns:
+            对应版本号，如果未安装或获取失败则返回None
+        """
+        # 如果明确指定版本类型
+        if version_type == "full":
+            return self.get_me3_full_version()
+        elif version_type == "portable":
+            return self.get_current_version()
+
+        # 自动检测模式：优先检测安装版，再检测便携版
+        if self.is_me3_full_installed():
+            return self.get_me3_full_version()
+        elif self.is_me3_installed():
+            return self.get_current_version()
+
+        return None
     
     def check_for_updates(self) -> bool:
         """检查是否有更新"""
@@ -374,13 +566,32 @@ class DownloadManager(QObject):
     def get_current_easytier_version(self) -> Optional[str]:
         """获取当前安装的EasyTier版本"""
         try:
+            import subprocess
+            import re
+            # 执行EasyTier可执行文件获取真实版本
+            easytier_exe_path = self.esr_dir / "easytier-core.exe"
+            if easytier_exe_path.exists():
+                import sys
+                creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                result = subprocess.run([str(easytier_exe_path), '-V'],
+                                      capture_output=True, text=True, timeout=5,
+                                      creationflags=creation_flags)
+                if result.returncode == 0:
+                    # 解析版本输出，支持 "easytier-core 2.4.3-2145ef40" 格式
+                    output = result.stdout.strip()
+                    version_match = re.search(r'easytier-core\s+(\d+\.\d+\.\d+)', output)
+                    if version_match:
+                        # 返回版本号（不带v前缀，与EasyTier的格式保持一致）
+                        return version_match.group(1)
+
+            # 如果执行失败，回退到读取version.json（兼容性）
             if self.esr_version_file.exists():
                 with open(self.esr_version_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     return data.get('version')
             return None
         except Exception as e:
-            print(f"读取EasyTier版本失败: {e}")
+            print(f"获取EasyTier版本失败: {e}")
             return None
 
     def save_easytier_version(self, version: str, is_prerelease: bool = False):

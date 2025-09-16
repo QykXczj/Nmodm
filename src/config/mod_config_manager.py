@@ -103,7 +103,8 @@ class ModConfigManager:
                     # 排除非mod DLL文件
                     excluded_dlls = {
                         'libzstd.dll',
-                        'oo2core_9_win64.dll'
+                        'oo2core_9_win64.dll',
+                        'steam_api64.dll'
                     }
                     if item.name.lower() not in excluded_dlls:
                         natives.append(item.name)
@@ -160,7 +161,8 @@ class ModConfigManager:
             # 检查是否包含DLL文件（排除非mod DLL）
             excluded_dlls = {
                 'libzstd.dll',
-                'oo2core_9_win64.dll'
+                'oo2core_9_win64.dll',
+                'steam_api64.dll'
             }
 
             dll_files = [dll for dll in mod_path.glob("*.dll")
@@ -206,7 +208,8 @@ class ModConfigManager:
         # 排除的非mod DLL文件
         excluded_dlls = {
             'libzstd.dll',
-            'oo2core_9_win64.dll'
+            'oo2core_9_win64.dll',
+            'steam_api64.dll'
         }
 
         try:
@@ -479,9 +482,59 @@ class ModConfigManager:
         }
     
     def get_me3_executable_path(self) -> Optional[str]:
-        """获取ME3可执行文件路径"""
+        """获取ME3可执行文件路径（支持完整版和便携版）"""
+        # 1. 优先检查完整安装版
+        try:
+            import subprocess
+            # 使用系统环境变量运行me3 -V命令检测
+            env = self._get_system_env()
+            import sys
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            result = subprocess.run(['me3', '-V'],
+                                  capture_output=True, text=True, timeout=5,
+                                  env=env, creationflags=creation_flags)
+            if result.returncode == 0:
+                return "me3"  # 系统PATH中的命令
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            pass
+
+        # 2. 备用检查便携版
         me3_path = self.root_dir / "me3p" / "bin" / "me3.exe"
-        return str(me3_path) if me3_path.exists() else None
+        if me3_path.exists():
+            return str(me3_path)
+
+        # 3. 都没有
+        return None
+
+    def _get_system_env(self):
+        """获取系统环境变量（排除虚拟环境）"""
+        import os
+        env = os.environ.copy()
+
+        # 如果在虚拟环境中，过滤掉虚拟环境的PATH
+        if 'VIRTUAL_ENV' in env:
+            # 获取虚拟环境路径
+            venv_path = env['VIRTUAL_ENV']
+
+            # 过滤PATH中的虚拟环境路径
+            path_parts = env.get('PATH', '').split(os.pathsep)
+            filtered_parts = []
+
+            for part in path_parts:
+                # 跳过虚拟环境相关的路径
+                if not part.startswith(venv_path):
+                    filtered_parts.append(part)
+
+            # 重新构造PATH
+            new_path = os.pathsep.join(filtered_parts)
+            env['PATH'] = new_path
+
+            # 移除虚拟环境变量
+            del env['VIRTUAL_ENV']
+            if 'PYTHONHOME' in env:
+                del env['PYTHONHOME']
+
+        return env
 
     def load_external_mods(self):
         """加载外部mod配置"""
@@ -1397,7 +1450,9 @@ class ModConfigManager:
     def _write_custom_toml(self, config_data: Dict[str, Any], file_handle):
         """自定义TOML写入方法，确保正确的格式"""
         # 写入profileVersion
-        file_handle.write(f'profileVersion = "{config_data.get("profileVersion", "v1")}"\n\n')
+        file_handle.write(f'profileVersion = "{config_data.get("profileVersion", "v1")}"\n')
+        # 写入start_online
+        file_handle.write('start_online = true\n\n')
 
         # 写入supports部分
         file_handle.write('[[supports]]\n')

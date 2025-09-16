@@ -62,7 +62,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("3.0.8")
+        self.app.setApplicationVersion("3.0.9")
         self.app.setOrganizationName("Nmodm Team")
 
         # 初始化局域网模式检测器
@@ -141,7 +141,7 @@ class NmodmApp:
             "mods": (4, None),
             "lan_gaming": (5, None),
             "virtual_lan": (6, None),
-            "about": (7, None)
+            "misc": (7, None)
         }
 
     def get_or_create_page(self, page_name):
@@ -176,8 +176,8 @@ class NmodmApp:
         """创建具体的页面"""
         try:
             if page_name == "home":
-                from .ui.pages.home_page import HomePage
-                page = HomePage()
+                from .ui.pages.quick_launch_page import QuickLaunchPage
+                page = QuickLaunchPage()
                 page.navigate_to.connect(self.navigate_to_page)
                 return page
 
@@ -209,9 +209,9 @@ class NmodmApp:
                 page = VirtualLanPage()
                 return page
 
-            elif page_name == "about":
-                from .ui.pages.about_page import AboutPage
-                page = AboutPage()
+            elif page_name == "misc":
+                from .ui.pages.misc_page import MiscPage
+                page = MiscPage()
                 return page
 
         except Exception as e:

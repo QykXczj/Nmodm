@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 
         # 局域网模式状态
         self.is_lan_mode = False
-        self.base_title = "Nmodm v3.0.8"
+        self.base_title = "Nmodm v3.0.9"
 
         self.setup_window()
         self.setup_ui()
@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
         self.center_window()
 
         # 确保窗口在任务栏中正确显示
-        self.setWindowTitle("Nmodm v3.0.7")
+        self.setWindowTitle("Nmodm v3.0.9")
         
     def setup_ui(self):
         """设置UI"""

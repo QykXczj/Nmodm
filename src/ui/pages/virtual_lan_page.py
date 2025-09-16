@@ -113,7 +113,10 @@ class VirtualLanInitWorker(QThread):
 
 class VirtualLanPage(BasePage):
     """虚拟局域网页面"""
-    
+
+    # 🔧 添加线程安全的日志信号
+    log_signal = Signal(str, str)  # message, msg_type
+
     def __init__(self, parent=None):
         super().__init__("🌐 虚拟局域网", parent)
 
@@ -137,32 +140,60 @@ class VirtualLanPage(BasePage):
         self.easytier_manager.connection_info_updated.connect(self.on_connection_info_updated)
         self.easytier_manager.error_occurred.connect(self.on_error_occurred)
 
+        # 🔧 连接线程安全的日志信号到UI更新槽
+        self.log_signal.connect(self._update_log_ui)
+
         self.setup_content()
 
-        # 显示初始化状态
+        # 标记页面未被用户访问
+        self._user_visited = False
+        self._initialization_completed = False
+
+        # 显示初始化状态（但不执行耗时操作）
         self.show_initialization_status()
-
-        # 异步执行所有耗时的初始化操作
-        QTimer.singleShot(50, self.async_initialize_page)
-
-        # 延迟注册页面离开事件处理（等待页面完全加载）
-        QTimer.singleShot(1000, self.register_page_leave_handler)
 
     def show_initialization_status(self):
         """显示初始化状态提示"""
         try:
             # 设置初始状态显示
             if hasattr(self, 'status_label'):
-                self.status_label.setText("正在检查...")
-                self.status_label.setStyleSheet("color: #f9e2af; font-weight: bold;")
+                self.status_label.setText("点击页面开始初始化...")
+                self.status_label.setStyleSheet("color: #89b4fa; font-weight: bold;")
 
             if hasattr(self, 'version_label'):
-                self.version_label.setText("检查中...")
+                self.version_label.setText("等待初始化...")
 
             # 初始化提示已简化，不再显示技术细节
 
         except Exception as e:
             print(f"显示初始化状态失败: {e}")
+
+    def ensure_initialization(self):
+        """确保页面已初始化（仅在用户访问时执行）"""
+        if not self._initialization_completed and not hasattr(self, '_initializing'):
+            self._initializing = True
+            print("🔍 用户访问虚拟局域网页面，开始初始化...")
+
+            # 更新状态显示
+            if hasattr(self, 'status_label'):
+                self.status_label.setText("正在初始化...")
+                self.status_label.setStyleSheet("color: #f9e2af; font-weight: bold;")
+
+            # 异步执行所有耗时的初始化操作（使用线程安全方式）
+            self._schedule_async_initialization()
+            self._user_visited = True
+
+    def showEvent(self, event):
+        """页面显示事件 - 用户切换到此页面时触发"""
+        super().showEvent(event)
+        # 确保页面已初始化
+        self.ensure_initialization()
+
+    def mousePressEvent(self, event):
+        """鼠标点击事件 - 用户点击页面时触发"""
+        super().mousePressEvent(event)
+        # 确保页面已初始化
+        self.ensure_initialization()
 
     def async_initialize_page(self):
         """异步初始化页面 - 使用QThread执行耗时操作"""
@@ -177,7 +208,7 @@ class VirtualLanPage(BasePage):
             self.init_worker.start()
 
             # 延迟清理残余进程，防止干扰本次运行（不阻塞UI）
-            QTimer.singleShot(500, self.cleanup_residual_processes_async)
+            self._schedule_cleanup_processes()
 
         except Exception as e:
             print(f"启动异步初始化失败: {e}")
@@ -209,8 +240,13 @@ class VirtualLanPage(BasePage):
                     from src.utils.process_cleaner import process_cleaner
 
                     def ui_callback(message, level):
-                        """UI回调函数，将清理日志显示到界面"""
-                        self.log_message(message, level)
+                        """UI回调函数，将清理日志显示到界面（线程安全版本）"""
+                        # 🔧 使用线程安全的log_message方法
+                        try:
+                            # 现在log_message内部会自动处理线程安全问题
+                            self.log_message(message, level)
+                        except Exception as e:
+                            print(f"UI回调错误: {e}")
 
                     # 使用新的管理员权限清理方法
                     cleanup_success = process_cleaner.cleanup_winip_processes_with_admin_request(ui_callback)
@@ -231,39 +267,14 @@ class VirtualLanPage(BasePage):
             executor = ThreadPoolExecutor(max_workers=1)
             future = executor.submit(cleanup_task)
 
-            # 使用QTimer定期检查任务完成状态
-            self._cleanup_timer = QTimer()
-            self._cleanup_timer.timeout.connect(lambda: self._check_cleanup_completion(future, executor))
-            self._cleanup_timer.start(100)  # 每100ms检查一次
+            # 使用线程安全的方式检查任务完成状态
+            self._start_cleanup_monitoring(future, executor)
 
         except Exception as e:
             print(f"❌ 启动异步清理失败: {e}")
             self.log_message(f"⚠️ 启动后台清理时出现问题: {e}", "warning")
 
-    def _check_cleanup_completion(self, future, executor):
-        """检查清理任务完成状态"""
-        try:
-            if future.done():
-                # 任务完成，停止定时器
-                self._cleanup_timer.stop()
 
-                # 获取结果
-                success = future.result()
-
-                if success:
-                    print("✅ 异步清理完成")
-                    # 清理成功，静默处理
-                else:
-                    print("❌ 异步清理失败")
-                    self.log_message("⚠️ 后台进程清理遇到问题", "warning")
-
-                # 关闭线程池
-                executor.shutdown(wait=False)
-
-        except Exception as e:
-            print(f"❌ 检查清理状态失败: {e}")
-            self._cleanup_timer.stop()
-            executor.shutdown(wait=False)
 
     # 注释：原来的同步清理方法已移除，现在使用异步清理避免UI卡顿
 
@@ -607,18 +618,33 @@ class VirtualLanPage(BasePage):
                 else:
                     if retry_count < 3:  # 最多重试3次
                         print(f"⚠️ App实例或侧边栏未就绪，{2}秒后重试 ({retry_count + 1}/3)")
-                        QTimer.singleShot(2000, lambda: self.register_page_leave_handler(retry_count + 1))
+                        self._schedule_retry_register(retry_count + 1)
                     else:
                         print("⚠️ 无法获取App实例或侧边栏（已达最大重试次数）")
             else:
                 if retry_count < 3:  # 最多重试3次
                     print(f"⚠️ 主窗口或App实例未就绪，{2}秒后重试 ({retry_count + 1}/3)")
-                    QTimer.singleShot(2000, lambda: self.register_page_leave_handler(retry_count + 1))
+                    self._schedule_retry_register(retry_count + 1)
                 else:
                     print("⚠️ 无法获取主窗口或App实例（已达最大重试次数）")
         except Exception as e:
             print(f"❌ 注册页面离开事件处理失败: {e}")
             return False
+
+    def _schedule_retry_register(self, retry_count):
+        """线程安全的重试调度"""
+        import threading
+        import time
+
+        def retry_task():
+            try:
+                time.sleep(2)  # 等待2秒
+                self.register_page_leave_handler(retry_count)
+            except Exception as e:
+                print(f"重试注册失败: {e}")
+
+        retry_thread = threading.Thread(target=retry_task, daemon=True)
+        retry_thread.start()
 
     def on_page_changed(self, page_id: str):
         """处理页面切换事件"""
@@ -1521,7 +1547,25 @@ class VirtualLanPage(BasePage):
         return f"{adjective}{noun}{number}"
 
     def log_message(self, message: str, msg_type: str = "info"):
-        """在运行日志中显示消息"""
+        """线程安全的日志显示方法"""
+        # 🔧 线程安全检测和自动路由
+        from PySide6.QtCore import QThread
+        from PySide6.QtWidgets import QApplication
+
+        current_thread = QThread.currentThread()
+        main_thread = QApplication.instance().thread() if QApplication.instance() else None
+        is_main_thread = current_thread == main_thread
+
+        # 🔧 线程安全路由：根据线程类型选择处理方式
+        if is_main_thread:
+            # 在主线程，直接更新UI
+            self._update_log_ui(message, msg_type)
+        else:
+            # 在后台线程，发射信号
+            self.log_signal.emit(message, msg_type)
+
+    def _update_log_ui(self, message: str, msg_type: str = "info"):
+        """实际的UI更新方法（仅在主线程调用）"""
         if hasattr(self, 'log_text'):
             timestamp = time.strftime("%H:%M:%S")
 
@@ -3381,6 +3425,11 @@ class VirtualLanPage(BasePage):
             # 更新房间状态UI
             self.update_room_status_ui(room_result)
 
+            # 标记初始化完成
+            self._initialization_completed = True
+            if hasattr(self, '_initializing'):
+                delattr(self, '_initializing')
+
             # 初始化完成，静默处理
 
         except Exception as e:
@@ -3396,6 +3445,10 @@ class VirtualLanPage(BasePage):
             if hasattr(self, 'status_label'):
                 self.status_label.setText("初始化失败")
                 self.status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+
+            # 清除初始化标记
+            if hasattr(self, '_initializing'):
+                delattr(self, '_initializing')
 
         except Exception as e:
             print(f"初始化错误处理失败: {e}")
@@ -3865,8 +3918,7 @@ class VirtualLanPage(BasePage):
 
         # 只有在信息真正变化时才更新表格
         if old_network != new_network or old_ip != new_ip:
-            QTimer.singleShot(500, self.update_peer_table_with_local_info)
-            QTimer.singleShot(600, self.ensure_local_info_exists)
+            self._schedule_peer_table_updates()
 
     def on_error_occurred(self, error_message: str):
         """错误发生"""
@@ -3910,10 +3962,8 @@ class VirtualLanPage(BasePage):
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
 
-            # 网络连接后更新优化状态
-            QTimer.singleShot(2000, self.update_optimization_status)  # 延迟2秒更新
-            QTimer.singleShot(3000, self.refresh_optimization_tools_status)  # 延迟3秒刷新工具状态
-            QTimer.singleShot(4000, self.ensure_local_info_exists)  # 延迟4秒确保本机信息存在
+            # 网络连接后更新优化状态（使用线程安全方式）
+            self._schedule_delayed_updates()
         else:
             # 更新连接状态显示
             if hasattr(self, 'connection_status_label'):
@@ -5085,9 +5135,20 @@ class VirtualLanPage(BasePage):
             # 将内容区域添加到主布局
             layout.addWidget(content_widget)
 
-            # 启动异步数据加载
-            QTimer.singleShot(100, delayed_load)  # 100ms后开始加载接口数据
-            QTimer.singleShot(200, delayed_load_optimization)  # 200ms后开始加载优化状态
+            # 启动异步数据加载（使用线程安全方式）
+            import threading
+            def async_load_task():
+                import time
+                try:
+                    time.sleep(0.1)  # 100ms
+                    delayed_load()
+                    time.sleep(0.1)  # 再等100ms，总共200ms
+                    delayed_load_optimization()
+                except Exception as e:
+                    print(f"异步加载任务失败: {e}")
+
+            load_thread = threading.Thread(target=async_load_task, daemon=True)
+            load_thread.start()
 
             # 显示对话框
             dialog.exec()
@@ -5103,25 +5164,194 @@ class VirtualLanPage(BasePage):
 
 
     def start_status_monitoring(self):
-        """启动状态监控"""
+        """启动状态监控（线程安全版本）"""
         try:
-            # 启动定时器，每5秒刷新一次状态
+            # 🔧 线程安全检测
+            from PySide6.QtCore import QThread, QTimer
+            from PySide6.QtWidgets import QApplication
+
+            current_thread = QThread.currentThread()
+            main_thread = QApplication.instance().thread() if QApplication.instance() else None
+            is_main_thread = current_thread == main_thread
+
+            if is_main_thread:
+                # 在主线程，直接启动定时器
+                if not hasattr(self, 'status_timer'):
+                    self.status_timer = QTimer()
+                    self.status_timer.timeout.connect(self.refresh_optimization_tools_status)
+
+                self.status_timer.start(5000)  # 5秒间隔
+                print("✅ 状态监控已启动")
+            else:
+                # 在后台线程，使用信号槽机制
+                print("🔧 后台线程请求启动状态监控，使用信号槽机制")
+                # 使用QTimer.singleShot在主线程中执行
+                QTimer.singleShot(0, self._start_timer_in_main_thread)
+
+        except Exception as e:
+            print(f"❌ 启动状态监控失败: {e}")
+
+    def _start_timer_in_main_thread(self):
+        """在主线程中启动定时器"""
+        try:
             if not hasattr(self, 'status_timer'):
                 self.status_timer = QTimer()
                 self.status_timer.timeout.connect(self.refresh_optimization_tools_status)
 
             self.status_timer.start(5000)  # 5秒间隔
-            print("✅ 状态监控已启动")
-
+            print("✅ 状态监控已启动（通过信号槽）")
         except Exception as e:
-            print(f"❌ 启动状态监控失败: {e}")
+            print(f"❌ 主线程启动定时器失败: {e}")
 
     def stop_status_monitoring(self):
-        """停止状态监控"""
+        """停止状态监控（线程安全版本）"""
         try:
-            if hasattr(self, 'status_timer') and self.status_timer.isActive():
-                self.status_timer.stop()
-                print("✅ 状态监控已停止")
+            # 🔧 线程安全检测
+            from PySide6.QtCore import QThread, QTimer
+            from PySide6.QtWidgets import QApplication
+
+            current_thread = QThread.currentThread()
+            main_thread = QApplication.instance().thread() if QApplication.instance() else None
+            is_main_thread = current_thread == main_thread
+
+            if is_main_thread:
+                # 在主线程，直接停止定时器
+                if hasattr(self, 'status_timer') and self.status_timer.isActive():
+                    self.status_timer.stop()
+                    print("✅ 状态监控已停止")
+            else:
+                # 在后台线程，使用信号槽机制
+                print("🔧 后台线程请求停止状态监控，使用信号槽机制")
+                # 使用QTimer.singleShot在主线程中执行
+                QTimer.singleShot(0, self._stop_timer_in_main_thread)
 
         except Exception as e:
             print(f"❌ 停止状态监控失败: {e}")
+
+    def _stop_timer_in_main_thread(self):
+        """在主线程中停止定时器"""
+        try:
+            if hasattr(self, 'status_timer') and self.status_timer.isActive():
+                self.status_timer.stop()
+                print("✅ 状态监控已停止（通过信号槽）")
+        except Exception as e:
+            print(f"❌ 主线程停止定时器失败: {e}")
+
+    def _schedule_delayed_updates(self):
+        """线程安全的延迟更新调度"""
+        import threading
+
+        def delayed_update_task():
+            import time
+            try:
+                # 延迟2秒更新优化状态
+                time.sleep(2)
+                self.update_optimization_status()
+
+                # 延迟3秒刷新工具状态
+                time.sleep(1)  # 总共3秒
+                self.refresh_optimization_tools_status()
+
+                # 延迟4秒确保本机信息存在
+                time.sleep(1)  # 总共4秒
+                self.ensure_local_info_exists()
+
+            except Exception as e:
+                print(f"延迟更新任务失败: {e}")
+
+        # 在后台线程中执行延迟更新
+        update_thread = threading.Thread(target=delayed_update_task, daemon=True)
+        update_thread.start()
+
+    def _schedule_async_initialization(self):
+        """线程安全的异步初始化调度"""
+        import threading
+        import time
+
+        def init_task():
+            try:
+                time.sleep(0.05)  # 50ms
+                self.async_initialize_page()
+
+                # 等待初始化完成后再注册页面离开处理器
+                max_wait = 10  # 最多等待10秒
+                wait_count = 0
+                while not self._initialization_completed and wait_count < max_wait * 10:
+                    time.sleep(0.1)
+                    wait_count += 1
+
+                if self._initialization_completed:
+                    self.register_page_leave_handler()
+                else:
+                    print("⚠️ 初始化超时，跳过页面离开处理器注册")
+
+            except Exception as e:
+                print(f"异步初始化任务失败: {e}")
+
+        init_thread = threading.Thread(target=init_task, daemon=True)
+        init_thread.start()
+
+    def _schedule_cleanup_processes(self):
+        """线程安全的清理进程调度"""
+        import threading
+        import time
+
+        def cleanup_task():
+            try:
+                time.sleep(0.5)  # 500ms
+                self.cleanup_residual_processes_async()
+            except Exception as e:
+                print(f"清理进程任务失败: {e}")
+
+        cleanup_thread = threading.Thread(target=cleanup_task, daemon=True)
+        cleanup_thread.start()
+
+    def _schedule_peer_table_updates(self):
+        """线程安全的对等节点表格更新调度"""
+        import threading
+        import time
+
+        def update_task():
+            try:
+                time.sleep(0.5)  # 500ms
+                self.update_peer_table_with_local_info()
+
+                time.sleep(0.1)  # 再等100ms，总共600ms
+                self.ensure_local_info_exists()
+
+            except Exception as e:
+                print(f"对等节点表格更新任务失败: {e}")
+
+        update_thread = threading.Thread(target=update_task, daemon=True)
+        update_thread.start()
+
+    def _start_cleanup_monitoring(self, future, executor):
+        """线程安全的清理监控"""
+        import threading
+        import time
+
+        def monitor_task():
+            try:
+                # 每100ms检查一次任务状态
+                while not future.done():
+                    time.sleep(0.1)
+
+                # 任务完成，获取结果
+                success = future.result()
+
+                if success:
+                    print("✅ 异步清理完成")
+                else:
+                    print("❌ 异步清理失败")
+                    # 🔧 使用线程安全的log_message方法
+                    self.log_message("⚠️ 后台进程清理遇到问题", "warning")
+
+                # 关闭线程池
+                executor.shutdown(wait=False)
+
+            except Exception as e:
+                print(f"❌ 监控清理状态失败: {e}")
+                executor.shutdown(wait=False)
+
+        monitor_thread = threading.Thread(target=monitor_task, daemon=True)
+        monitor_thread.start()

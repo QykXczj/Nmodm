@@ -378,9 +378,9 @@ class ConfigPage(BasePage):
     def create_system_check_section_widget(self):
         """创建系统检查与修复区域widget"""
         section = ConfigSection("系统检查与修复")
-        # 设置尺寸策略：最小化空间占用
+        # 设置尺寸策略：允许动态扩展
         from PySide6.QtWidgets import QSizePolicy, QGridLayout
-        section.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        section.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         # 使用网格布局替代垂直布局
         layout = QGridLayout()
@@ -389,7 +389,7 @@ class ConfigPage(BasePage):
 
         # 上半部分：软件路径检测提醒
         path_check_container = QWidget()
-        path_check_container.setFixedHeight(120)  # 设置固定高度，保持整齐
+        path_check_container.setMinimumHeight(120)  # 设置最小高度，允许动态扩展
         path_check_layout = QVBoxLayout()
         path_check_layout.setContentsMargins(8, 8, 8, 8)
         path_check_layout.setSpacing(8)
@@ -452,7 +452,7 @@ class ConfigPage(BasePage):
 
         # 中间部分：OnlineFix完整性检测区域
         onlinefix_check_container = QWidget()
-        onlinefix_check_container.setFixedHeight(120)  # 设置固定高度，与路径检查保持一致
+        onlinefix_check_container.setMinimumHeight(120)  # 设置最小高度，允许动态扩展
         onlinefix_check_layout = QVBoxLayout()
         onlinefix_check_layout.setContentsMargins(8, 8, 8, 8)
         onlinefix_check_layout.setSpacing(8)
@@ -501,8 +501,8 @@ class ConfigPage(BasePage):
                 color: #1e1e2e;
                 font-weight: bold;
                 font-size: 11px;
-                padding: 8px 12px;
-                margin-top: 4px;
+                padding: 6px 10px;
+                margin-top: 2px;
             }
             QPushButton:hover {
                 background-color: #94d3a2;
@@ -527,10 +527,16 @@ class ConfigPage(BasePage):
 
         # 下半部分：steam_api64.dll检测区域
         dll_check_container = QWidget()
-        dll_check_container.setFixedHeight(100)  # 设置固定高度，稍低于上方区域
-        dll_check_layout = QVBoxLayout()
+        dll_check_container.setMinimumHeight(100)  # 设置最小高度，允许动态扩展
+        dll_check_layout = QHBoxLayout()  # 改为水平布局
         dll_check_layout.setContentsMargins(8, 8, 8, 8)
-        dll_check_layout.setSpacing(8)
+        dll_check_layout.setSpacing(12)
+
+        # 左侧：状态信息区域
+        dll_info_container = QWidget()
+        dll_info_layout = QVBoxLayout()
+        dll_info_layout.setContentsMargins(0, 0, 0, 0)
+        dll_info_layout.setSpacing(6)
 
         # DLL检测标题
         dll_check_title = QLabel("🔧 steam_api64.dll检测")
@@ -569,8 +575,20 @@ class ConfigPage(BasePage):
             }
         """)
 
+        dll_info_layout.addWidget(dll_check_title)
+        dll_info_layout.addWidget(self.dll_check_status)
+        dll_info_layout.addWidget(self.dll_size_info)
+        dll_info_layout.addStretch()  # 添加弹性空间
+        dll_info_container.setLayout(dll_info_layout)
+
+        # 右侧：修复按钮区域
+        dll_button_container = QWidget()
+        dll_button_layout = QVBoxLayout()
+        dll_button_layout.setContentsMargins(0, 0, 0, 0)
+        dll_button_layout.setSpacing(0)
+
         # 一键恢复按钮
-        self.dll_restore_btn = QPushButton("🔧 一键修复 steam_api64.dll")
+        self.dll_restore_btn = QPushButton("🔧 一键修复\nsteam_api64.dll")
         self.dll_restore_btn.setStyleSheet("""
             QPushButton {
                 background-color: #a6e3a1;
@@ -579,8 +597,9 @@ class ConfigPage(BasePage):
                 color: #1e1e2e;
                 font-weight: bold;
                 font-size: 11px;
-                padding: 8px 12px;
-                margin-top: 4px;
+                padding: 12px 16px;
+                min-width: 120px;
+                max-width: 140px;
             }
             QPushButton:hover {
                 background-color: #94d3a2;
@@ -596,10 +615,14 @@ class ConfigPage(BasePage):
         self.dll_restore_btn.clicked.connect(self.restore_steam_api_dll)
         self.dll_restore_btn.setVisible(False)  # 默认隐藏，检测到问题时显示
 
-        dll_check_layout.addWidget(dll_check_title)
-        dll_check_layout.addWidget(self.dll_check_status)
-        dll_check_layout.addWidget(self.dll_size_info)
-        dll_check_layout.addWidget(self.dll_restore_btn)
+        dll_button_layout.addStretch()  # 上方弹性空间
+        dll_button_layout.addWidget(self.dll_restore_btn)
+        dll_button_layout.addStretch()  # 下方弹性空间
+        dll_button_container.setLayout(dll_button_layout)
+
+        # 组装水平布局
+        dll_check_layout.addWidget(dll_info_container, 2)  # 左侧占2/3空间
+        dll_check_layout.addWidget(dll_button_container, 1)  # 右侧占1/3空间
         dll_check_container.setLayout(dll_check_layout)
         layout.addWidget(dll_check_container, 1, 0, 1, 2)  # 第二行，跨两列
 
@@ -634,11 +657,11 @@ class ConfigPage(BasePage):
                 self.show_status("未找到steam_api64.dll文件", "warning")
                 return
 
-            # 检查OnlineFix文件夹中的dll文件（在项目根目录下）
-            onlinefix_dir = os.path.join(os.getcwd(), "OnlineFix")
-            onlinefix_dll = os.path.join(onlinefix_dir, "steam_api64.dll")
+            # 检查OnlineFix文件夹中的dll文件
+            onlinefix_dir = self.config_manager.onlinefix_dir
+            onlinefix_dll = onlinefix_dir / "steam_api64.dll"
 
-            if not os.path.exists(onlinefix_dll):
+            if not onlinefix_dll.exists():
                 self.show_status("未找到OnlineFix文件夹中的steam_api64.dll", "warning")
                 return
 
@@ -651,7 +674,7 @@ class ConfigPage(BasePage):
 
             # 复制OnlineFix中的dll文件
             import shutil
-            shutil.copy2(onlinefix_dll, steam_api_path)
+            shutil.copy2(str(onlinefix_dll), steam_api_path)
 
             self.show_status("steam_api64.dll恢复成功", "success")
             self.dll_restore_btn.setVisible(False)  # 隐藏恢复按钮
@@ -903,9 +926,9 @@ class ConfigPage(BasePage):
             game_dir = os.path.dirname(game_path)
             steam_api_path = os.path.join(game_dir, "steam_api64.dll")
 
-            # OnlineFix文件夹在项目根目录下
-            onlinefix_dir = os.path.join(os.getcwd(), "OnlineFix")
-            onlinefix_dll = os.path.join(onlinefix_dir, "steam_api64.dll")
+            # 使用统一的OnlineFix路径
+            onlinefix_dir = self.config_manager.onlinefix_dir
+            onlinefix_dll = onlinefix_dir / "steam_api64.dll"
             backup_dll = steam_api_path + ".bak"
 
             if not os.path.exists(steam_api_path):
@@ -930,10 +953,10 @@ class ConfigPage(BasePage):
 
             # 检查是否存在备份文件和OnlineFix文件
             has_backup = os.path.exists(backup_dll)
-            has_onlinefix = os.path.exists(onlinefix_dll)
+            has_onlinefix = onlinefix_dll.exists()
 
             if has_onlinefix:
-                onlinefix_size = os.path.getsize(onlinefix_dll)
+                onlinefix_size = onlinefix_dll.stat().st_size
                 onlinefix_size_kb = onlinefix_size / 1024
 
                 # 比较两个文件的大小

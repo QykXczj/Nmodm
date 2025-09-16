@@ -6,7 +6,6 @@
 import sys
 import time
 import subprocess
-import tempfile
 import os
 from typing import List, Tuple
 
@@ -157,8 +156,9 @@ class ProcessCleaner:
                 if self.is_admin:
                     # 有管理员权限，直接使用taskkill
                     log_func("第三阶段：使用管理员权限清理...")
-                    result = subprocess.run(['taskkill', '/f', '/im', 'WinIPBroadcast.exe'], 
-                                          capture_output=True, text=True)
+                    result = subprocess.run(['taskkill', '/f', '/im', 'WinIPBroadcast.exe'],
+                                          capture_output=True, text=True,
+                                          creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
                     if result.returncode == 0:
                         log_func("✅ 使用管理员权限成功清理WinIPBroadcast进程", "info")
                         return True
@@ -184,12 +184,14 @@ class ProcessCleaner:
             return False
     
     def _request_admin_cleanup(self, log_func) -> bool:
-        """请求管理员权限进行清理（模拟启动网络时的机制）"""
+        """请求管理员权限进行清理（异步非阻塞版本）"""
         try:
             log_func("🔐 检测到管理员权限进程，正在请求管理员权限清理...", "info")
 
             if sys.platform == "win32":
                 import ctypes
+                import threading
+                import time
 
                 # 使用ShellExecute以管理员权限运行taskkill命令
                 shell32 = ctypes.windll.shell32
@@ -197,50 +199,34 @@ class ProcessCleaner:
                 # 构建清理命令
                 cmd = "taskkill /f /im WinIPBroadcast.exe"
 
-                result = shell32.ShellExecuteW(
-                    None,                    # hwnd
-                    "runas",                 # lpOperation (以管理员身份运行)
-                    "cmd.exe",               # lpFile
-                    f"/c {cmd}",             # lpParameters
-                    None,                    # lpDirectory
-                    0                        # nShowCmd (隐藏窗口)
-                )
+                # 使用线程执行，避免阻塞UI线程和QTimer跨线程问题
+                def execute_admin_command():
+                    try:
+                        result = shell32.ShellExecuteW(
+                            None,                    # hwnd
+                            "runas",                 # lpOperation (以管理员身份运行)
+                            "cmd.exe",               # lpFile
+                            f"/c {cmd}",             # lpParameters
+                            None,                    # lpDirectory
+                            0                        # nShowCmd (隐藏窗口)
+                        )
 
-                if result > 32:  # 成功
-                    log_func("✅ 管理员权限请求成功，正在清理进程...", "info")
-                    # 等待命令执行完成
-                    time.sleep(3)
+                        if result > 32:  # 成功
+                            log_func("✅ 管理员权限请求成功，正在清理进程...", "info")
+                            # 等待3秒让命令执行完成
+                            time.sleep(3)
+                            # 验证清理效果
+                            self._verify_admin_cleanup(log_func)
+                        else:
+                            self._handle_admin_cleanup_error(result, log_func)
+                    except Exception as e:
+                        log_func(f"❌ 管理员权限执行失败: {e}", "error")
+                        log_func("💡 建议手动清理或以管理员权限重启程序", "info")
 
-                    # 验证清理效果
-                    final_check = []
-                    import psutil
-                    for proc in psutil.process_iter(['pid', 'name']):
-                        try:
-                            if proc.info['name'].lower() == 'winipbroadcast.exe':
-                                final_check.append(proc)
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            continue
-
-                    if final_check:
-                        log_func(f"⚠️ 仍有 {len(final_check)} 个进程未能清理", "warning")
-                        log_func("💡 可能需要手动结束进程", "info")
-                        return False
-                    else:
-                        log_func("✅ 所有WinIPBroadcast进程已成功清理", "info")
-                        return True
-                else:
-                    log_func(f"❌ 管理员权限请求失败，错误代码: {result}", "error")
-                    if result == 5:
-                        log_func("   用户取消了UAC提示", "warning")
-                    elif result == 2:
-                        log_func("   系统文件未找到", "error")
-                    elif result == 31:
-                        log_func("   没有关联的应用程序", "error")
-
-                    # 回退到原来的提示
-                    log_func("💡 如需完全清理，请以管理员权限重启程序", "info")
-                    log_func("💡 或运行项目根目录下的'清理WinIPBroadcast进程.bat'文件", "info")
-                    return False
+                # 使用线程执行，避免阻塞UI
+                thread = threading.Thread(target=execute_admin_command, daemon=True)
+                thread.start()
+                return True  # 返回True表示已启动异步清理
             else:
                 # 非Windows系统，使用sudo
                 log_func("🔐 请求sudo权限清理WinIPBroadcast进程...", "info")
@@ -352,6 +338,45 @@ class ProcessCleaner:
         except Exception as e:
             print(f"❌ 进程清理失败: {e}")
             return False
+
+    def _verify_admin_cleanup(self, log_func):
+        """异步验证管理员权限清理效果"""
+        try:
+            import psutil
+
+            # 验证清理效果
+            final_check = []
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() == 'winipbroadcast.exe':
+                        final_check.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            if final_check:
+                log_func(f"⚠️ 仍有 {len(final_check)} 个进程未能清理", "warning")
+                log_func("💡 可能需要手动结束进程", "info")
+            else:
+                log_func("✅ 所有WinIPBroadcast进程已成功清理", "info")
+
+        except Exception as e:
+            log_func(f"❌ 验证清理效果失败: {e}", "error")
+
+    def _handle_admin_cleanup_error(self, result, log_func):
+        """处理管理员权限清理错误"""
+        log_func(f"❌ 管理员权限请求失败，错误代码: {result}", "error")
+        if result == 5:
+            log_func("   用户取消了UAC提示", "warning")
+        elif result == 2:
+            log_func("   系统文件未找到", "error")
+        elif result == 31:
+            log_func("   没有关联的应用程序", "error")
+
+        # 回退到原来的提示
+        log_func("💡 如需完全清理，请以管理员权限重启程序", "info")
+        log_func("💡 或运行项目根目录下的'清理WinIPBroadcast进程.bat'文件", "info")
+
+
 
 
 # 全局实例

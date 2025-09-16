@@ -52,6 +52,11 @@ class ToolManager:
         # 确保目录存在
         self.tool_dir.mkdir(parents=True, exist_ok=True)
 
+        # 性能优化：缓存完整性检查结果
+        self._integrity_cache = None
+        self._integrity_cache_time = 0
+        self._cache_valid_duration = 300  # 5分钟缓存有效期
+
         # 记录初始化信息（只在第一次初始化时显示）
         # ToolManager初始化完成，静默处理
 
@@ -59,7 +64,15 @@ class ToolManager:
         self._initialized = True
     
     def check_tools_integrity(self) -> Dict[str, bool]:
-        """检查工具完整性（增强版本）"""
+        """检查工具完整性（增强版本，带缓存优化）"""
+        import time
+
+        # 检查缓存是否有效
+        current_time = time.time()
+        if (self._integrity_cache is not None and
+            current_time - self._integrity_cache_time < self._cache_valid_duration):
+            return self._integrity_cache
+
         integrity_status = {}
 
         for tool_file, description in self.required_tools.items():
@@ -99,6 +112,10 @@ class ToolManager:
             except Exception as e:
                 print(f"检查工具文件时出错 {tool_file}: {e}")
                 integrity_status[tool_file] = False
+
+        # 更新缓存
+        self._integrity_cache = integrity_status
+        self._integrity_cache_time = current_time
 
         return integrity_status
 
@@ -193,6 +210,15 @@ class ToolManager:
                 print(f"❌ 工具包不存在: {self.tool_zip_path}")
                 return False
 
+            # 检查ZIP文件完整性
+            import zipfile
+            if not zipfile.is_zipfile(self.tool_zip_path):
+                print(f"❌ 工具包文件损坏")
+                return False
+
+            # 确保目标目录存在
+            self.tool_dir.mkdir(parents=True, exist_ok=True)
+
             print(f"📦 开始解压工具包: {self.tool_zip_path}")
 
             # 解压到临时目录，然后移动文件
@@ -200,24 +226,24 @@ class ToolManager:
                 # 获取压缩包内的文件列表
                 file_list = zip_ref.namelist()
                 print(f"📋 压缩包包含 {len(file_list)} 个文件")
-                
+
                 # 解压所有文件到tool目录
                 for file_info in zip_ref.infolist():
                     # 跳过目录
                     if file_info.is_dir():
                         continue
-                    
+
                     # 获取文件名（去除路径）
                     filename = Path(file_info.filename).name
-                    
+
                     # 只解压我们需要的工具文件
                     if filename in self.required_tools:
                         target_path = self.tool_dir / filename
-                        
+
                         # 如果文件已存在，先删除
                         if target_path.exists():
                             target_path.unlink()
-                        
+
                         # 解压文件
                         with zip_ref.open(file_info) as source, open(target_path, 'wb') as target:
                             shutil.copyfileobj(source, target)
@@ -236,65 +262,79 @@ class ToolManager:
             return False
     
     def ensure_tools_available(self) -> bool:
-        """确保工具可用（检查完整性，必要时解压）"""
-        # 操作: 检查工具可用性
+        """确保工具可用（检查完整性，必要时解压）- 性能优化版本"""
+        import time
+
         try:
-                # 1. 检查是否已有解压完成标志
-                if self.tool_extracted_flag.exists():
-                    # 检查工具完整性
-                    integrity_status = self.check_tools_integrity()
-                    missing_tools = [tool for tool, exists in integrity_status.items() if not exists]
+            # 快速路径：检查标志文件时间戳
+            if self.tool_extracted_flag.exists():
+                try:
+                    flag_time = self.tool_extracted_flag.stat().st_mtime
+                    current_time = time.time()
 
-                    if not missing_tools:
-                        print("✅ 所有工具文件完整（已有解压标志）")
+                    # 如果标志文件是最近创建的（1小时内），跳过完整性检查
+                    if current_time - flag_time < 3600:  # 1小时
+                        print("✅ 工具文件最近已验证，跳过检查")
                         return True
-                    else:
-                        print(f"⚠️ 发现缺失工具，重新解压: {', '.join(missing_tools)}")
-                        # 删除标志文件，重新解压
-                        self.tool_extracted_flag.unlink()
+                except Exception:
+                    pass  # 如果获取时间戳失败，继续正常检查流程
 
-                # 2. 检查工具完整性
+                # 检查工具完整性（使用缓存）
                 integrity_status = self.check_tools_integrity()
                 missing_tools = [tool for tool, exists in integrity_status.items() if not exists]
 
                 if not missing_tools:
-                    # 工具完整但没有标志，创建标志
-                    self.create_extraction_flag()
-                    print("✅ 所有工具文件完整")
+                    print("✅ 所有工具文件完整（已有解压标志）")
                     return True
-
-                print(f"⚠️ 发现缺失工具: {', '.join(missing_tools)}")
-
-                # 3. 检查OnlineFix文件夹中的tool.zip
-                if not self.tool_zip_path.exists():
-                    # 检查ESR文件夹中是否有旧的tool.zip（向后兼容）
-                    old_tool_zip = self.esr_dir / "tool.zip"
-                    if old_tool_zip.exists():
-                        print("📦 发现旧版tool.zip，迁移到OnlineFix文件夹")
-                        self.onlinefix_dir.mkdir(exist_ok=True)
-                        if self.tool_zip_path.exists():
-                            self.tool_zip_path.unlink()
-                        shutil.move(str(old_tool_zip), str(self.tool_zip_path))
-                        print("✅ tool.zip已迁移到OnlineFix文件夹")
-                    else:
-                        print("❌ 工具包不存在")
-                        return False
-
-                # 4. 尝试解压工具包
-                if self.extract_tools():
-                    # 重新检查完整性
-                    integrity_status = self.check_tools_integrity()
-                    missing_tools = [tool for tool, exists in integrity_status.items() if not exists]
-
-                    if not missing_tools:
-                        print("✅ 工具解压后完整性检查通过")
-                        return True
-                    else:
-                        print(f"❌ 解压后仍有缺失工具: {', '.join(missing_tools)}")
-                        return False
                 else:
-                    print("❌ 工具包解压失败")
+                    print(f"⚠️ 发现缺失工具，重新解压: {', '.join(missing_tools)}")
+                    # 删除标志文件，重新解压
+                    self.tool_extracted_flag.unlink()
+                    # 清除缓存，强制重新检查
+                    self._integrity_cache = None
+
+            # 2. 检查工具完整性
+            integrity_status = self.check_tools_integrity()
+            missing_tools = [tool for tool, exists in integrity_status.items() if not exists]
+
+            if not missing_tools:
+                # 工具完整但没有标志，创建标志
+                self.create_extraction_flag()
+                print("✅ 所有工具文件完整")
+                return True
+
+            print(f"⚠️ 发现缺失工具: {', '.join(missing_tools)}")
+
+            # 3. 检查OnlineFix文件夹中的tool.zip
+            if not self.tool_zip_path.exists():
+                # 检查ESR文件夹中是否有旧的tool.zip（向后兼容）
+                old_tool_zip = self.esr_dir / "tool.zip"
+                if old_tool_zip.exists():
+                    print("📦 发现旧版tool.zip，迁移到OnlineFix文件夹")
+                    self.onlinefix_dir.mkdir(exist_ok=True)
+                    if self.tool_zip_path.exists():
+                        self.tool_zip_path.unlink()
+                    shutil.move(str(old_tool_zip), str(self.tool_zip_path))
+                    print("✅ tool.zip已迁移到OnlineFix文件夹")
+                else:
+                    print("❌ 工具包不存在")
                     return False
+
+            # 4. 尝试解压工具包
+            if self.extract_tools():
+                # 重新检查完整性
+                integrity_status = self.check_tools_integrity()
+                missing_tools = [tool for tool, exists in integrity_status.items() if not exists]
+
+                if not missing_tools:
+                    print("✅ 工具解压后完整性检查通过")
+                    return True
+                else:
+                    print(f"❌ 解压后仍有缺失工具: {', '.join(missing_tools)}")
+                    return False
+            else:
+                print("❌ 工具包解压失败")
+                return False
 
         except Exception as e:
             print(f"❌ 工具可用性检查失败: {e}")
@@ -305,6 +345,11 @@ class ToolManager:
         try:
             import time
             self.tool_extracted_flag.write_text(f"Tools extracted at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # 清除缓存，确保下次检查时重新验证
+            self._integrity_cache = None
+            self._integrity_cache_time = 0
+
             print("✅ 已创建工具解压完成标志")
         except Exception as e:
             print(f"创建解压标志失败: {e}")

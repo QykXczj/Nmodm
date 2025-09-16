@@ -598,10 +598,19 @@ class ModsPage(BasePage):
             # 检查是否为缺失的外部DLL
             is_missing = is_external and clean_name in missing_mods['natives']
 
+            # 提取DLL文件名（去除路径）
+            display_dll_name = dll_name
+            if "/" in dll_name and not dll_name.endswith(" (外部)"):
+                # 对于内部DLL，提取文件名部分
+                display_dll_name = dll_name.split("/")[-1]
+            elif dll_name.endswith(" (外部)"):
+                # 对于外部DLL，保持原样
+                display_dll_name = dll_name
+
             if is_missing:
-                display_text = f"❌ {dll_name} [缺失]"
+                display_text = f"❌ {display_dll_name} [缺失]"
             else:
-                display_text = f"🔧 {dll_name}"
+                display_text = f"🔧 {display_dll_name}"
 
             if comment:
                 display_text += f" - {comment}"
@@ -724,6 +733,7 @@ class ModsPage(BasePage):
         lines.append("# 由Nmodm自动生成")
         lines.append("")
         lines.append('profileVersion = "v1"')
+        lines.append('start_online = true')
         lines.append("")
 
         # 添加packages
@@ -797,6 +807,18 @@ class ModsPage(BasePage):
             self.show_status("保存配置失败", "error")
             return
 
+        # 清理冲突进程
+        self.show_status("正在准备启动游戏...", "info")
+        # 强制UI刷新，确保状态显示及时更新
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
+
+        try:
+            from src.utils.game_process_cleaner import cleanup_game_processes
+            cleanup_game_processes()
+        except Exception as e:
+            print(f"清理进程时发生错误: {e}")
+
         # 构建启动命令
         config_file = str(self.mod_manager.config_file)
         cmd = [
@@ -810,9 +832,19 @@ class ModsPage(BasePage):
 
         try:
             # 启动游戏
-            self.show_status("正在启动游戏...", "info")
-            subprocess.Popen(cmd, cwd=os.path.dirname(me3_exe))
-            self.show_status("游戏启动成功", "success")
+            import sys
+
+            # 设置创建标志以隐藏控制台窗口
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+            if me3_exe == "me3":
+                # 完整安装版：不需要指定工作目录
+                subprocess.Popen(cmd, creationflags=creation_flags)
+                self.show_status("游戏启动成功（使用完整安装版ME3）", "success")
+            else:
+                # 便携版：需要指定工作目录
+                subprocess.Popen(cmd, cwd=os.path.dirname(me3_exe), creationflags=creation_flags)
+                self.show_status("游戏启动成功（使用便携版ME3）", "success")
         except Exception as e:
             self.show_status(f"启动失败: {str(e)}", "error")
 
@@ -1053,7 +1085,7 @@ class ModsPage(BasePage):
             config_action.triggered.connect(lambda: self.configure_nrsc_settings())
         elif clean_name.endswith("nighter.dll") or "nighter" in clean_name:
             print(f"✅ 添加 nighter.dll 配置菜单")
-            difficulty_action = menu.addAction("🌙 调整难度")
+            difficulty_action = menu.addAction("🌙 深夜模式设置")
             difficulty_action.triggered.connect(lambda: self.configure_nighter_difficulty())
         else:
             print(f"ℹ️ DLL '{clean_name}' 无特殊配置选项")
@@ -1202,7 +1234,13 @@ class ModsPage(BasePage):
     def update_native_display(self, dll_name: str, checkbox: QCheckBox, comment: str):
         """更新DLL显示（包含备注）"""
         is_external = dll_name in self.mod_manager.external_natives
-        display_name = f"{dll_name} (外部)" if is_external else dll_name
+
+        # 提取DLL文件名（去除路径）
+        if is_external:
+            display_name = f"{dll_name} (外部)"
+        else:
+            # 对于内部DLL，只显示文件名
+            display_name = dll_name.split("/")[-1] if "/" in dll_name else dll_name
 
         if comment:
             display_text = f"🔧 {display_name} - {comment}"
@@ -1329,6 +1367,7 @@ class ModsPage(BasePage):
                 color: #cdd6f4;
                 font-size: 14px;
                 font-weight: bold;
+                background-color: transparent;
             }
             QSpinBox {
                 background-color: #313244;
@@ -1474,8 +1513,9 @@ class ModsPage(BasePage):
         dialog.exec()
 
     def configure_nighter_difficulty(self):
-        """配置Nighter难度"""
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QRadioButton, QButtonGroup
+        """配置Nighter设置"""
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                       QPushButton, QRadioButton, QButtonGroup, QCheckBox)
         from PySide6.QtCore import Qt
         import json
         import os
@@ -1492,7 +1532,13 @@ class ModsPage(BasePage):
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
 
-            current_level = config.get('deepNightLevel', 5)
+            # 读取实际的配置结构
+            force_unlock_deep_night = config.get('forceUnlockDeepNight', True)
+            force_deep_night = config.get('forceDeepNight', {'enable': False, 'level': 3})
+            bypass_online_check = config.get('bypassOnlineCheck', False)
+
+            current_enable = force_deep_night.get('enable', False)
+            current_level = force_deep_night.get('level', 3)
 
         except Exception as e:
             self.show_status(f"读取配置文件失败: {e}", "error")
@@ -1502,7 +1548,7 @@ class ModsPage(BasePage):
         dialog = QDialog(self)
         dialog.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         dialog.setModal(True)
-        dialog.resize(500, 320)
+        dialog.resize(520, 400)
         dialog.setStyleSheet("""
             QDialog {
                 background-color: #1e1e2e;
@@ -1514,12 +1560,17 @@ class ModsPage(BasePage):
                 color: #cdd6f4;
                 font-size: 14px;
                 font-weight: bold;
+                background-color: transparent;
             }
             QRadioButton {
                 color: #cdd6f4;
                 font-size: 14px;
                 padding: 8px;
                 spacing: 10px;
+                background-color: transparent;
+            }
+            QRadioButton:disabled {
+                color: #45475a;
             }
             QRadioButton::indicator {
                 width: 18px;
@@ -1538,6 +1589,35 @@ class ModsPage(BasePage):
             QRadioButton::indicator:checked:hover {
                 border-color: #f9e2af;
                 background-color: #f9e2af;
+            }
+            QRadioButton::indicator:disabled {
+                border-color: #313244;
+                background-color: #1e1e2e;
+            }
+            QCheckBox {
+                color: #cdd6f4;
+                font-size: 14px;
+                padding: 8px;
+                spacing: 10px;
+                background-color: transparent;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 3px;
+                border: 2px solid #45475a;
+                background-color: #313244;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #89b4fa;
+            }
+            QCheckBox::indicator:checked {
+                border-color: #89b4fa;
+                background-color: #89b4fa;
+            }
+            QCheckBox::indicator:checked:hover {
+                border-color: #7aa2f7;
+                background-color: #7aa2f7;
             }
             QPushButton {
                 background-color: #a6e3a1;
@@ -1579,7 +1659,7 @@ class ModsPage(BasePage):
 
         # 标题栏
         title_bar = QHBoxLayout()
-        title_label = QLabel("🌙 Nighter 深夜难度设置")
+        title_label = QLabel("🌙 Nighter 深夜模式设置")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #fab387;")
 
         close_button = QPushButton("×")
@@ -1597,73 +1677,249 @@ class ModsPage(BasePage):
         separator.setStyleSheet("background-color: #45475a; margin: 10px 0;")
         layout.addWidget(separator)
 
-        # 当前难度显示（固定显示调整前的难度，不会跟随用户选择变化）
-        current_label = QLabel(f"调整前难度: 等级 {current_level}")
-        current_label.setStyleSheet("font-size: 16px; color: #fab387; margin-bottom: 15px;")
-        layout.addWidget(current_label)
+        # 主内容区域 - 水平布局
+        content_layout = QHBoxLayout()
+
+        # 左侧设置区域
+        left_widget = QWidget()
+        left_widget.setStyleSheet("background-color: transparent;")
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 10, 0)
+        left_layout.setSpacing(2)  # 设置更紧密的垂直间距
+
+        # 基础设置区域
+        basic_settings_label = QLabel("🔧 基础设置")
+        basic_settings_label.setStyleSheet("font-size: 16px; color: #89b4fa; margin-bottom: 3px; background-color: transparent;")
+        left_layout.addWidget(basic_settings_label)
+
+        # 强制解锁深夜模式
+        unlock_checkbox = QCheckBox("强制解锁深夜模式")
+        unlock_checkbox.setChecked(force_unlock_deep_night)
+        unlock_checkbox.setStyleSheet("background-color: transparent; margin: 1px 0;")
+        left_layout.addWidget(unlock_checkbox)
+
+        # 绕过在线检查
+        bypass_checkbox = QCheckBox("绕过在线检查")
+        bypass_checkbox.setChecked(bypass_online_check)
+        bypass_checkbox.setStyleSheet("background-color: transparent; margin: 1px 0;")
+        left_layout.addWidget(bypass_checkbox)
+
+        # 强制指定深夜难度
+        force_night_label = QLabel("🌙 强制指定深夜难度")
+        force_night_label.setStyleSheet("font-size: 16px; color: #89b4fa; margin: 5px 0 3px 0; background-color: transparent;")
+        left_layout.addWidget(force_night_label)
+
+        # 启用强制指定深夜难度
+        enable_force_checkbox = QCheckBox("启用强制指定深夜难度")
+        enable_force_checkbox.setChecked(current_enable)
+        enable_force_checkbox.setStyleSheet("background-color: transparent; margin: 1px 0;")
+        left_layout.addWidget(enable_force_checkbox)
+
+        left_layout.addStretch()
+
+        # 右侧难度选择区域
+        right_widget = QWidget()
+        right_widget.setStyleSheet("background-color: transparent;")
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(10, 0, 0, 0)
+
+        # 难度选择标题
+        level_label = QLabel("选择深夜难度:")
+        level_label.setStyleSheet("font-size: 16px; color: #89b4fa; margin-bottom: 10px; background-color: transparent;")
+        right_layout.addWidget(level_label)
 
         # 单选框组
         radio_group = QButtonGroup()
         radio_buttons = []
 
-        # 创建单选框
+        # 创建网格布局容器
+        from PySide6.QtWidgets import QGridLayout
+        radio_grid_widget = QWidget()
+        radio_grid_widget.setStyleSheet("background-color: transparent;")
+        radio_grid_layout = QGridLayout(radio_grid_widget)
+        radio_grid_layout.setContentsMargins(0, 0, 0, 0)
+        radio_grid_layout.setSpacing(5)
+
+        # 创建单选框 - 网格布局，每行两个
         for level in range(1, 6):
-            radio = QRadioButton(f"难度等级 {level}")
+            radio = QRadioButton(f"深夜 {level}")
             radio.setChecked(level == current_level)
+            radio.setEnabled(current_enable)  # 初始状态根据强制指定深夜难度决定
+            radio.setStyleSheet("background-color: transparent;")
             radio_buttons.append(radio)
             radio_group.addButton(radio, level)
-            layout.addWidget(radio)
 
-        # 当前选择的难度描述
-        desc_label = QLabel(f"当前选择: 难度等级 {current_level}")
-        desc_label.setStyleSheet("font-size: 14px; color: #a6e3a1; margin: 15px 0; text-align: center;")
-        desc_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(desc_label)
+            # 计算网格位置：每行两个
+            row = (level - 1) // 2
+            col = (level - 1) % 2
+            radio_grid_layout.addWidget(radio, row, col)
 
-        # 更新描述的函数（只更新选择描述，不更新调整前难度显示）
-        def update_description(button):
-            if button.isChecked():
-                level = radio_group.id(button)
-                desc_label.setText(f"当前选择: 难度等级 {level}")
+        right_layout.addWidget(radio_grid_widget)
 
-        # 连接信号
-        for radio in radio_buttons:
-            radio.toggled.connect(lambda checked, btn=radio: update_description(btn) if checked else None)
+        right_layout.addStretch()
 
-        # 按钮
-        button_layout = QHBoxLayout()
+        # 组装左右布局
+        content_layout.addWidget(left_widget, 1)
+        content_layout.addWidget(right_widget, 1)
+        layout.addLayout(content_layout)
 
+        # 启用/禁用难度选择的函数
+        def toggle_difficulty_selection(enabled):
+            for radio in radio_buttons:
+                radio.setEnabled(enabled)
+            # 同时更新标题颜色
+            if enabled:
+                level_label.setStyleSheet("font-size: 16px; color: #89b4fa; margin-bottom: 10px; background-color: transparent;")
+            else:
+                level_label.setStyleSheet("font-size: 16px; color: #45475a; margin-bottom: 10px; background-color: transparent;")
+
+        # 连接强制指定深夜难度复选框信号
+        enable_force_checkbox.toggled.connect(toggle_difficulty_selection)
+
+        # 初始化标题颜色
+        toggle_difficulty_selection(current_enable)
+
+        # 注意事项区域 - 参考工具下载界面样式
+        from PySide6.QtWidgets import QGroupBox
+        notice_section = QGroupBox("注意事项")
+        notice_section.setStyleSheet("""
+            QGroupBox {
+                color: #cdd6f4;
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #313244;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 8px 0 8px;
+                color: #89b4fa;
+            }
+        """)
+
+        notice_layout = QVBoxLayout()
+        notice_layout.setSpacing(10)
+
+        # 说明文字 - 参考工具下载界面样式
+        help_text = """强制解锁深夜如果不勾选则出击界面没有深夜选项；
+绕过在线检查可解决离线无历战王和深夜的问题；
+启用强制指定深夜难度后才能调整深夜难度；
+"动态链接库初始化例程失败"的报错去工具下载页"""
+
+        help_label = QLabel(help_text)
+        help_label.setStyleSheet("""
+            QLabel {
+                color: #fab387;
+                font-size: 13px;
+                font-family: 'Segoe UI', 'Microsoft YaHei UI Light', sans-serif;
+                font-weight: 300;
+                line-height: 1.4;
+                padding: 10px;
+                background-color: #1e1e2e;
+                border-radius: 6px;
+                border: 1px solid #313244;
+            }
+        """)
+        help_label.setWordWrap(True)
+        notice_layout.addWidget(help_label)
+
+        notice_section.setLayout(notice_layout)
+
+        # 底部区域 - 说明栏和按钮水平布局
+        bottom_layout = QHBoxLayout()
+
+        # 按钮区域
+        button_widget = QWidget()
+        button_layout = QVBoxLayout(button_widget)
+        button_layout.setSpacing(8)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 重置默认按钮
+        reset_button = QPushButton("重置默认")
+        reset_button.setFixedSize(80, 35)
+
+        # 保存按钮
         ok_button = QPushButton("保存")
-        cancel_button = QPushButton("取消")
+        ok_button.setFixedSize(80, 35)
 
-        button_layout.addStretch()
-        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(reset_button)
         button_layout.addWidget(ok_button)
-        layout.addLayout(button_layout)
+
+        bottom_layout.addWidget(notice_section, 1)  # 说明栏占主要空间
+        bottom_layout.addWidget(button_widget, 0, Qt.AlignVCenter)  # 按钮组垂直居中
+
+        layout.addLayout(bottom_layout)
+
+        # 重置默认配置函数
+        def reset_to_default():
+            try:
+                # 默认配置（基于当前nighter.json的内容）
+                default_config = {
+                    "forceUnlockDeepNight": True,
+                    "bypassOnlineCheck": False,
+                    "forceDeepNight": {
+                        "enable": False,
+                        "level": 3
+                    },
+                    "superNightLordList": [0, 1, 2, 3, 4, 5, 6]
+                }
+
+                # 更新UI控件到默认状态
+                unlock_checkbox.setChecked(default_config['forceUnlockDeepNight'])
+                bypass_checkbox.setChecked(default_config['bypassOnlineCheck'])
+                enable_force_checkbox.setChecked(default_config['forceDeepNight']['enable'])
+
+                # 设置默认难度等级
+                default_level = default_config['forceDeepNight']['level']
+                for radio in radio_buttons:
+                    radio.setChecked(radio_group.id(radio) == default_level)
+
+                # 更新难度选择的启用状态
+                toggle_difficulty_selection(default_config['forceDeepNight']['enable'])
+
+                self.show_status("已重置为默认配置", "success")
+
+            except Exception as e:
+                self.show_status(f"重置配置失败: {e}", "error")
 
         # 连接信号
-        def save_difficulty():
+        def save_settings():
             try:
+                # 更新基础设置
+                config['forceUnlockDeepNight'] = unlock_checkbox.isChecked()
+                config['bypassOnlineCheck'] = bypass_checkbox.isChecked()
+
+                # 更新强制深夜模式设置
+                config['forceDeepNight']['enable'] = enable_force_checkbox.isChecked()
+
                 # 获取选中的难度等级
                 checked_button = radio_group.checkedButton()
                 if checked_button:
                     new_level = radio_group.id(checked_button)
-                    config['deepNightLevel'] = new_level
-
-                    # 保存到文件
-                    with open(config_path, 'w', encoding='utf-8') as f:
-                        json.dump(config, f, indent=4, ensure_ascii=False)
-
-                    self.show_status(f"Nighter 难度已设置为等级 {new_level}", "success")
-                    dialog.accept()
+                    config['forceDeepNight']['level'] = new_level
                 else:
                     self.show_status("请选择一个难度等级", "error")
+                    return
+
+                # 确保superNightLordList存在（默认全解锁）
+                if 'superNightLordList' not in config:
+                    config['superNightLordList'] = [0, 1, 2, 3, 4, 5, 6]
+
+                # 保存到文件
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+
+                self.show_status("Nighter 设置已保存", "success")
+                dialog.accept()
 
             except Exception as e:
-                self.show_status(f"保存难度设置失败: {e}", "error")
+                self.show_status(f"保存设置失败: {e}", "error")
 
-        ok_button.clicked.connect(save_difficulty)
-        cancel_button.clicked.connect(dialog.reject)
+        ok_button.clicked.connect(save_settings)
+        reset_button.clicked.connect(reset_to_default)
 
         # 显示对话框
         dialog.exec()

@@ -226,7 +226,7 @@ class Sidebar(QWidget):
             ("mods", "🔧", "Mod配置"),
             ("lan_gaming", "🌐", "局域网配置"),
             ("virtual_lan", "🌍", "虚拟局域网"),
-            ("about", "ℹ️", "关于")
+            ("misc", "📦", "杂项")
         ]
         
         for page_id, icon, text in menu_items:
@@ -248,7 +248,7 @@ class Sidebar(QWidget):
         footer_layout.setContentsMargins(15, 10, 15, 0)
         
         # 版本信息
-        version_label = QLabel("v3.0.8")
+        version_label = QLabel("v3.0.9")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;
@@ -277,3 +277,5 @@ class Sidebar(QWidget):
         """设置当前页面"""
         if page_id in self.buttons:
             self.switch_page(page_id)
+
+

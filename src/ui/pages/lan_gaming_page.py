@@ -1233,7 +1233,9 @@ ip_country=CN
             self._set_lan_mode_status(True)
 
             # 启动steamclient_loader.exe
-            subprocess.Popen([str(loader_exe)], cwd=str(self.steamclient_dir))
+            import sys
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            subprocess.Popen([str(loader_exe)], cwd=str(self.steamclient_dir), creationflags=creation_flags)
 
             # 提示用户并延迟关闭窗口
             self.update_status("局域网联机模式启动中，程序将重新启动", "success")

@@ -157,8 +157,9 @@ class NetworkOptimizer(QObject):
                 # 如果没有psutil，尝试使用系统命令检查
                 try:
                     import subprocess
-                    result = subprocess.run(['tasklist', '/fi', 'imagename eq WinIPBroadcast.exe'], 
-                                          capture_output=True, text=True)
+                    result = subprocess.run(['tasklist', '/fi', 'imagename eq WinIPBroadcast.exe'],
+                                          capture_output=True, text=True,
+                                          creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
                     if 'WinIPBroadcast.exe' in result.stdout:
                         print("✅ 检测到WinIPBroadcast进程运行中（系统命令检查）")
                         process_started = True

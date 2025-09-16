@@ -477,8 +477,8 @@ class EasyTierManager(QObject):
     def stop_network(self) -> bool:
         """停止EasyTier网络（优化版本，减少卡顿）"""
         try:
-            # 停止状态监控
-            self.status_timer.stop()
+            # 🔧 线程安全的停止状态监控
+            self._stop_status_timer_safe()
 
             # 终止进程（快速版本）
             if self.easytier_process:
@@ -501,8 +501,8 @@ class EasyTierManager(QObject):
             self.easytier_process = None
             self.network_status_changed.emit(False)
 
-            # 异步清理残留进程，避免阻塞UI
-            QTimer.singleShot(100, self._cleanup_remaining_processes)
+            # 使用线程安全的方式异步清理残留进程
+            self._schedule_cleanup_remaining_processes()
 
             print("EasyTier网络已停止")
             return True
@@ -541,7 +541,22 @@ class EasyTierManager(QObject):
 
         except Exception as e:
             print(f"后台清理残留进程时出错: {e}")
-    
+
+    def _schedule_cleanup_remaining_processes(self):
+        """线程安全的残留进程清理调度"""
+        import threading
+        import time
+
+        def cleanup_task():
+            try:
+                time.sleep(0.1)  # 100ms延迟
+                self._cleanup_remaining_processes()
+            except Exception as e:
+                print(f"清理残留进程任务失败: {e}")
+
+        cleanup_thread = threading.Thread(target=cleanup_task, daemon=True)
+        cleanup_thread.start()
+
     def get_network_status(self) -> Dict:
         """获取网络状态"""
         try:
@@ -650,6 +665,37 @@ class EasyTierManager(QObject):
             print(f"获取对等节点列表异常: {e}")
             return []
     
+    def _stop_status_timer_safe(self):
+        """线程安全的停止状态定时器"""
+        try:
+            # 🔧 线程安全检测
+            from PySide6.QtCore import QThread
+            from PySide6.QtWidgets import QApplication
+
+            current_thread = QThread.currentThread()
+            main_thread = QApplication.instance().thread() if QApplication.instance() else None
+            is_main_thread = current_thread == main_thread
+
+            if is_main_thread:
+                # 在主线程，直接停止定时器
+                if self.status_timer.isActive():
+                    self.status_timer.stop()
+            else:
+                # 在后台线程，使用信号槽机制
+                # 使用QTimer.singleShot在主线程中执行
+                QTimer.singleShot(0, self._stop_timer_in_main_thread)
+
+        except Exception as e:
+            print(f"❌ 线程安全停止定时器失败: {e}")
+
+    def _stop_timer_in_main_thread(self):
+        """在主线程中停止定时器"""
+        try:
+            if self.status_timer.isActive():
+                self.status_timer.stop()
+        except Exception as e:
+            print(f"❌ 主线程停止定时器失败: {e}")
+
     def _check_status(self):
         """定期检查状态"""
         if self.easytier_process and self.easytier_process.poll() is not None:
