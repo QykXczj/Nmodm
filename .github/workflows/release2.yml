@@ -215,8 +215,8 @@ jobs:
         $setupSection += "`nArchitecturesInstallIn64BitMode=x64"
 
         # 添加图标支持
-        if (Test-Path "zwnr.png") {
-          $setupSection += "`nSetupIconFile=zwnr.png"
+        if (Test-Path "zwnr.ico") {
+          $setupSection += "`nSetupIconFile=zwnr.ico"
         }
 
         # 添加中文语言支持
