@@ -201,7 +201,7 @@ jobs:
         $setupSection += "`nAppName=Nmodm"
         $setupSection += "`nAppVersion=$version"
         $setupSection += "`nAppPublisher=QykXczj"
-        $setupSection += "`nDefaultDirName={sd}\Nmodm_v$version"
+        $setupSection += "`nDefaultDirName={src}\Nmodm_v$version"
         $setupSection += "`nDefaultGroupName=Nmodm"
         $setupSection += "`nOutputDir=release"
         $setupSection += "`nOutputBaseFilename=Nmodm_v$version-Setup"
