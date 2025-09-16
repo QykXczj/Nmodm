@@ -1,4 +1,4 @@
-name: 创建发行版
+name: 创建发行版(带安装包)
 
 on:
   workflow_dispatch:
@@ -49,63 +49,8 @@ jobs:
 
     - name: 使用 Nuitka 打包 (目录版)
       run: |
-        # 创建简化的构建脚本避免编码问题
-        python -c "
-        import sys
-        import os
-        import subprocess
-        import shutil
-        from pathlib import Path
-
-        # 设置环境变量避免编码问题
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
-
-        # 简化的 Nuitka 构建
-        project_root = Path('.')
-        builds_dir = project_root / 'Builds'
-        dist_dir = builds_dir / 'Nuitka'
-
-        # 确保目录存在
-        builds_dir.mkdir(exist_ok=True)
-        dist_dir.mkdir(exist_ok=True)
-
-        # 清理旧文件
-        if dist_dir.exists():
-            shutil.rmtree(dist_dir)
-            dist_dir.mkdir(exist_ok=True)
-
-        # Nuitka 命令
-        cmd = [
-            sys.executable, '-m', 'nuitka',
-            '--assume-yes-for-downloads',
-            '--enable-plugin=pyside6',
-            '--disable-console',
-            '--standalone',
-            '--output-dir=' + str(dist_dir),
-            '--output-filename=Nmodm_nuitka_standalone',
-            '--include-data-file=zwnr.png=zwnr.png',
-            '--include-data-dir=OnlineFix=OnlineFix',
-            '--include-data-dir=src=src',
-            'main.py'
-        ]
-
-        print('Starting Nuitka build...')
-        result = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True)
-
-        if result.returncode == 0:
-            print('Nuitka build completed successfully')
-
-            # 重命名输出目录
-            main_dist = dist_dir / 'main.dist'
-            target_dir = dist_dir / 'Nmodm_nuitka_standalone'
-            if main_dist.exists() and not target_dir.exists():
-                main_dist.rename(target_dir)
-                print('Output directory renamed to Nmodm_nuitka_standalone')
-        else:
-            print('Nuitka build failed:')
-            print(result.stderr)
-            sys.exit(1)
-        "
+        Write-Host "🔨 使用 build_nuitka.py 脚本，自动选择独立模式"
+        echo "2" | python build_nuitka.py
 
     - name: 创建发布包
       run: |
