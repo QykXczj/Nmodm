@@ -211,19 +211,46 @@ jobs:
 
     - name: 验证 Inno Setup 脚本
       run: |
+        Write-Host "📋 当前工作目录: $(Get-Location)"
+        Write-Host "📋 目录内容:"
+        Get-ChildItem | Select-Object Name, Length, LastWriteTime | Format-Table
+
         if (Test-Path "setup.iss") {
           Write-Host "✅ Inno Setup 脚本存在"
           Write-Host "📋 脚本文件大小: $((Get-Item 'setup.iss').Length) 字节"
+          Write-Host "📋 脚本内容:"
+          Get-Content "setup.iss" | Write-Host
         } else {
           Write-Host "❌ Inno Setup 脚本不存在"
           exit 1
         }
 
-    - name: 构建 Windows 安装包
-      uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
-      with:
-        path: setup.iss
-        options: /O+ /Q
+    - name: 安装 Inno Setup (备用方案)
+      run: |
+        Write-Host "📦 使用 Chocolatey 安装 Inno Setup"
+        choco install innosetup -y
+
+    - name: 手动构建 Windows 安装包
+      run: |
+        Write-Host "🔨 使用命令行编译 Inno Setup 脚本"
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
+        } else {
+          Write-Host "❌ 找不到 Inno Setup 编译器"
+          exit 1
+        }
+
+        Write-Host "✅ 找到编译器: $isccPath"
+        & "$isccPath" "setup.iss"
+
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "✅ 编译成功"
+        } else {
+          Write-Host "❌ 编译失败，退出代码: $LASTEXITCODE"
+          exit 1
+        }
 
     - name: 验证并移动安装包
       run: |
