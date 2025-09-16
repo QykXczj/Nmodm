@@ -223,10 +223,9 @@ jobs:
         $setupSection += "`n"
         $setupSection += "`n; 中文语言支持"
         $setupSection += "`nShowLanguageDialog=no"
-        $setupSection += "`nDefaultLanguage=ChineseSimplified"
 
         $languagesSection = "`n`n[Languages]"
-        $languagesSection += "`nName: `"ChineseSimplified`"; MessagesFile: `"compiler:Languages\ChineseSimplified.isl`""
+        $languagesSection += "`nName: `"chinesesimplified`"; MessagesFile: `"compiler:Languages\ChineseSimplified.isl`""
 
         $filesSection = "`n`n[Files]"
         $filesSection += "`nSource: `"$nuitkaDir\*`"; DestDir: `"{app}`"; Flags: ignoreversion recursesubdirs createallsubdirs"
