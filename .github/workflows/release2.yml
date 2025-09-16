@@ -49,10 +49,33 @@ jobs:
 
     - name: 使用 Nuitka 打包 (目录版)
       run: |
-        Write-Host "🔨 使用 build_nuitka.py 脚本，自动选择独立模式"
+        Write-Host "🔨 直接调用 NuitkaBuilder 进行构建"
         $env:PYTHONIOENCODING = "utf-8"
-        $env:PYTHONLEGACYWINDOWSSTDIO = "1"
-        echo "2" | python build_nuitka.py
+        python -c "
+        import sys
+        import os
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        sys.path.append('.')
+        from build_nuitka import NuitkaBuilder
+
+        print('🎯 Nuitka 自动打包工具')
+        print('=' * 50)
+
+        builder = NuitkaBuilder()
+
+        # 检查环境
+        if not builder.check_environment():
+            print('❌ 环境检查失败')
+            sys.exit(1)
+
+        # 执行独立模式构建
+        print('🚀 开始独立模式打包...')
+        if builder.build(onefile=False):
+            print('✅ 独立模式打包完成')
+        else:
+            print('❌ 独立模式打包失败')
+            sys.exit(1)
+        "
 
     - name: 创建发布包
       run: |
