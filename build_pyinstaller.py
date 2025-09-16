@@ -23,7 +23,7 @@ class PyInstallerBuilder:
         self.dist_dir = self.builds_dir / "PyInstaller"
         self.build_dir = self.project_root / "build"
         self.spec_file = self.project_root / "nmodm.spec"
-        self.version = "3.0.3"  # 应用版本号
+        self.version = "3.0.9"  # 应用版本号
         
     def check_environment(self) -> bool:
         """检查打包环境"""
@@ -55,6 +55,14 @@ class PyInstallerBuilder:
             print(f"✅ PySide6已安装")
         except ImportError:
             print("❌ PySide6未安装，请先安装依赖: pip install -r requirements.txt")
+            return False
+
+        # 检查cryptography (存档转换功能需要)
+        try:
+            import cryptography
+            print(f"✅ cryptography已安装")
+        except ImportError:
+            print("❌ cryptography未安装，请先安装依赖: pip install -r requirements.txt")
             return False
         
         # 检查必要文件
@@ -118,6 +126,9 @@ a = Analysis(
         # OnlineFix目录 - 包含破解文件、ESL工具包、网络优化工具包等
         ('OnlineFix', 'OnlineFix'),
 
+        # ESR和me3p目录不需要打包 - 这些是用户通过"工具下载"界面下载的工具
+        # 注释：ESR(EasyTier)和me3p(ME3)工具由用户按需下载，不预置在安装包中
+
         # ESL目录不再需要打包 - 现在从OnlineFix/esl2.zip解压
         # 注释：ESL工具现在统一从OnlineFix文件夹的esl2.zip解压，无需预置ESL目录
 
@@ -145,7 +156,6 @@ a = Analysis(
         'src.ui.pages.config_page',
         'src.ui.pages.me3_page',
         'src.ui.pages.mods_page',
-        'src.ui.pages.bin_merge_page',
         'src.ui.pages.lan_gaming_page',
         'src.ui.pages.about_page',
         
@@ -154,6 +164,11 @@ a = Analysis(
         'requests', 'tempfile', 'zipfile', 'shutil', 'configparser',
         'urllib.parse', 'urllib.request', 'dataclasses', 'typing',
         'enum', 'datetime', 'time', 'os', 'sys', 're',
+
+        # 加密库模块 (存档转换功能)
+        'cryptography', 'cryptography.hazmat', 'cryptography.hazmat.primitives',
+        'cryptography.hazmat.primitives.ciphers', 'cryptography.hazmat.backends',
+        'cryptography.hazmat.backends.openssl',
     ],
     hookspath=[],
     hooksconfig={{}},
@@ -318,8 +333,9 @@ coll = COLLECT(
         try:
             # 简单启动测试（3秒后自动关闭）
             print("启动应用程序进行快速测试...")
-            process = subprocess.Popen([str(exe_path)], 
-                                     cwd=exe_path.parent)
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            process = subprocess.Popen([str(exe_path)],
+                                     cwd=exe_path.parent, creationflags=creation_flags)
             
             # 等待3秒
             time.sleep(3)
