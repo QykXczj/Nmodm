@@ -1,0 +1,372 @@
+name: 创建发行版2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发行版本号 (例如: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      prerelease:
+        description: '是否为预发布版本'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: '是否为草稿版本'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  create-release:
+    runs-on: windows-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install nuitka
+
+    - name: 创建必要目录
+      run: |
+        New-Item -ItemType Directory -Force -Path "OnlineFix"
+        New-Item -ItemType Directory -Force -Path "Mods"
+        "OnlineFix64.dll" | Out-File -FilePath "OnlineFix/dlllist.txt" -Encoding UTF8
+
+    - name: 使用 Nuitka 打包 (目录版)
+      run: |
+        Write-Host "🔨 直接调用 NuitkaBuilder 进行构建"
+        $env:PYTHONIOENCODING = "utf-8"
+        python -c "
+        import sys
+        import os
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        sys.path.append('.')
+        from build_nuitka import NuitkaBuilder
+
+        print('🎯 Nuitka 自动打包工具')
+        print('=' * 50)
+
+        builder = NuitkaBuilder()
+
+        # 检查环境
+        if not builder.check_environment():
+            print('❌ 环境检查失败')
+            sys.exit(1)
+
+        # 执行独立模式构建
+        print('🚀 开始独立模式打包...')
+        if builder.build(onefile=False):
+            print('✅ 独立模式打包完成')
+        else:
+            print('❌ 独立模式打包失败')
+            sys.exit(1)
+        "
+
+    - name: 创建发布包
+      run: |
+        New-Item -ItemType Directory -Force -Path "release"
+
+        # 查找 Nuitka 构建输出目录
+        $nuitkaDir = $null
+        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
+          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
+        } elseif (Test-Path "Builds/Nuitka/main.dist") {
+          $nuitkaDir = "Builds/Nuitka/main.dist"
+        }
+
+        if ($nuitkaDir) {
+          Write-Host "Found Nuitka build directory: $nuitkaDir"
+          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm-v${{ github.event.inputs.version }}.zip"
+          Write-Host "Main release package created: Nmodm-v${{ github.event.inputs.version }}.zip"
+        } else {
+          Write-Host "Nuitka build output not found"
+          Get-ChildItem "Builds" -Recurse | Write-Host
+          exit 1
+        }
+
+        # 创建源代码包
+        $sourceFiles = @("src", "OnlineFix", "main.py", "requirements.txt", "README.md", "LICENSE", "build_manager.py", "install_dependencies.py")
+        $existingFiles = @()
+        foreach ($file in $sourceFiles) {
+          if (Test-Path $file) {
+            $existingFiles += $file
+          }
+        }
+        if ($existingFiles.Count -gt 0) {
+          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+          Write-Host "Source code package created: Nmodm-Source-v${{ github.event.inputs.version }}.zip"
+        }
+
+    - name: 创建 Inno Setup 脚本
+      run: |
+        # 查找 Nuitka 构建输出目录
+        $nuitkaDir = $null
+        if (Test-Path "Builds/Nuitka/Nmodm_nuitka_standalone") {
+          $nuitkaDir = "Builds/Nuitka/Nmodm_nuitka_standalone"
+        } elseif (Test-Path "Builds/Nuitka/main.dist") {
+          $nuitkaDir = "Builds/Nuitka/main.dist"
+        }
+
+        if (-not $nuitkaDir) {
+          Write-Host "❌ 找不到 Nuitka 构建输出目录"
+          Get-ChildItem "Builds" -Recurse | Write-Host
+          exit 1
+        }
+
+        Write-Host "✅ 找到 Nuitka 构建目录: $nuitkaDir"
+
+        # 动态创建 Inno Setup 脚本
+        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+
+        # 创建脚本内容
+        $setupSection = "[Setup]"
+        $setupSection += "`nAppName=Nmodm"
+        $setupSection += "`nAppVersion=$version"
+        $setupSection += "`nAppPublisher=QykXczj"
+        $setupSection += "`nDefaultDirName={autopf}\Nmodm"
+        $setupSection += "`nDefaultGroupName=Nmodm"
+        $setupSection += "`nOutputDir=release"
+        $setupSection += "`nOutputBaseFilename=Nmodm-v$version-Setup"
+        $setupSection += "`nCompression=lzma2"
+        $setupSection += "`nSolidCompression=yes"
+        $setupSection += "`nUninstallDisplayName=Nmodm v$version"
+        $setupSection += "`nUninstallDisplayIcon={app}\Nmodm.exe"
+        $setupSection += "`nCreateUninstallRegKey=yes"
+        $setupSection += "`nMinVersion=6.1sp1"
+        $setupSection += "`nArchitecturesAllowed=x64"
+        $setupSection += "`nArchitecturesInstallIn64BitMode=x64"
+
+        $filesSection = "`n`n[Files]"
+        $filesSection += "`nSource: `"$nuitkaDir\*`"; DestDir: `"{app}`"; Flags: ignoreversion recursesubdirs createallsubdirs"
+
+        $iconsSection = "`n`n[Icons]"
+        $iconsSection += "`nName: `"{group}\Nmodm`"; Filename: `"{app}\Nmodm.exe`""
+        $iconsSection += "`nName: `"{autodesktop}\Nmodm`"; Filename: `"{app}\Nmodm.exe`"; Tasks: desktopicon"
+
+        $tasksSection = "`n`n[Tasks]"
+        $tasksSection += "`nName: `"desktopicon`"; Description: `"创建桌面快捷方式`"; GroupDescription: `"附加图标:`"; Flags: unchecked"
+
+        $runSection = "`n`n[Run]"
+        $runSection += "`nFilename: `"{app}\Nmodm.exe`"; Description: `"启动 Nmodm`"; Flags: nowait postinstall skipifsilent"
+
+        $messagesSection = "`n`n[Messages]"
+        $messagesSection += "`nWelcomeLabel1=欢迎使用 Nmodm 安装向导"
+        $messagesSection += "`nWelcomeLabel2=这将在您的计算机上安装 Nmodm v$version"
+
+        # 组合所有部分
+        $issContent = $setupSection + $filesSection + $iconsSection + $tasksSection + $runSection + $messagesSection
+
+        # 写入文件
+        $issContent | Out-File -FilePath "setup.iss" -Encoding UTF8
+        Write-Host "✅ Inno Setup 脚本已创建"
+
+        # 验证脚本内容
+        Write-Host "📋 脚本内容预览:"
+        Get-Content "setup.iss" | Select-Object -First 10 | Write-Host
+
+    - name: 验证 Inno Setup 脚本
+      run: |
+        Write-Host "📋 当前工作目录: $(Get-Location)"
+        Write-Host "📋 目录内容:"
+        Get-ChildItem | Select-Object Name, Length, LastWriteTime | Format-Table
+
+        if (Test-Path "setup.iss") {
+          Write-Host "✅ Inno Setup 脚本存在"
+          Write-Host "📋 脚本文件大小: $((Get-Item 'setup.iss').Length) 字节"
+          Write-Host "📋 脚本绝对路径: $((Get-Item 'setup.iss').FullName)"
+          Write-Host "📋 脚本内容:"
+          Get-Content "setup.iss" | Write-Host
+        } else {
+          Write-Host "❌ Inno Setup 脚本不存在"
+          Write-Host "📋 查找所有 .iss 文件:"
+          Get-ChildItem -Recurse -Filter "*.iss" | Select-Object FullName | Write-Host
+          exit 1
+        }
+
+    - name: 使用 Chocolatey 安装 Inno Setup
+      run: |
+        Write-Host "📦 安装 Inno Setup"
+        choco install innosetup -y
+        Write-Host "✅ Inno Setup 安装完成"
+
+    - name: 手动构建 Windows 安装包
+      run: |
+        Write-Host "🔨 手动编译 Inno Setup 脚本"
+
+        # 查找 ISCC.exe
+        $isccPaths = @(
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+          "C:\Program Files\Inno Setup 6\ISCC.exe",
+          "C:\tools\InnoSetup\ISCC.exe"
+        )
+
+        $isccPath = $null
+        foreach ($path in $isccPaths) {
+          if (Test-Path $path) {
+            $isccPath = $path
+            Write-Host "✅ 找到编译器: $isccPath"
+            break
+          }
+        }
+
+        if (-not $isccPath) {
+          Write-Host "❌ 找不到 Inno Setup 编译器"
+          Write-Host "📋 搜索所有可能的 ISCC.exe:"
+          Get-ChildItem -Path "C:\" -Recurse -Name "ISCC.exe" -ErrorAction SilentlyContinue | Write-Host
+          exit 1
+        }
+
+        # 编译脚本
+        Write-Host "🔨 开始编译..."
+        & "$isccPath" "setup.iss" /O+
+
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "✅ 编译成功"
+        } else {
+          Write-Host "❌ 编译失败，退出代码: $LASTEXITCODE"
+          exit 1
+        }
+
+    - name: 验证并移动安装包
+      run: |
+        Write-Host "📋 检查可能的输出位置..."
+
+        # 检查多个可能的输出位置
+        $possiblePaths = @("Output", "release", ".")
+        $foundExe = $false
+
+        foreach ($path in $possiblePaths) {
+          if (Test-Path $path) {
+            Write-Host "✅ 检查目录: $path"
+            $exeFiles = Get-ChildItem "$path\*.exe" -ErrorAction SilentlyContinue
+            if ($exeFiles.Count -gt 0) {
+              Write-Host "✅ 在 $path 中找到 $($exeFiles.Count) 个 .exe 文件"
+              foreach ($file in $exeFiles) {
+                Write-Host "  - $($file.Name) ($($file.Length) 字节)"
+                # 如果不在 release 目录，移动到 release 目录
+                if ($path -ne "release") {
+                  if (-not (Test-Path "release")) {
+                    New-Item -ItemType Directory -Path "release" -Force
+                  }
+                  Move-Item $file.FullName "release\" -Force
+                  Write-Host "  ✅ 已移动到 release 目录"
+                }
+              }
+              $foundExe = $true
+              break
+            } else {
+              Write-Host "  ❌ 在 $path 中未找到 .exe 文件"
+            }
+          } else {
+            Write-Host "  ❌ 目录 $path 不存在"
+          }
+        }
+
+        if (-not $foundExe) {
+          Write-Host "❌ 在所有可能位置都未找到安装包文件"
+          Write-Host "📋 当前目录完整内容:"
+          Get-ChildItem -Recurse | Where-Object { $_.Extension -eq ".exe" } | Select-Object FullName, Length | Format-Table
+          exit 1
+        }
+
+        # 显示最终发布目录内容
+        Write-Host "📦 发布目录最终内容:"
+        if (Test-Path "release") {
+          Get-ChildItem "release" | Select-Object Name, Length, LastWriteTime | Format-Table
+        } else {
+          Write-Host "❌ release 目录不存在"
+        }
+        
+    - name: 创建发行版
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        name: Nmodm ${{ github.event.inputs.version }}
+        body: |
+          # Nmodm ${{ github.event.inputs.version }} Release
+
+          ## New Version Release
+
+          This is Nmodm - Modern ME3 Mod Manager version ${{ github.event.inputs.version }}.
+
+          ## Download Options
+
+          ### Windows 安装包 (推荐)
+          - **Nmodm-v${{ github.event.inputs.version }}-Setup.exe** - Windows 安装程序，一键安装，自动创建快捷方式
+
+          ### 便携版
+          - **Nmodm-v${{ github.event.inputs.version }}.zip** - Nuitka 目录构建版，高性能，解压即用
+
+          ### 开发者版本
+          - **Nmodm-Source-v${{ github.event.inputs.version }}.zip** - 源代码包，需要 Python 环境
+
+          ## Main Features
+
+          - Modern frameless GUI interface
+          - Intelligent Mod management system
+          - Complete ME3 configuration and launch
+          - Multi-mirror download support
+          - Mod annotation and classification
+          - External Mod support
+          - Multi-theme interface
+
+          ## System Requirements
+
+          - Windows 10/11 (64-bit)
+          - Elden Ring Nightreign game
+
+          ## Usage Instructions
+
+          ### Windows 安装包 (推荐)
+          1. 下载 `Nmodm-v${{ github.event.inputs.version }}-Setup.exe`
+          2. 以管理员身份运行安装程序
+          3. 按照安装向导完成安装
+          4. 从开始菜单或桌面快捷方式启动 Nmodm
+          5. 按照应用内指南配置游戏路径和模组
+
+          ### 便携版
+          1. 下载 `Nmodm-v${{ github.event.inputs.version }}.zip`
+          2. 解压到任意目录
+          3. 运行 `Nmodm.exe`
+          4. 按照应用内指南配置游戏路径和模组
+
+          ### 源代码版本
+          1. 下载并解压源代码包
+          2. 安装 Python 3.11+
+          3. 运行 `python install_dependencies.py`
+          4. 运行 `python main.py`
+
+          ## Important Notes
+
+          - Please backup game saves before use
+          - Some antivirus software may report false positives, please add to trust list
+          - Ensure you own a legal copy of the game
+
+          ## Bug Reports
+
+          If you encounter issues, please report them on the [Issues](https://github.com/QykXczj/Nmodm/issues) page.
+
+          ## Acknowledgments
+
+          Thanks to all users for their support and feedback!
+        draft: ${{ github.event.inputs.draft }}
+        prerelease: ${{ github.event.inputs.prerelease }}
+        files: |
+          release/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
