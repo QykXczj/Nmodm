@@ -366,3 +366,124 @@ def get_steam_cleanup_status() -> dict:
     """获取Steam清理状态的便捷函数"""
     manager = get_dll_manager()
     return manager.get_cleanup_status()
+
+
+class DllDirectoryContext:
+    """DLL目录上下文管理器 - 用于安全的游戏启动"""
+
+    def __init__(self):
+        self.original_dll_dir = None
+        self.kernel32 = ctypes.windll.kernel32
+
+    def __enter__(self):
+        """进入上下文：保存原始DLL路径并重置为系统默认"""
+        try:
+            # 保存原始DLL目录设置
+            buffer_size = 1024
+            buffer = ctypes.create_unicode_buffer(buffer_size)
+            result = self.kernel32.GetDllDirectoryW(buffer_size, buffer)
+
+            if result > 0:
+                self.original_dll_dir = buffer.value
+                print(f"[DLL管理] 保存原始DLL目录: {self.original_dll_dir}")
+            else:
+                self.original_dll_dir = None
+                print("[DLL管理] 原始DLL目录: 系统默认")
+
+            # 重置DLL搜索路径为系统默认
+            reset_result = self.kernel32.SetDllDirectoryW(None)
+            if reset_result:
+                print("[DLL管理] ✅ DLL搜索路径已重置为系统默认")
+            else:
+                print("[DLL管理] ⚠️ DLL搜索路径重置失败")
+
+            return self
+
+        except Exception as e:
+            print(f"[DLL管理] ❌ 进入DLL上下文失败: {e}")
+            return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """退出上下文：自动恢复原始DLL路径"""
+        # 标记参数已知但未使用（用于异常处理）
+        _ = exc_type, exc_val, exc_tb
+        try:
+            # 恢复原始DLL目录设置
+            if self.original_dll_dir:
+                result = self.kernel32.SetDllDirectoryW(self.original_dll_dir)
+                if result:
+                    print(f"[DLL管理] ✅ DLL搜索路径已恢复: {self.original_dll_dir}")
+                else:
+                    print("[DLL管理] ❌ DLL搜索路径恢复失败")
+            else:
+                # 恢复为系统默认
+                result = self.kernel32.SetDllDirectoryW(None)
+                if result:
+                    print("[DLL管理] ✅ DLL搜索路径已恢复为系统默认")
+                else:
+                    print("[DLL管理] ❌ DLL搜索路径恢复失败")
+
+        except Exception as e:
+            print(f"[DLL管理] ❌ 退出DLL上下文失败: {e}")
+
+        # 返回False表示不抑制异常
+        return False
+
+
+def safe_launch_game(bat_path: str) -> bool:
+    """
+    安全启动游戏 - 使用DLL隔离保护
+
+    Args:
+        bat_path: bat脚本的完整路径
+
+    Returns:
+        bool: 启动是否成功
+    """
+    try:
+        # 检查Windows平台
+        if os.name != 'nt':
+            print("[DLL管理] ⚠️ 非Windows平台，使用标准启动方式")
+            import subprocess
+            # 非Windows平台不支持start命令，使用原始方式
+            subprocess.Popen(['cmd', '/c', bat_path])
+            return True
+
+        # 检查ctypes.wintypes可用性
+        try:
+            import ctypes.wintypes
+        except ImportError:
+            print("[DLL管理] ⚠️ ctypes.wintypes不可用，使用标准启动方式")
+            import subprocess
+            # ctypes不可用时也使用独立终端
+            subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
+            return True
+
+        print(f"[DLL管理] 🚀 开始安全启动游戏: {bat_path}")
+
+        # 使用DLL目录上下文管理器
+        with DllDirectoryContext():
+            print("[DLL管理] 🔒 进入DLL隔离环境")
+            import subprocess
+            # 使用start命令创建独立终端窗口，避免覆盖当前控制台
+            process = subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
+            print(f"[DLL管理] ✅ 游戏在独立终端中启动成功，PID: {process.pid}")
+            print("[DLL管理] 💡 独立终端窗口已创建，不会覆盖当前控制台")
+
+        print("[DLL管理] 🔓 退出DLL隔离环境，自动恢复")
+        print("[DLL管理] 💡 使用上下文管理器模式：代码优雅，异常安全")
+        print("[DLL管理] 🎮 游戏进程已继承清洁的DLL环境，独立运行")
+        return True
+
+    except Exception as e:
+        print(f"[DLL管理] ❌ 安全启动失败: {e}")
+        print("[DLL管理] 🔄 降级到标准启动方式")
+        try:
+            import subprocess
+            # 降级时也使用独立终端，保持一致性
+            subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
+            print("[DLL管理] ✅ 标准启动成功（独立终端）")
+            return True
+        except Exception as fallback_e:
+            print(f"[DLL管理] ❌ 标准启动也失败: {fallback_e}")
+            return False

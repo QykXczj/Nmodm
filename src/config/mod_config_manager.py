@@ -1450,9 +1450,7 @@ class ModConfigManager:
     def _write_custom_toml(self, config_data: Dict[str, Any], file_handle):
         """自定义TOML写入方法，确保正确的格式"""
         # 写入profileVersion
-        file_handle.write(f'profileVersion = "{config_data.get("profileVersion", "v1")}"\n')
-        # 写入start_online
-        file_handle.write('start_online = true\n\n')
+        file_handle.write(f'profileVersion = "{config_data.get("profileVersion", "v1")}"\n\n')
 
         # 写入supports部分
         file_handle.write('[[supports]]\n')

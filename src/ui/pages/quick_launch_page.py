@@ -5,7 +5,11 @@
 import os
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QFrame, QGridLayout)
+                               QPushButton, QFrame, QGridLayout, QDialog,
+                               QCheckBox, QSpinBox, QGroupBox, QLineEdit,
+                               QTextEdit, QListWidget, QListWidgetItem,
+                               QButtonGroup, QMessageBox, QTabWidget,
+                               QScrollArea)
 from PySide6.QtCore import Qt, Signal
 
 from .base_page import BasePage
@@ -462,7 +466,7 @@ class QuickLaunchPage(BasePage):
 下方为预设的几套启动方案，点击"🚀 启动"按钮即可快速启动游戏。
 """
 
-        params_card = self.create_info_card("🎮 启动参数说明", params_content)
+        params_card = self.create_info_card_with_button("🎮 启动参数说明", params_content, "⚙️ 参数配置", self.show_launch_params_config)
 
         # 右侧：Nighter配置卡片
         nighter_card = self.create_nighter_config_card()
@@ -523,6 +527,87 @@ class QuickLaunchPage(BasePage):
         layout.addWidget(content_label)
         card.setLayout(layout)
 
+        return card
+
+    def create_info_card_with_button(self, title, content, button_text, button_callback):
+        """创建带按钮的信息卡片"""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e2e;
+                border: 0.5px solid #313244;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+
+        # 标题和按钮的水平布局
+        title_layout = QHBoxLayout()
+        title_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 标题
+        title_label = QLabel(title)
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 16px;
+                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+        title_layout.addWidget(title_label)
+
+        # 弹簧
+        title_layout.addStretch()
+
+        # 按钮
+        button = QPushButton(button_text)
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #74c7ec;
+            }
+            QPushButton:pressed {
+                background-color: #7287fd;
+            }
+        """)
+        button.clicked.connect(button_callback)
+        title_layout.addWidget(button)
+
+        layout.addLayout(title_layout)
+
+        # 内容
+        content_label = QLabel(content)
+        content_label.setStyleSheet("""
+            QLabel {
+                color: #cdd6f4;
+                font-size: 12px;
+                line-height: 1.4;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+        content_label.setWordWrap(True)
+        layout.addWidget(content_label)
+
+        card.setLayout(layout)
         return card
 
     def create_nighter_config_card(self):
@@ -770,6 +855,34 @@ class QuickLaunchPage(BasePage):
         # 初始化状态
         self.toggle_difficulty_selection(current_enable and nighter_module_exists)
 
+        # 添加编辑预设方案按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        edit_preset_btn = QPushButton("📝 编辑预设方案")
+        edit_preset_btn.setFixedHeight(30)
+        edit_preset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 4px 12px;
+            }
+            QPushButton:hover {
+                background-color: #94d3a2;
+            }
+            QPushButton:pressed {
+                background-color: #7dc4a0;
+            }
+        """)
+        edit_preset_btn.clicked.connect(self.show_preset_editor)
+        button_layout.addWidget(edit_preset_btn)
+
+        layout.addLayout(button_layout)
+
         return card
 
     def toggle_difficulty_selection(self, enabled):
@@ -1005,47 +1118,115 @@ class QuickLaunchPage(BasePage):
             # 强制UI刷新，确保状态显示及时更新
             from PySide6.QtWidgets import QApplication
             QApplication.processEvents()
+            # 给用户一些时间看到准备状态
+            import time
+            time.sleep(0.8)
 
-            # 清理冲突进程
+            # 检查并执行自动备份
             try:
-                from src.utils.game_process_cleaner import cleanup_game_processes
-                cleanup_game_processes()
+                from .misc_page import MiscPage
+                if MiscPage.trigger_auto_backup_if_enabled():
+                    self.show_status_message("💾 正在自动备份存档...")
+                    QApplication.processEvents()
+                    # 给自动备份一些时间
+                    import time
+                    time.sleep(1.5)
             except Exception as e:
-                print(f"清理进程时发生错误: {e}")
+                print(f"自动备份时发生错误: {e}")
+
+            # 清理冲突进程（异步执行，避免阻塞UI）
+            try:
+                import threading
+                from src.utils.game_process_cleaner import cleanup_game_processes
+
+                def cleanup_processes():
+                    try:
+                        cleanup_game_processes()
+                    except Exception as e:
+                        print(f"清理进程时发生错误: {e}")
+
+                # 在后台线程中清理进程
+                cleanup_thread = threading.Thread(target=cleanup_processes, daemon=True)
+                cleanup_thread.start()
+            except Exception as e:
+                print(f"启动进程清理时发生错误: {e}")
 
             # 获取启动参数
             game_path = self.config_manager.get_game_path()
             me3_exe = self.mod_manager.get_me3_executable_path()
 
-            # 构建启动命令
-            cmd_args = [
-                me3_exe,
-                "launch",
-                "--exe", str(game_path),
-                "--skip-steam-init",
-                "--game", "nightreign",
-                "-p", config_path
-            ]
+            # 创建bat启动脚本
+            bat_path = self.create_launch_bat_script(me3_exe, str(game_path), config_path, "list.bat")
+            if not bat_path:
+                self.show_status_message("❌ 创建启动脚本失败", error=True)
+                return
 
-            # 启动游戏
-            import subprocess
-            import sys
+            # 启动bat脚本 - 使用DLL隔离保护
+            from src.utils.dll_manager import safe_launch_game
+            safe_launch_game(str(bat_path))
 
-            # 设置创建标志以隐藏控制台窗口
-            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-
-            if me3_exe == "me3":
-                # 完整安装版：不需要指定工作目录
-                subprocess.Popen(cmd_args, creationflags=creation_flags)
-                me3_type = "完整安装版"
-            else:
-                # 便携版：需要指定工作目录
-                subprocess.Popen(cmd_args, cwd=os.path.dirname(me3_exe), creationflags=creation_flags)
-                me3_type = "便携版"
-            self.show_status_message(f"✅ {preset_info['name']} 启动成功！（使用{me3_type}ME3）")
+            me3_type = "完整安装版" if me3_exe == "me3" else "便携版"
+            self.show_status_message(f"✅ {preset_info['name']} 启动成功！（{me3_type}ME3 + bat脚本）")
 
         except Exception as e:
             self.show_status_message(f"❌ 启动 {preset_info['name']} 失败: {str(e)}", error=True)
+
+    def create_launch_bat_script(self, me3_exe: str, game_path: str, config_path: str, bat_name: str) -> str:
+        """创建启动bat脚本"""
+        try:
+            # 确保me3p/start目录存在
+            start_dir = Path("me3p/start")
+            start_dir.mkdir(parents=True, exist_ok=True)
+
+            # 获取绝对路径
+            config_path = str(Path(config_path).resolve())
+            game_path = str(Path(game_path).resolve())
+
+            # 读取启动参数
+            launch_params = ['--skip-steam-init', '--online']  # 默认参数
+            try:
+                launch_params = LaunchParamsConfigDialog.get_launch_params()
+            except Exception as e:
+                print(f"读取启动参数失败，使用默认参数: {e}")
+
+            # 构建启动命令
+            if me3_exe == "me3":
+                # 完整安装版
+                me3_cmd = "me3"
+            else:
+                # 便携版，使用绝对路径
+                me3_cmd = f'"{str(Path(me3_exe).resolve())}"'
+
+            # 构建完整命令
+            cmd_parts = [
+                me3_cmd,
+                "launch",
+                f'--exe "{game_path}"'
+            ]
+            cmd_parts.extend(launch_params)
+            cmd_parts.extend([
+                "--game nightreign",
+                f'-p "{config_path}"'
+            ])
+
+            # 创建bat脚本内容
+            bat_content = f"""chcp 65001
+{' '.join(cmd_parts)}
+"""
+
+            # 写入bat文件
+            bat_path = start_dir / bat_name
+            with open(bat_path, 'w', encoding='utf-8') as f:
+                f.write(bat_content)
+
+            print(f"创建启动脚本: {bat_path}")
+            print(f"脚本内容: {bat_content.strip()}")
+
+            return str(bat_path.resolve())
+
+        except Exception as e:
+            print(f"创建启动脚本失败: {e}")
+            return None
 
 
 
@@ -1094,3 +1275,1489 @@ class QuickLaunchPage(BasePage):
             status_type = "info"
 
         self.status_bar.show_temp_message(message, status_type)
+
+    def refresh_presets_section(self):
+        """刷新预设方案区域"""
+        try:
+            # 找到预设方案区域的父容器
+            # 需要重新创建预设方案区域
+            # 首先移除现有的预设方案区域
+            for i in reversed(range(self.content_layout.count())):
+                item = self.content_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    # 检查是否是预设方案区域（通过检查是否包含预设卡片）
+                    if hasattr(widget, 'layout') and widget.layout():
+                        layout = widget.layout()
+                        if isinstance(layout, QGridLayout):
+                            # 这是预设方案的网格布局，移除它
+                            widget.setParent(None)
+                            break
+
+            # 重新创建预设方案区域
+            self.create_presets_section(self.content_layout)
+
+        except Exception as e:
+            print(f"刷新预设方案区域失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def show_launch_params_config(self):
+        """显示启动参数配置对话框"""
+        dialog = LaunchParamsConfigDialog(self)
+        dialog.exec()
+
+    def show_preset_editor(self):
+        """显示预设方案编辑对话框"""
+        try:
+            dialog = PresetEditorDialog(self)
+            # 连接信号，当预设方案发生变化时刷新主页面
+            dialog.presets_changed.connect(self.refresh_presets_section)
+            dialog.exec()
+        except Exception as e:
+            print(f"显示预设编辑器失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+class LaunchParamsConfigDialog(QDialog):
+    """启动参数配置对话框"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("启动参数配置")
+        self.setFixedSize(600, 500)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+
+        # 设置样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: 2px solid #89b4fa;
+                border-radius: 12px;
+            }
+            QGroupBox {
+                font-size: 14px;
+                font-weight: bold;
+                color: #89b4fa;
+                border: 1px solid #313244;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: transparent;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                background-color: transparent;
+            }
+            QCheckBox {
+                color: #cdd6f4;
+                font-size: 12px;
+                spacing: 8px;
+                background-color: transparent;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 3px;
+                border: 1px solid #45475a;
+                background-color: #313244;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #89b4fa;
+                border-color: #89b4fa;
+            }
+            QSpinBox {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                padding: 4px;
+                color: #cdd6f4;
+                font-size: 12px;
+            }
+            QSpinBox:focus {
+                border-color: #89b4fa;
+            }
+            QPushButton {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #74c7ec;
+            }
+            QPushButton:pressed {
+                background-color: #7287fd;
+            }
+            QLabel {
+                color: #bac2de;
+                font-size: 12px;
+                background-color: transparent;
+            }
+        """)
+
+        # 拖拽相关变量
+        self.drag_position = None
+
+        self.init_ui()
+        self.load_config()
+
+        # 如果配置文件不存在，创建默认配置文件
+        config_file = self.get_config_file_path()
+        if not config_file.exists():
+            self.create_default_config()
+
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # 标题栏（带关闭按钮）
+        title_layout = QHBoxLayout()
+        title_layout.setContentsMargins(0, 0, 0, 0)
+
+        title_label = QLabel("🎮 ME3启动参数配置")
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 18px;
+                font-weight: bold;
+                margin-bottom: 10px;
+                background-color: transparent;
+            }
+        """)
+        title_layout.addWidget(title_label)
+
+        title_layout.addStretch()
+
+        # 关闭按钮
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(30, 30)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f38ba8;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 15px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #eba0ac;
+            }
+            QPushButton:pressed {
+                background-color: #f38ba8;
+            }
+        """)
+        close_btn.clicked.connect(self.reject)
+        title_layout.addWidget(close_btn)
+
+        layout.addLayout(title_layout)
+
+        # 说明
+        desc_label = QLabel("配置ME3启动时使用的参数，这些设置将同时应用于快速启动和MOD配置页面。")
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+
+        # 性能优化参数组
+        perf_group = QGroupBox("🚀 性能优化参数")
+        perf_layout = QVBoxLayout()
+
+        self.no_boot_boost_cb = QCheckBox("禁用启动加速缓存 (--no-boot-boost)")
+        self.no_boot_boost_cb.setToolTip("禁用BHD文件缓存，可能会增加启动时间但减少磁盘占用")
+        perf_layout.addWidget(self.no_boot_boost_cb)
+
+        self.show_logos_cb = QCheckBox("显示游戏开场Logo (--show-logos)")
+        self.show_logos_cb.setToolTip("显示游戏开场动画，取消勾选可加快进入游戏速度")
+        perf_layout.addWidget(self.show_logos_cb)
+
+        perf_group.setLayout(perf_layout)
+        layout.addWidget(perf_group)
+
+        # 网络参数组
+        network_group = QGroupBox("🌐 网络相关参数")
+        network_layout = QVBoxLayout()
+
+        self.skip_steam_init_cb = QCheckBox("跳过Steam初始化 (--skip-steam-init)")
+        self.skip_steam_init_cb.setToolTip("跳过Steam初始化，避免Steam相关问题")
+        self.skip_steam_init_cb.setChecked(True)  # 默认启用
+        self.skip_steam_init_cb.setEnabled(False)  # 不允许修改，因为是必需的
+        network_layout.addWidget(self.skip_steam_init_cb)
+
+        self.online_cb = QCheckBox("启用在线匹配 (--online) ⚠️ 有封号风险")
+        self.online_cb.setToolTip("重新启用在线多人游戏功能，但可能导致账号被封禁")
+        self.online_cb.setStyleSheet("QCheckBox { color: #f38ba8; }")
+        network_layout.addWidget(self.online_cb)
+
+        network_group.setLayout(network_layout)
+        layout.addWidget(network_group)
+
+        # 调试参数组
+        debug_group = QGroupBox("🛠️ 调试相关参数")
+        debug_layout = QVBoxLayout()
+
+        self.disable_arxan_cb = QCheckBox("禁用Arxan保护 (--disable-arxan)")
+        self.disable_arxan_cb.setToolTip("中和Arxan/GuardIT代码保护，提高MOD兼容性")
+        debug_layout.addWidget(self.disable_arxan_cb)
+
+        self.diagnostics_cb = QCheckBox("启用诊断模式 (-d, --diagnostics)")
+        self.diagnostics_cb.setToolTip("启用详细的诊断信息，用于问题排查")
+        debug_layout.addWidget(self.diagnostics_cb)
+
+        debug_group.setLayout(debug_layout)
+        layout.addWidget(debug_group)
+
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        # 重置按钮
+        reset_btn = QPushButton("🔄 重置默认")
+        reset_btn.clicked.connect(self.reset_to_default)
+        button_layout.addWidget(reset_btn)
+
+        # 取消按钮
+        cancel_btn = QPushButton("❌ 取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        # 保存按钮
+        save_btn = QPushButton("💾 保存")
+        save_btn.clicked.connect(self.save_config)
+        button_layout.addWidget(save_btn)
+
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+    def get_config_file_path(self):
+        """获取配置文件路径"""
+        from pathlib import Path
+        config_dir = Path("me3p") / "start"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return config_dir / "launch_params.json"
+
+    def create_default_config(self):
+        """创建默认配置文件"""
+        try:
+            default_config = {
+                'no_boot_boost': False,
+                'show_logos': False,
+                'skip_steam_init': True,  # 始终为True
+                'online': True,  # 默认启用在线功能
+                'disable_arxan': False,
+                'diagnostics': False
+            }
+
+            config_file = self.get_config_file_path()
+            import json
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, indent=2, ensure_ascii=False)
+
+            print(f"已创建默认启动参数配置: {config_file}")
+
+        except Exception as e:
+            print(f"创建默认启动参数配置失败: {e}")
+
+    def load_config(self):
+        """加载配置"""
+        try:
+            config_file = self.get_config_file_path()
+            if config_file.exists():
+                import json
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+
+                self.no_boot_boost_cb.setChecked(config.get('no_boot_boost', False))
+                self.show_logos_cb.setChecked(config.get('show_logos', False))
+                self.online_cb.setChecked(config.get('online', True))  # 默认启用在线功能
+                self.disable_arxan_cb.setChecked(config.get('disable_arxan', False))
+                self.diagnostics_cb.setChecked(config.get('diagnostics', False))
+            else:
+                # 配置文件不存在，设置默认值
+                self.no_boot_boost_cb.setChecked(False)
+                self.show_logos_cb.setChecked(False)
+                self.online_cb.setChecked(True)  # 默认启用在线功能
+                self.disable_arxan_cb.setChecked(False)
+                self.diagnostics_cb.setChecked(False)
+        except Exception as e:
+            print(f"加载启动参数配置失败: {e}")
+            # 设置默认值
+            self.no_boot_boost_cb.setChecked(False)
+            self.show_logos_cb.setChecked(False)
+            self.online_cb.setChecked(True)  # 默认启用在线功能
+            self.disable_arxan_cb.setChecked(False)
+            self.diagnostics_cb.setChecked(False)
+
+    def save_config(self):
+        """保存配置"""
+        try:
+            config = {
+                'no_boot_boost': self.no_boot_boost_cb.isChecked(),
+                'show_logos': self.show_logos_cb.isChecked(),
+                'skip_steam_init': True,  # 始终为True
+                'online': self.online_cb.isChecked(),
+                'disable_arxan': self.disable_arxan_cb.isChecked(),
+                'diagnostics': self.diagnostics_cb.isChecked()
+            }
+
+            config_file = self.get_config_file_path()
+            import json
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+
+            self.accept()
+
+        except Exception as e:
+            print(f"保存启动参数配置失败: {e}")
+
+    def reset_to_default(self):
+        """重置为默认设置"""
+        self.no_boot_boost_cb.setChecked(False)
+        self.show_logos_cb.setChecked(False)
+        self.online_cb.setChecked(True)  # 默认启用在线功能
+        self.disable_arxan_cb.setChecked(False)
+        self.diagnostics_cb.setChecked(False)
+
+    @staticmethod
+    def get_launch_params():
+        """静态方法：获取当前的启动参数列表"""
+        try:
+            from pathlib import Path
+            config_file = Path("me3p") / "start" / "launch_params.json"
+
+            if not config_file.exists():
+                return ['--skip-steam-init', '--online']  # 返回默认参数
+
+            import json
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            params = []
+
+            if config.get('no_boot_boost', False):
+                params.append('--no-boot-boost')
+
+            if config.get('show_logos', False):
+                params.append('--show-logos')
+
+            # skip_steam_init 始终添加
+            params.append('--skip-steam-init')
+
+            if config.get('online', False):
+                params.append('--online')
+
+            if config.get('disable_arxan', False):
+                params.append('--disable-arxan')
+
+            if config.get('diagnostics', False):
+                params.extend(['-d'])
+
+            return params
+
+        except Exception as e:
+            print(f"获取启动参数失败: {e}")
+            return ['--skip-steam-init', '--online']  # 返回默认参数
+
+    def mousePressEvent(self, event):
+        """鼠标按下事件 - 开始拖拽"""
+        if event.button() == Qt.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        """鼠标移动事件 - 拖拽窗口"""
+        if event.buttons() == Qt.LeftButton and self.drag_position:
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+
+class PresetEditorDialog(QDialog):
+    """预设方案编辑对话框"""
+
+    # 添加信号，用于通知主页面刷新预设方案
+    presets_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("编辑预设方案")
+        self.setFixedSize(850, 650)
+        self.setModal(True)
+
+        # 设置无边框
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+
+        # 拖拽相关
+        self.drag_position = None
+
+        # 编辑模式相关
+        self.editing_file = None
+
+        # 设置样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: 2px solid #45475a;
+                border-radius: 8px;
+            }
+            QLabel {
+                color: #cdd6f4;
+                font-size: 12px;
+            }
+            QLineEdit {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                padding: 6px;
+                color: #cdd6f4;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #89b4fa;
+            }
+            QTextEdit {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                padding: 6px;
+                color: #cdd6f4;
+                font-size: 12px;
+            }
+            QTextEdit:focus {
+                border-color: #89b4fa;
+            }
+            QCheckBox {
+                color: #cdd6f4;
+                font-size: 12px;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 1px solid #45475a;
+                border-radius: 3px;
+                background-color: #313244;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #89b4fa;
+                border-color: #89b4fa;
+            }
+            QCheckBox::indicator:checked {
+                image: none;
+            }
+            QPushButton {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #74c7ec;
+            }
+            QPushButton:pressed {
+                background-color: #6c7086;
+            }
+            QTabWidget::pane {
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                background-color: #1e1e2e;
+            }
+            QTabBar::tab {
+                background-color: #313244;
+                color: #cdd6f4;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+            }
+            QTabBar::tab:hover {
+                background-color: #45475a;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 8px;
+                color: #cdd6f4;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px 0 4px;
+            }
+            QScrollArea {
+                border: 1px solid #45475a;
+                border-radius: 4px;
+                background-color: #313244;
+            }
+        """)
+
+        self.init_ui()
+        self.load_available_mods()
+        self.load_existing_presets()
+
+    def init_ui(self):
+        """初始化界面"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # 自定义标题栏
+        title_bar = self.create_title_bar()
+        layout.addWidget(title_bar)
+
+        # 主内容区域
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        content_layout.setSpacing(12)
+
+        # 创建选项卡
+        self.tab_widget = QTabWidget()
+
+        # 创建新预设选项卡
+        create_tab = QWidget()
+        self.init_create_tab(create_tab)
+        self.tab_widget.addTab(create_tab, "📝 创建预设")
+
+        # 管理预设选项卡
+        manage_tab = QWidget()
+        self.init_manage_tab(manage_tab)
+        self.tab_widget.addTab(manage_tab, "🗂️ 管理预设")
+
+        # 选项卡切换事件
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+
+        content_layout.addWidget(self.tab_widget)
+
+        content_widget = QWidget()
+        content_widget.setLayout(content_layout)
+        layout.addWidget(content_widget)
+
+        self.setLayout(layout)
+
+    def create_title_bar(self):
+        """创建自定义标题栏"""
+        title_bar = QFrame()
+        title_bar.setFixedHeight(40)
+        title_bar.setStyleSheet("""
+            QFrame {
+                background-color: #313244;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+            }
+        """)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(12, 0, 12, 0)
+
+        # 标题
+        title_label = QLabel("📝 预设方案管理")
+        title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #cdd6f4;")
+        layout.addWidget(title_label)
+
+        layout.addStretch()
+
+        # 关闭按钮
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(30, 30)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #cdd6f4;
+                border: none;
+                border-radius: 15px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #f38ba8;
+                color: #1e1e2e;
+            }
+        """)
+        close_btn.clicked.connect(self.reject)
+        layout.addWidget(close_btn)
+
+        title_bar.setLayout(layout)
+        return title_bar
+
+    def init_create_tab(self, tab_widget):
+        """初始化创建预设选项卡"""
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        # 基本信息区域
+        info_group = QGroupBox("基本信息")
+        info_layout = QVBoxLayout()
+
+        # 方案名称和文件名
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("方案名称:"))
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("请输入方案名称，如：我的自定义方案")
+        name_layout.addWidget(self.name_edit)
+
+        name_layout.addWidget(QLabel("文件名:"))
+        self.filename_edit = QLineEdit()
+        self.filename_edit.setPlaceholderText("如：my_preset（自动添加.me3扩展名）")
+        name_layout.addWidget(self.filename_edit)
+
+        info_layout.addLayout(name_layout)
+
+        # 方案描述
+        desc_layout = QHBoxLayout()
+        desc_layout.addWidget(QLabel("方案描述:"))
+        self.desc_edit = QTextEdit()
+        self.desc_edit.setPlaceholderText("请输入方案描述，如：包含深夜模式和无缝联机功能")
+        self.desc_edit.setMaximumHeight(50)
+        desc_layout.addWidget(self.desc_edit)
+        info_layout.addLayout(desc_layout)
+
+        # 图标选择
+        icon_layout = QHBoxLayout()
+        icon_layout.addWidget(QLabel("选择图标:"))
+        self.icon_buttons = []
+        self.icon_group = QButtonGroup()
+
+        icons = ["🎮", "🌙", "⚔️", "🛡️", "🔥", "⭐", "💎", "🚀", "🎯", "🏆"]
+        for i, icon in enumerate(icons):
+            btn = QPushButton(icon)
+            btn.setFixedSize(40, 40)
+            btn.setCheckable(True)
+            btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 20px;
+                    background-color: #313244;
+                    border: 1px solid #45475a;
+                    border-radius: 4px;
+                    padding: 0px;
+                    text-align: center;
+                }
+                QPushButton:checked {
+                    background-color: #89b4fa;
+                    border-color: #89b4fa;
+                }
+                QPushButton:hover {
+                    background-color: #45475a;
+                }
+            """)
+            self.icon_group.addButton(btn, i)
+            self.icon_buttons.append(btn)
+            icon_layout.addWidget(btn)
+
+        # 默认选择第一个图标
+        self.icon_buttons[0].setChecked(True)
+
+        icon_layout.addStretch()
+        info_layout.addLayout(icon_layout)
+
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+
+        # Mod选择区域 - 使用复选框
+        mod_group = QGroupBox("Mod选择")
+        mod_layout = QHBoxLayout()
+
+        # 左侧：Mod包选择
+        packages_layout = QVBoxLayout()
+        packages_layout.addWidget(QLabel("Mod包 (Packages):"))
+
+        packages_scroll = QScrollArea()
+        packages_widget = QWidget()
+        self.packages_layout = QVBoxLayout(packages_widget)
+        self.packages_checkboxes = []
+        packages_scroll.setWidget(packages_widget)
+        packages_scroll.setWidgetResizable(True)
+        packages_scroll.setMaximumHeight(150)
+        packages_layout.addWidget(packages_scroll)
+
+        # 右侧：DLL选择
+        natives_layout = QVBoxLayout()
+        natives_layout.addWidget(QLabel("DLL文件 (Natives):"))
+
+        natives_scroll = QScrollArea()
+        natives_widget = QWidget()
+        self.natives_layout = QVBoxLayout(natives_widget)
+        self.natives_checkboxes = []
+        natives_scroll.setWidget(natives_widget)
+        natives_scroll.setWidgetResizable(True)
+        natives_scroll.setMaximumHeight(150)
+        natives_layout.addWidget(natives_scroll)
+
+        mod_layout.addLayout(packages_layout)
+        mod_layout.addLayout(natives_layout)
+
+        mod_group.setLayout(mod_layout)
+        layout.addWidget(mod_group)
+
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c7086;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #7c7d93;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        # 根据当前选项卡显示不同的保存按钮
+        self.save_btn = QPushButton("保存方案")
+        self.save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #94d3a2;
+            }
+            QPushButton:pressed {
+                background-color: #7dc4a0;
+            }
+        """)
+        self.save_btn.clicked.connect(self.save_preset)
+        button_layout.addWidget(self.save_btn)
+
+        layout.addLayout(button_layout)
+
+        tab_widget.setLayout(layout)
+
+    def init_manage_tab(self, tab_widget):
+        """初始化管理预设选项卡 - 采用快速启动风格"""
+        layout = QVBoxLayout()
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # 顶部标题和刷新按钮
+        header_layout = QHBoxLayout()
+
+        title_label = QLabel("📋 预设方案管理")
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 16px;
+                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+        header_layout.addWidget(title_label)
+
+        header_layout.addStretch()
+
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #89b4fa;
+                border: none;
+                border-radius: 4px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #7aa2f7;
+            }
+            QPushButton:pressed {
+                background-color: #6c7ce0;
+            }
+        """)
+        refresh_btn.clicked.connect(self.load_existing_presets)
+        header_layout.addWidget(refresh_btn)
+
+        layout.addLayout(header_layout)
+
+        # 预设卡片容器
+        self.presets_container = QWidget()
+        self.presets_layout = QVBoxLayout(self.presets_container)
+        self.presets_layout.setSpacing(6)
+        self.presets_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(self.presets_container)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+        """)
+
+        layout.addWidget(scroll_area)
+
+        tab_widget.setLayout(layout)
+
+    def load_available_mods(self):
+        """加载可用的mod列表"""
+        try:
+            from ...config.mod_config_manager import ModConfigManager
+            mod_manager = ModConfigManager()
+            available_mods = mod_manager.scan_mods_directory()
+
+            # 清空现有复选框
+            for checkbox in self.packages_checkboxes:
+                checkbox.setParent(None)
+            self.packages_checkboxes.clear()
+
+            for checkbox in self.natives_checkboxes:
+                checkbox.setParent(None)
+            self.natives_checkboxes.clear()
+
+            # 加载mod包复选框
+            for package in available_mods["packages"]:
+                checkbox = QCheckBox(package)
+                checkbox.setObjectName(package)
+                self.packages_checkboxes.append(checkbox)
+                self.packages_layout.addWidget(checkbox)
+
+            # 加载DLL文件复选框
+            for native in available_mods["natives"]:
+                checkbox = QCheckBox(native)
+                checkbox.setObjectName(native)
+                self.natives_checkboxes.append(checkbox)
+                self.natives_layout.addWidget(checkbox)
+
+        except Exception as e:
+            print(f"加载mod列表失败: {e}")
+
+    def save_preset(self):
+        """保存预设方案"""
+        try:
+            # 获取基本信息
+            name = self.name_edit.text().strip()
+            description = self.desc_edit.toPlainText().strip()
+
+            if not name:
+                self.show_message("错误", "请输入方案名称")
+                return
+
+            # 获取选择的图标
+            selected_icon_id = self.icon_group.checkedId()
+            icons = ["🎮", "🌙", "⚔️", "🛡️", "🔥", "⭐", "💎", "🚀", "🎯", "🏆"]
+            selected_icon = icons[selected_icon_id] if selected_icon_id >= 0 else "🎮"
+
+            # 获取选择的mod包
+            selected_packages = []
+            for checkbox in self.packages_checkboxes:
+                if checkbox.isChecked():
+                    selected_packages.append(checkbox.objectName())
+
+            # 获取选择的DLL
+            selected_natives = []
+            for checkbox in self.natives_checkboxes:
+                if checkbox.isChecked():
+                    selected_natives.append(checkbox.objectName())
+
+            if not selected_packages and not selected_natives:
+                self.show_message("错误", "请至少选择一个mod包或DLL文件")
+                return
+
+            # 生成配置文件内容
+            config_content = self.generate_config_content(name, description, selected_icon, selected_packages, selected_natives)
+
+            # 保存到文件
+            import os
+            from pathlib import Path
+
+            list_dir = Path("Mods/list")
+            list_dir.mkdir(exist_ok=True)
+
+            # 确定文件路径
+            if self.editing_file:
+                # 编辑模式：使用原文件路径
+                file_path = self.editing_file
+            else:
+                # 新建模式：使用用户输入的文件名或生成文件名
+                filename_input = self.filename_edit.text().strip()
+                if filename_input:
+                    # 确保文件名以.me3结尾
+                    if not filename_input.endswith('.me3'):
+                        filename_input += '.me3'
+                    filename = filename_input
+                else:
+                    # 如果没有输入文件名，根据方案名称生成
+                    safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
+                    safe_name = safe_name.replace(' ', '_')
+                    filename = f"{safe_name}.me3"
+                file_path = list_dir / filename
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(config_content)
+
+            if self.editing_file:
+                self.show_message("成功", f"预设方案已更新: {file_path.name}")
+                # 重置编辑状态
+                self.editing_file = None
+                self.save_btn.setText("保存方案")
+                # 刷新管理列表
+                self.load_existing_presets()
+                # 发出信号通知主页面刷新
+                self.presets_changed.emit()
+                # 切换到管理选项卡
+                self.tab_widget.setCurrentIndex(1)
+            else:
+                self.show_message("成功", f"预设方案已保存到: {file_path}")
+                # 发出信号通知主页面刷新
+                self.presets_changed.emit()
+                self.accept()
+
+        except Exception as e:
+            self.show_message("错误", f"保存失败: {e}")
+
+    def generate_config_content(self, name, description, icon, packages, natives):
+        """生成配置文件内容"""
+        lines = []
+        lines.append(f"# 方案名称: {icon} {name}")
+        lines.append(f"# 描述: {description}")
+        lines.append(f"# 图标: {icon}")
+        lines.append('profileVersion = "v1"')
+        lines.append("")
+
+        # 添加mod包配置
+        if packages:
+            lines.append("# Mod包配置")
+            for package in packages:
+                # 移除 (外部) 标记
+                clean_package = package.replace(" (外部)", "")
+                lines.append(f'[[packages]]')
+                lines.append(f'path = "../{clean_package}"')
+                lines.append("")
+
+        # 添加DLL配置
+        if natives:
+            lines.append("# Native DLL配置")
+            for native in natives:
+                # 移除 (外部) 标记
+                clean_native = native.replace(" (外部)", "")
+                lines.append(f'[[natives]]')
+                if "/" in clean_native:
+                    # 子文件夹中的DLL
+                    lines.append(f'path = "../{clean_native}"')
+                else:
+                    # 根目录下的DLL
+                    lines.append(f'path = "../{clean_native}"')
+                lines.append("")
+
+        return "\n".join(lines)
+
+    def load_existing_presets(self):
+        """加载现有预设方案 - 卡片布局"""
+        try:
+            from pathlib import Path
+
+            # 清空现有卡片
+            for i in reversed(range(self.presets_layout.count())):
+                child = self.presets_layout.itemAt(i).widget()
+                if child:
+                    child.setParent(None)
+
+            list_dir = Path("Mods/list")
+            if not list_dir.exists():
+                # 显示空状态
+                empty_label = QLabel("📁 Mods/list 目录不存在")
+                empty_label.setStyleSheet("""
+                    QLabel {
+                        color: #6c7086;
+                        font-size: 14px;
+                        text-align: center;
+                        background-color: transparent;
+                        border: none;
+                        margin: 20px;
+                        padding: 20px;
+                    }
+                """)
+                empty_label.setAlignment(Qt.AlignCenter)
+                self.presets_layout.addWidget(empty_label)
+                return
+
+            # 扫描.me3文件
+            preset_files = list(list_dir.glob("*.me3"))
+
+            if len(preset_files) == 0:
+                # 显示空状态
+                empty_label = QLabel("📋 暂无预设方案\n\n点击 '创建预设' 选项卡开始创建")
+                empty_label.setStyleSheet("""
+                    QLabel {
+                        color: #6c7086;
+                        font-size: 14px;
+                        text-align: center;
+                        background-color: transparent;
+                        border: none;
+                        margin: 20px;
+                        padding: 20px;
+                        line-height: 1.6;
+                    }
+                """)
+                empty_label.setAlignment(Qt.AlignCenter)
+                self.presets_layout.addWidget(empty_label)
+                return
+
+            # 添加预设卡片
+            for preset_file in preset_files:
+                preset_card = self.create_manage_preset_card(preset_file)
+                self.presets_layout.addWidget(preset_card)
+
+            # 添加弹性空间
+            self.presets_layout.addStretch()
+
+        except Exception as e:
+            print(f"加载现有预设失败: {e}")
+            # 显示错误状态
+            error_label = QLabel(f"❌ 加载失败: {str(e)}")
+            error_label.setStyleSheet("""
+                QLabel {
+                    color: #f38ba8;
+                    font-size: 14px;
+                    text-align: center;
+                    background-color: transparent;
+                    border: none;
+                    margin: 20px;
+                    padding: 20px;
+                }
+            """)
+            error_label.setAlignment(Qt.AlignCenter)
+            self.presets_layout.addWidget(error_label)
+
+    def create_manage_preset_card(self, preset_file):
+        """创建管理预设卡片 - 类似快速启动风格"""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e2e;
+                border: 0.5px solid #313244;
+                border-radius: 6px;
+                padding: 2px;
+                min-height: 65px;
+            }
+            QFrame:hover {
+                border-color: #45475a;
+                background-color: #252537;
+            }
+        """)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+
+        # 解析预设文件获取信息
+        preset_info = self.parse_preset_file(preset_file)
+
+        # 顶部：标题、文件名和按钮
+        top_layout = QHBoxLayout()
+
+        # 标题
+        title_text = f"{preset_info['icon']} {preset_info['name']}"
+        title_label = QLabel(title_text)
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 15px;
+                font-weight: bold;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+        top_layout.addWidget(title_label)
+
+        # 文件名
+        file_label = QLabel(preset_file.name)
+        file_label.setStyleSheet("""
+            QLabel {
+                color: #6c7086;
+                font-size: 11px;
+                font-family: monospace;
+                background-color: transparent;
+                border: none;
+                margin: 0px 8px 0px 8px;
+                padding: 0px;
+            }
+        """)
+        top_layout.addWidget(file_label)
+
+        top_layout.addStretch()
+
+        # 操作按钮
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(6)
+
+        # 编辑按钮
+        edit_btn = QPushButton("✏️ 编辑")
+        edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #89b4fa;
+                border: none;
+                border-radius: 4px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #7aa2f7;
+            }
+            QPushButton:pressed {
+                background-color: #6c7ce0;
+            }
+        """)
+        edit_btn.clicked.connect(lambda: self.edit_preset(preset_file))
+        buttons_layout.addWidget(edit_btn)
+
+        # 删除按钮
+        delete_btn = QPushButton("🗑️ 删除")
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f38ba8;
+                border: none;
+                border-radius: 4px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #eba0ac;
+            }
+            QPushButton:pressed {
+                background-color: #e78284;
+            }
+        """)
+        delete_btn.clicked.connect(lambda: self.delete_preset(preset_file))
+        buttons_layout.addWidget(delete_btn)
+
+        top_layout.addLayout(buttons_layout)
+
+        layout.addLayout(top_layout)
+
+        # 中部：描述
+        description_label = QLabel(preset_info['description'])
+        description_label.setStyleSheet("""
+            QLabel {
+                color: #cdd6f4;
+                font-size: 13px;
+                line-height: 1.4;
+                background-color: transparent;
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+        """)
+        description_label.setWordWrap(True)
+        layout.addWidget(description_label)
+
+        card.setLayout(layout)
+        return card
+
+    def parse_preset_file(self, preset_file):
+        """解析预设文件获取基本信息"""
+        try:
+            with open(preset_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            info = {
+                'name': '未知方案',
+                'description': '无描述',
+                'icon': '🎮'
+            }
+
+            for line in content.split('\n'):
+                if line.startswith('# 方案名称:'):
+                    parts = line.split(':', 1)[1].strip().split(' ', 1)
+                    if len(parts) >= 2:
+                        info['icon'] = parts[0]
+                        info['name'] = parts[1]
+                elif line.startswith('# 描述:'):
+                    info['description'] = line.split(':', 1)[1].strip()
+
+            return info
+
+        except Exception as e:
+            print(f"解析预设文件失败: {e}")
+            return {'name': '解析失败', 'description': '无法读取文件', 'icon': '❌'}
+
+    def edit_preset(self, preset_file):
+        """编辑预设方案"""
+        try:
+            # 解析现有预设文件
+            preset_data = self.parse_preset_file_detailed(preset_file)
+
+            # 切换到创建选项卡
+            self.tab_widget.setCurrentIndex(0)
+
+            # 填充表单数据
+            self.name_edit.setText(preset_data['name'])
+            self.desc_edit.setPlainText(preset_data['description'])
+            # 文件名去掉.me3扩展名
+            filename_without_ext = preset_file.name.replace('.me3', '') if preset_file.name.endswith('.me3') else preset_file.name
+            self.filename_edit.setText(filename_without_ext)
+
+            # 设置图标
+            icons = ["🎮", "🌙", "⚔️", "🛡️", "🔥", "⭐", "💎", "🚀", "🎯", "🏆"]
+            if preset_data['icon'] in icons:
+                icon_index = icons.index(preset_data['icon'])
+                self.icon_buttons[icon_index].setChecked(True)
+
+            # 设置mod选择
+            self.set_mod_selections(preset_data['packages'], preset_data['natives'])
+
+            # 保存当前编辑的文件路径
+            self.editing_file = preset_file
+
+            # 更新保存按钮文本
+            self.save_btn.setText("更新方案")
+
+            self.show_message("提示", f"已加载预设方案: {preset_data['name']}\n请在'创建预设'选项卡中修改")
+
+        except Exception as e:
+            self.show_message("错误", f"加载预设失败: {e}")
+
+    def parse_preset_file_detailed(self, preset_file):
+        """详细解析预设文件"""
+        try:
+            with open(preset_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            data = {
+                'name': '未知方案',
+                'description': '无描述',
+                'icon': '🎮',
+                'packages': [],
+                'natives': []
+            }
+
+            lines = content.split('\n')
+            current_section = None
+
+            for line in lines:
+                line = line.strip()
+
+                if line.startswith('# 方案名称:'):
+                    parts = line.split(':', 1)[1].strip().split(' ', 1)
+                    if len(parts) >= 2:
+                        data['icon'] = parts[0]
+                        data['name'] = parts[1]
+                elif line.startswith('# 描述:'):
+                    data['description'] = line.split(':', 1)[1].strip()
+                elif line.startswith('[[packages]]'):
+                    current_section = 'packages'
+                elif line.startswith('[[natives]]'):
+                    current_section = 'natives'
+                elif line.startswith('path = '):
+                    if current_section:
+                        # 提取路径，移除引号和../前缀
+                        path = line.split('=', 1)[1].strip().strip('"').replace('../', '')
+                        data[current_section].append(path)
+
+            return data
+
+        except Exception as e:
+            print(f"详细解析预设文件失败: {e}")
+            return {
+                'name': '解析失败',
+                'description': '无法读取文件',
+                'icon': '❌',
+                'packages': [],
+                'natives': []
+            }
+
+    def set_mod_selections(self, packages, natives):
+        """设置mod选择状态"""
+        try:
+            # 清空所有选择
+            for checkbox in self.packages_checkboxes:
+                checkbox.setChecked(False)
+            for checkbox in self.natives_checkboxes:
+                checkbox.setChecked(False)
+
+            # 设置packages选择
+            for package in packages:
+                for checkbox in self.packages_checkboxes:
+                    # 处理可能的 (外部) 标记
+                    checkbox_name = checkbox.objectName().replace(" (外部)", "")
+                    if checkbox_name == package:
+                        checkbox.setChecked(True)
+                        break
+
+            # 设置natives选择
+            for native in natives:
+                for checkbox in self.natives_checkboxes:
+                    # 处理可能的 (外部) 标记
+                    checkbox_name = checkbox.objectName().replace(" (外部)", "")
+                    if checkbox_name == native:
+                        checkbox.setChecked(True)
+                        break
+
+        except Exception as e:
+            print(f"设置mod选择失败: {e}")
+
+    def on_tab_changed(self, index):
+        """选项卡切换处理"""
+        if index == 0:  # 创建预设选项卡
+            if not self.editing_file:
+                # 如果不是编辑模式，重置表单
+                self.reset_create_form()
+        elif index == 1:  # 管理预设选项卡
+            # 刷新预设列表
+            self.load_existing_presets()
+
+    def reset_create_form(self):
+        """重置创建表单"""
+        try:
+            # 清空输入框
+            self.name_edit.clear()
+            self.desc_edit.clear()
+
+            # 重置图标选择
+            if self.icon_buttons:
+                self.icon_buttons[0].setChecked(True)
+
+            # 清空mod选择
+            for checkbox in self.packages_checkboxes:
+                checkbox.setChecked(False)
+            for checkbox in self.natives_checkboxes:
+                checkbox.setChecked(False)
+
+            # 重置编辑状态
+            self.editing_file = None
+            self.save_btn.setText("保存方案")
+
+        except Exception as e:
+            print(f"重置表单失败: {e}")
+
+    def delete_preset(self, preset_file):
+        """删除预设方案"""
+        try:
+            from PySide6.QtWidgets import QMessageBox
+
+            # 创建自定义无边框确认对话框
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("确认删除")
+            msg_box.setText(f"确定要删除预设方案 '{preset_file.name}' 吗？\n此操作不可撤销！")
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.setDefaultButton(QMessageBox.No)
+
+            # 设置无边框
+            msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+
+            # 设置样式
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #1e1e2e;
+                    color: #cdd6f4;
+                    border: 2px solid #f38ba8;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #89b4fa;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    font-weight: bold;
+                    min-width: 60px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #74c7ec;
+                }
+                QMessageBox QPushButton:pressed {
+                    background-color: #7287fd;
+                }
+            """)
+
+            reply = msg_box.exec()
+
+            if reply == QMessageBox.Yes:
+                preset_file.unlink()
+                self.load_existing_presets()  # 刷新列表
+                self.presets_changed.emit()  # 发出信号通知主页面刷新
+                self.show_message("成功", f"已删除预设方案: {preset_file.name}")
+
+        except Exception as e:
+            self.show_message("错误", f"删除失败: {e}")
+
+    def mousePressEvent(self, event):
+        """鼠标按下事件 - 开始拖拽"""
+        if event.button() == Qt.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        """鼠标移动事件 - 拖拽窗口"""
+        if event.buttons() == Qt.LeftButton and self.drag_position:
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def show_message(self, title, message):
+        """显示消息对话框"""
+        from PySide6.QtWidgets import QMessageBox
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+
+        # 设置无边框
+        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+
+        # 设置样式
+        msg_box.setStyleSheet("""
+            QMessageBox {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: 2px solid #89b4fa;
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QMessageBox QPushButton {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+                min-width: 60px;
+            }
+            QMessageBox QPushButton:hover {
+                background-color: #74c7ec;
+            }
+            QMessageBox QPushButton:pressed {
+                background-color: #7287fd;
+            }
+        """)
+        msg_box.exec()

@@ -11,7 +11,6 @@ from PySide6.QtCore import Qt, Signal, QTimer, QProcess
 from .base_page import BasePage
 from ...config.mod_config_manager import ModConfigManager
 from ...config.config_manager import ConfigManager
-import subprocess
 import os
 from pathlib import Path
 
@@ -733,7 +732,9 @@ class ModsPage(BasePage):
         lines.append("# 由Nmodm自动生成")
         lines.append("")
         lines.append('profileVersion = "v1"')
-        lines.append('start_online = true')
+        lines.append("")
+        lines.append("[[supports]]")
+        lines.append('game = "nightreign"')
         lines.append("")
 
         # 添加packages
@@ -812,41 +813,111 @@ class ModsPage(BasePage):
         # 强制UI刷新，确保状态显示及时更新
         from PySide6.QtWidgets import QApplication
         QApplication.processEvents()
+        # 给用户一些时间看到准备状态
+        import time
+        time.sleep(0.8)
 
+        # 检查并执行自动备份
         try:
-            from src.utils.game_process_cleaner import cleanup_game_processes
-            cleanup_game_processes()
+            from .misc_page import MiscPage
+            if MiscPage.trigger_auto_backup_if_enabled():
+                self.show_status("正在自动备份存档...", "info")
+                QApplication.processEvents()
+                # 给自动备份一些时间
+                import time
+                time.sleep(1.5)
         except Exception as e:
-            print(f"清理进程时发生错误: {e}")
+            print(f"自动备份时发生错误: {e}")
 
-        # 构建启动命令
-        config_file = str(self.mod_manager.config_file)
-        cmd = [
-            me3_exe,
-            "launch",
-            "--exe", game_path,
-            "--skip-steam-init",
-            "--game", "nightreign",
-            "-p", config_file
-        ]
-
+        # 清理冲突进程（异步执行，避免阻塞UI）
         try:
-            # 启动游戏
-            import sys
+            import threading
+            from src.utils.game_process_cleaner import cleanup_game_processes
 
-            # 设置创建标志以隐藏控制台窗口
-            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            def cleanup_processes():
+                try:
+                    cleanup_game_processes()
+                except Exception as e:
+                    print(f"清理进程时发生错误: {e}")
 
-            if me3_exe == "me3":
-                # 完整安装版：不需要指定工作目录
-                subprocess.Popen(cmd, creationflags=creation_flags)
-                self.show_status("游戏启动成功（使用完整安装版ME3）", "success")
-            else:
-                # 便携版：需要指定工作目录
-                subprocess.Popen(cmd, cwd=os.path.dirname(me3_exe), creationflags=creation_flags)
-                self.show_status("游戏启动成功（使用便携版ME3）", "success")
+            # 在后台线程中清理进程
+            cleanup_thread = threading.Thread(target=cleanup_processes, daemon=True)
+            cleanup_thread.start()
+        except Exception as e:
+            print(f"启动进程清理时发生错误: {e}")
+
+        # 创建bat启动脚本
+        try:
+            bat_path = self.create_launch_bat_script(me3_exe, game_path, "current.bat")
+            if not bat_path:
+                self.show_status("创建启动脚本失败", "error")
+                return
+
+            # 启动bat脚本 - 使用DLL隔离保护
+            from src.utils.dll_manager import safe_launch_game
+            safe_launch_game(str(bat_path))
+            self.show_status("游戏启动成功（使用bat脚本）", "success")
+
         except Exception as e:
             self.show_status(f"启动失败: {str(e)}", "error")
+
+    def create_launch_bat_script(self, me3_exe: str, game_path: str, bat_name: str) -> str:
+        """创建启动bat脚本"""
+        try:
+            # 确保me3p/start目录存在
+            start_dir = Path("me3p/start")
+            start_dir.mkdir(parents=True, exist_ok=True)
+
+            # 获取绝对路径
+            config_file = str(Path(self.mod_manager.config_file).resolve())
+            game_path = str(Path(game_path).resolve())
+
+            # 读取启动参数
+            launch_params = ["--skip-steam-init", "--online"]  # 默认参数
+            try:
+                from .quick_launch_page import LaunchParamsConfigDialog
+                launch_params = LaunchParamsConfigDialog.get_launch_params()
+            except Exception as e:
+                print(f"读取启动参数失败，使用默认参数: {e}")
+
+            # 构建启动命令
+            if me3_exe == "me3":
+                # 完整安装版
+                me3_cmd = "me3"
+            else:
+                # 便携版，使用绝对路径
+                me3_cmd = f'"{str(Path(me3_exe).resolve())}"'
+
+            # 构建完整命令
+            cmd_parts = [
+                me3_cmd,
+                "launch",
+                f'--exe "{game_path}"'
+            ]
+            cmd_parts.extend(launch_params)
+            cmd_parts.extend([
+                "--game nightreign",
+                f'-p "{config_file}"'
+            ])
+
+            # 创建bat脚本内容
+            bat_content = f"""chcp 65001
+{' '.join(cmd_parts)}
+"""
+
+            # 写入bat文件
+            bat_path = start_dir / bat_name
+            with open(bat_path, 'w', encoding='utf-8') as f:
+                f.write(bat_content)
+
+            print(f"创建启动脚本: {bat_path}")
+            print(f"脚本内容: {bat_content.strip()}")
+
+            return str(bat_path.resolve())
+
+        except Exception as e:
+            print(f"创建启动脚本失败: {e}")
+            return None
 
     def show_status(self, message: str, status_type: str = "info"):
         """显示状态信息"""
