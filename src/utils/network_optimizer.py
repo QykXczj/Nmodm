@@ -276,9 +276,6 @@ class NetworkOptimizer(QObject):
                         print(f"⚠️ 仍有 {len(final_check)} 个WinIPBroadcast进程未能清理")
                         # 尝试使用系统命令
                         try:
-                            import subprocess
-                            import sys
-                            
                             if sys.platform == "win32":
                                 # 尝试使用管理员权限的taskkill
                                 import ctypes

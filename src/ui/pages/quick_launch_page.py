@@ -1279,20 +1279,35 @@ class QuickLaunchPage(BasePage):
     def refresh_presets_section(self):
         """刷新预设方案区域"""
         try:
-            # 找到预设方案区域的父容器
-            # 需要重新创建预设方案区域
-            # 首先移除现有的预设方案区域
-            for i in reversed(range(self.content_layout.count())):
+            # 移除所有预设相关的widget（包括网格布局和提示信息）
+            widgets_to_remove = []
+
+            for i in range(self.content_layout.count()):
                 item = self.content_layout.itemAt(i)
                 if item and item.widget():
                     widget = item.widget()
-                    # 检查是否是预设方案区域（通过检查是否包含预设卡片）
+
+                    # 检查是否是预设方案相关的widget
+                    is_preset_widget = False
+
+                    # 1. 检查是否是网格布局（预设卡片容器）
                     if hasattr(widget, 'layout') and widget.layout():
                         layout = widget.layout()
                         if isinstance(layout, QGridLayout):
-                            # 这是预设方案的网格布局，移除它
-                            widget.setParent(None)
-                            break
+                            is_preset_widget = True
+
+                    # 2. 检查是否是"无预设"提示QLabel
+                    elif isinstance(widget, QLabel):
+                        text = widget.text()
+                        if "未找到预设方案" in text or "Mods/list/" in text:
+                            is_preset_widget = True
+
+                    if is_preset_widget:
+                        widgets_to_remove.append(widget)
+
+            # 移除所有找到的预设相关widget
+            for widget in widgets_to_remove:
+                widget.setParent(None)
 
             # 重新创建预设方案区域
             self.create_presets_section(self.content_layout)
