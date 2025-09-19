@@ -23,6 +23,16 @@ class NuitkaBuilder:
         self.dist_dir = self.builds_dir / "Nuitka"
         self.version = "3.1.0"  # 应用版本号
         self.build_dir = self.project_root / "build"
+
+        # 版本信息配置
+        self.version_info = {
+            "product_name": "Nmodm",
+            "product_version": f"{self.version}.0",  # 3.1.0 -> 3.1.0.0
+            "file_version": f"{self.version}.0",
+            "file_description": "Nmodm - 游戏模组管理器",
+            "copyright": "Copyright © 2024",
+            "trademark": ""
+        }
         
     def check_environment(self) -> bool:
         """检查打包环境"""
@@ -182,8 +192,38 @@ class NuitkaBuilder:
         ]
         
         return modules
-    
-    def build(self, onefile: bool = True, clean: bool = True) -> bool:
+
+    def get_version_info_args(self) -> List[str]:
+        """获取版本信息参数列表"""
+        version_args = []
+
+        # 产品名称
+        if self.version_info["product_name"]:
+            version_args.append(f"--product-name={self.version_info['product_name']}")
+
+        # 产品版本
+        if self.version_info["product_version"]:
+            version_args.append(f"--product-version={self.version_info['product_version']}")
+
+        # 文件版本
+        if self.version_info["file_version"]:
+            version_args.append(f"--file-version={self.version_info['file_version']}")
+
+        # 文件描述
+        if self.version_info["file_description"]:
+            version_args.append(f"--file-description={self.version_info['file_description']}")
+
+        # 版权信息
+        if self.version_info["copyright"]:
+            version_args.append(f"--copyright={self.version_info['copyright']}")
+
+        # 商标信息
+        if self.version_info["trademark"]:
+            version_args.append(f"--trademark={self.version_info['trademark']}")
+
+        return version_args
+
+    def build(self, onefile: bool = True, clean: bool = True, disable_console: bool = True) -> bool:
         """执行打包"""
         mode_name = "单文件" if onefile else "目录"
         print(f"🚀 开始Nuitka打包 ({mode_name}模式)...")
@@ -201,7 +241,6 @@ class NuitkaBuilder:
             "--warn-implicit-exceptions",  # 警告隐式异常
             "--warn-unusual-code",         # 警告异常代码
             "--enable-plugin=pyside6",     # 启用PySide6插件
-            "--disable-console",           # 禁用控制台窗口
         ]
 
         # 设置图标（检查图标文件是否存在）
@@ -210,7 +249,11 @@ class NuitkaBuilder:
             cmd.append(f"--windows-icon-from-ico={icon_file}")
         else:
             print("⚠️ 图标文件不存在，跳过图标设置")
-        
+
+        # 设置控制台选项
+        if disable_console:
+            cmd.append("--disable-console")
+
         # 添加模式特定参数
         if onefile:
             cmd.append("--onefile")
@@ -242,7 +285,11 @@ class NuitkaBuilder:
             "--nofollow-import-to=setuptools",
         ]
         cmd.extend(exclude_modules)
-        
+
+        # 添加版本信息
+        version_info_args = self.get_version_info_args()
+        cmd.extend(version_info_args)
+
         # 添加主文件
         cmd.append("main.py")
         
@@ -567,10 +614,32 @@ def main():
     print("1. 单文件模式 (onefile)")
     print("2. 独立模式 (standalone)")
     print("3. 两种模式都打包")
-    
+
     try:
         choice = input("\n请选择 (1/2/3): ").strip()
-        
+
+        # 询问是否禁用控制台窗口
+        print("\n🖥️ 控制台窗口设置:")
+        print("1. 禁用控制台窗口 (推荐，适合发布版本)")
+        print("2. 保留控制台窗口 (适合调试)")
+
+        console_choice = input("\n请选择 (1/2): ").strip()
+        disable_console = console_choice != '2'  # 默认禁用，除非用户明确选择保留
+
+        if disable_console:
+            print("✅ 将禁用控制台窗口")
+        else:
+            print("✅ 将保留控制台窗口")
+
+        # 显示版本信息配置
+        print("\n📋 版本信息配置:")
+        print(f"  产品名称: {builder.version_info['product_name']}")
+        print(f"  产品版本: {builder.version_info['product_version']}")
+        print(f"  文件版本: {builder.version_info['file_version']}")
+        print(f"  文件描述: {builder.version_info['file_description']}")
+        print(f"  版权信息: {builder.version_info['copyright']}")
+        print("✅ 将为exe文件添加专业版本信息")
+
         success_count = 0
         total_count = 0
         
@@ -578,7 +647,7 @@ def main():
             print(f"\n{'='*50}")
             print("🚀 开始单文件模式打包...")
             total_count += 1
-            if builder.build(onefile=True):
+            if builder.build(onefile=True, disable_console=disable_console):
                 if builder.test_executable(onefile=True):
                     success_count += 1
                     print("✅ 单文件模式打包完成并测试通过")
@@ -591,7 +660,7 @@ def main():
             print(f"\n{'='*50}")
             print("🚀 开始独立模式打包...")
             total_count += 1
-            if builder.build(onefile=False):
+            if builder.build(onefile=False, disable_console=disable_console):
                 if builder.test_executable(onefile=False):
                     success_count += 1
                     print("✅ 独立模式打包完成并测试通过")
