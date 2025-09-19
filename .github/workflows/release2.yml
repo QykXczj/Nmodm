@@ -70,7 +70,7 @@ jobs:
 
         # 执行独立模式构建
         print('🚀 开始独立模式打包...')
-        if builder.build(onefile=False):
+        if builder.build(onefile=False, disable_console=False):
             print('✅ 独立模式打包完成')
         else:
             print('❌ 独立模式打包失败')
@@ -213,6 +213,15 @@ jobs:
         $setupSection += "`nMinVersion=6.1sp1"
         $setupSection += "`nArchitecturesAllowed=x64"
         $setupSection += "`nArchitecturesInstallIn64BitMode=x64"
+
+        # 添加版本信息
+        $setupSection += "`nAppCopyright=Copyright © 2024"
+        $setupSection += "`nAppComments=Nmodm - 游戏模组管理器"
+        $setupSection += "`nVersionInfoVersion=$version.0"
+        $setupSection += "`nVersionInfoDescription=Nmodm - 游戏模组管理器"
+        $setupSection += "`nVersionInfoCopyright=Copyright © 2024"
+        $setupSection += "`nVersionInfoProductName=Nmodm"
+        $setupSection += "`nVersionInfoProductVersion=$version.0"
 
         # 添加图标支持
         if (Test-Path "zwnr.ico") {
