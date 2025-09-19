@@ -65,18 +65,25 @@ class EasyTierConfigGenerator:
         
         if listeners is None:
             listeners = ["udp://0.0.0.0:11010"]
-        
+
         if flags is None:
             flags = {
                 "enable_kcp_proxy": True,
                 "enable_quic_proxy": True,
                 "latency_first": True,
                 "multi_thread": True,
-                "disable_encryption": True,
-                "disable_ipv6": False,
+                "enable_encryption": True,   # 默认启用加密
+                "disable_ipv6": False,       # 默认不禁用IPv6
                 "use_smoltcp": False,
-                "enable_compression": True
+                "enable_compression": False, # 默认不启用压缩
+                "tcp_listen": False          # 默认不监听TCP
             }
+
+        # 处理TCP监听选项
+        if flags.get("tcp_listen", False):
+            # 如果启用TCP监听，添加TCP监听器
+            if "tcp://0.0.0.0:11010" not in listeners:
+                listeners.append("tcp://0.0.0.0:11010")
         
         # 构建配置字典
         config = {
@@ -107,20 +114,21 @@ class EasyTierConfigGenerator:
         config["flags"]["enable_quic_proxy"] = flags.get("enable_quic_proxy", True)
         config["flags"]["latency_first"] = flags.get("latency_first", True)
         config["flags"]["multi_thread"] = flags.get("multi_thread", True)
-        config["flags"]["disable_ipv6"] = flags.get("disable_ipv6", False)
         config["flags"]["use_smoltcp"] = flags.get("use_smoltcp", True)
-        
-        # 处理加密配置
-        # 如果禁用加密，则设置disable_encryption = true
-        # 如果启用加密，则不添加disable_encryption字段（让EasyTier使用默认加密）
-        enable_encryption = flags.get("enable_encryption", True)
-        print(f"🔍 调试：enable_encryption = {enable_encryption}")
-        if not enable_encryption:
-            config["flags"]["disable_encryption"] = True
-            print(f"🔍 调试：设置 disable_encryption = true")
+
+        # 处理IPv6配置 - 在TOML中使用enable_ipv6字段
+        disable_ipv6 = flags.get("disable_ipv6", False)
+        if not disable_ipv6:
+            config["flags"]["enable_ipv6"] = True
         else:
-            print(f"🔍 调试：启用加密，不添加 disable_encryption 字段")
-        # 如果启用加密，不添加disable_encryption字段到配置中
+            config["flags"]["enable_ipv6"] = False
+        
+        # 处理加密配置 - 在TOML中使用enable_encryption字段
+        enable_encryption = flags.get("enable_encryption", True)
+        if enable_encryption:
+            config["flags"]["enable_encryption"] = True
+        else:
+            config["flags"]["enable_encryption"] = False
         
         # 处理压缩配置
         # 如果启用压缩，则设置data_compress_algo = 2

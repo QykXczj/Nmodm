@@ -1185,7 +1185,7 @@ class VirtualLanPage(BasePage):
 
         # 房间代码输入
         room_code_label = QLabel("房间代码:")
-        room_code_label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 13px;")
+        room_code_label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 13px; background-color: transparent;")
         join_layout.addWidget(room_code_label)
         self.room_code_edit = QLineEdit()
         self.room_code_edit.setPlaceholderText("粘贴房间代码 (ESR://...)")
@@ -1207,7 +1207,7 @@ class VirtualLanPage(BasePage):
 
         # 玩家名称输入
         player_name_label = QLabel("玩家名称:")
-        player_name_label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 13px;")
+        player_name_label.setStyleSheet("color: #cdd6f4; font-weight: bold; font-size: 13px; background-color: transparent;")
         join_layout.addWidget(player_name_label)
 
         # 玩家名称输入行（包含输入框和随机生成按钮）
@@ -1280,7 +1280,7 @@ class VirtualLanPage(BasePage):
         join_btn_layout.addWidget(self.join_room_btn)
 
         join_hint = QLabel("解析房间代码并加入")
-        join_hint.setStyleSheet("color: #bac2de; font-size: 11px;")
+        join_hint.setStyleSheet("color: #bac2de; font-size: 11px; background-color: transparent;")
         join_btn_layout.addWidget(join_hint)
         join_btn_layout.addStretch()
 
@@ -2075,7 +2075,7 @@ class VirtualLanPage(BasePage):
 
             # 重置复选框为默认状态
             self.dhcp_check.setChecked(True)
-            self.encryption_check.setChecked(False)  # 默认禁用加密
+            self.encryption_check.setChecked(True)   # 默认启用加密
             self.ipv6_check.setChecked(True)
             self.latency_first_check.setChecked(True)
             self.multi_thread_check.setChecked(True)
@@ -2146,7 +2146,7 @@ class VirtualLanPage(BasePage):
                 "hostname": hostname,  # 统一使用hostname字段
                 "network_secret": network_secret,
                 "dhcp": self.dhcp_check.isChecked(),
-                "disable_encryption": not self.encryption_check.isChecked(),
+                "enable_encryption": self.encryption_check.isChecked(),
                 "disable_ipv6": not self.ipv6_check.isChecked(),
                 "latency_first": self.latency_first_check.isChecked(),
                 "multi_thread": self.multi_thread_check.isChecked(),
@@ -2155,6 +2155,7 @@ class VirtualLanPage(BasePage):
                 "enable_quic_proxy": self.quic_proxy_check.isChecked(),
                 "use_smoltcp": self.smoltcp_check.isChecked(),
                 "enable_compression": self.compression_check.isChecked(),
+                "tcp_listen": self.tcp_listen_check.isChecked(),
                 # 网络优化配置
                 "network_optimization": {
                     "winip_broadcast": self.winip_broadcast_check.isChecked(),
@@ -2315,7 +2316,7 @@ class VirtualLanPage(BasePage):
                 self.peer_ip_edit.setEnabled(True)
 
             # 高级设置（使用新的默认值）
-            self.encryption_check.setChecked(not room_config.get("disable_encryption", True))  # 默认禁用加密
+            self.encryption_check.setChecked(room_config.get("enable_encryption", True))       # 默认启用加密
             self.ipv6_check.setChecked(not room_config.get("disable_ipv6", False))
             self.latency_first_check.setChecked(room_config.get("latency_first", True))
             self.multi_thread_check.setChecked(room_config.get("multi_thread", True))
@@ -2376,7 +2377,7 @@ class VirtualLanPage(BasePage):
                 "hostname": hostname,
                 "network_secret": network_secret,
                 "dhcp": self.dhcp_check.isChecked(),
-                "disable_encryption": not self.encryption_check.isChecked(),
+                "enable_encryption": self.encryption_check.isChecked(),
                 "disable_ipv6": not self.ipv6_check.isChecked(),
                 "latency_first": self.latency_first_check.isChecked(),
                 "multi_thread": self.multi_thread_check.isChecked(),
@@ -2385,6 +2386,7 @@ class VirtualLanPage(BasePage):
                 "enable_quic_proxy": self.quic_proxy_check.isChecked(),
                 "use_smoltcp": self.smoltcp_check.isChecked(),
                 "enable_compression": self.compression_check.isChecked(),
+                "tcp_listen": self.tcp_listen_check.isChecked(),
                 # 网络优化配置
                 "network_optimization": {
                     "winip_broadcast": self.winip_broadcast_check.isChecked(),
@@ -2564,7 +2566,7 @@ class VirtualLanPage(BasePage):
 
         # 加密选项
         self.encryption_check = QCheckBox("启用加密")
-        self.encryption_check.setChecked(False)  # 默认禁用（提升性能）
+        self.encryption_check.setChecked(True)   # 默认启用加密
         self.encryption_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.encryption_check, 0, 0)
 
@@ -2682,27 +2684,40 @@ class VirtualLanPage(BasePage):
 
         # 压缩算法选项
         self.compression_check = QCheckBox("启用压缩算法")
-        self.compression_check.setChecked(True)  # 默认启用
+        self.compression_check.setChecked(False)  # 默认不启用
         self.compression_check.setToolTip("使用zstd压缩算法减少网络流量")
         self.compression_check.setStyleSheet(compact_checkbox_style)
         layout.addWidget(self.compression_check, 9, 1)
 
-        # 网络加速提醒信息
-        acceleration_hint = QLabel("🚀 网络加速：KCP/QUIC代理提升网络性能，用户态网络栈优化延迟，压缩减少流量")
-        acceleration_hint.setStyleSheet("""
-            QLabel {
-                color: #f9e2af;
-                font-size: 11px;
-                font-style: italic;
-                padding: 4px 8px;
-                background-color: rgba(249, 226, 175, 0.1);
-                border: 1px solid rgba(249, 226, 175, 0.3);
+        # 监听TCP选项
+        self.tcp_listen_check = QCheckBox("监听TCP")
+        self.tcp_listen_check.setChecked(False)  # 默认不勾选
+        self.tcp_listen_check.setToolTip("同时监听TCP端口，连接不稳定时可尝试勾选")
+        self.tcp_listen_check.setStyleSheet(compact_checkbox_style)
+        layout.addWidget(self.tcp_listen_check, 10, 0)
+
+        # 参数详解按钮
+        self.params_help_btn = QPushButton("📖 参数详解")
+        self.params_help_btn.setToolTip("查看高级设置中各个参数的详细说明")
+        self.params_help_btn.clicked.connect(self.show_params_help)
+        self.params_help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #fab387;
+                color: #1e1e2e;
+                border: none;
                 border-radius: 3px;
-                margin: 3px 0px;
-                min-height: 16px;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 6px;
+                margin: 1px 0px;
+                min-height: 18px;
+                max-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #f9e2af;
             }
         """)
-        layout.addWidget(acceleration_hint, 10, 0, 1, 2)
+        layout.addWidget(self.params_help_btn, 10, 1)
 
         # 按钮布局
         button_layout = QHBoxLayout()
@@ -2755,23 +2770,6 @@ class VirtualLanPage(BasePage):
         button_layout.addStretch()
 
         layout.addLayout(button_layout, 11, 0, 1, 2)
-
-        # 网络优化提醒信息
-        optimization_hint = QLabel("💡 游戏优化：WinIPBroadcast解决房间发现问题，网卡跃点优化确保游戏流量优先级")
-        optimization_hint.setStyleSheet("""
-            QLabel {
-                color: #a6e3a1;
-                font-size: 11px;
-                font-style: italic;
-                padding: 4px 8px;
-                background-color: rgba(166, 227, 161, 0.1);
-                border: 1px solid rgba(166, 227, 161, 0.3);
-                border-radius: 3px;
-                margin: 3px 0px;
-                min-height: 16px;
-            }
-        """)
-        layout.addWidget(optimization_hint, 12, 0, 1, 2)
 
         return group
     
@@ -3385,7 +3383,7 @@ class VirtualLanPage(BasePage):
         # 外部节点已固定，无需配置
 
         # 设置高级选项（注意disable_*的逻辑转换，使用新的默认值）
-        self.encryption_check.setChecked(not config.get("disable_encryption", True))   # 默认禁用加密
+        self.encryption_check.setChecked(config.get("enable_encryption", True))        # 默认启用加密
         self.ipv6_check.setChecked(not config.get("disable_ipv6", False))              # 默认启用IPv6
         self.latency_first_check.setChecked(config.get("latency_first", True))         # 默认启用延迟优先
         self.multi_thread_check.setChecked(config.get("multi_thread", True))           # 默认启用多线程
@@ -3475,7 +3473,7 @@ class VirtualLanPage(BasePage):
                 self.peer_ip_edit.setEnabled(True)
 
             # 设置高级选项
-            self.encryption_check.setChecked(not config.get("disable_encryption", True))
+            self.encryption_check.setChecked(config.get("enable_encryption", True))
             self.ipv6_check.setChecked(not config.get("disable_ipv6", False))
             self.latency_first_check.setChecked(config.get("latency_first", True))
             self.multi_thread_check.setChecked(config.get("multi_thread", True))
@@ -3536,7 +3534,7 @@ class VirtualLanPage(BasePage):
             "network_name": self.network_name_edit.text().strip(),      # --network-name
             "hostname": self.machine_id_edit.text().strip(),            # --hostname
             "network_secret": self.network_secret_edit.text().strip(),  # --network-secret
-            "disable_encryption": not self.encryption_check.isChecked(), # --disable-encryption
+            "enable_encryption": self.encryption_check.isChecked(),      # --enable-encryption
             "disable_ipv6": not self.ipv6_check.isChecked(),           # --disable-ipv6
             "latency_first": self.latency_first_check.isChecked(),      # --latency-first
             "multi_thread": self.multi_thread_check.isChecked(),        # --multi-thread
@@ -3545,6 +3543,7 @@ class VirtualLanPage(BasePage):
             "enable_quic_proxy": self.quic_proxy_check.isChecked(),     # --enable-quic-proxy
             "use_smoltcp": self.smoltcp_check.isChecked(),              # --use-smoltcp
             "enable_compression": self.compression_check.isChecked(),   # 压缩算法设置
+            "tcp_listen": self.tcp_listen_check.isChecked(),            # TCP监听设置
             # 网络优化配置
             "network_optimization": {
                 "winip_broadcast": self.winip_broadcast_check.isChecked(),
@@ -3594,7 +3593,8 @@ class VirtualLanPage(BasePage):
                 "enable_encryption": self.encryption_check.isChecked(),
                 "disable_ipv6": not self.ipv6_check.isChecked(),
                 "use_smoltcp": self.smoltcp_check.isChecked(),
-                "enable_compression": self.compression_check.isChecked()
+                "enable_compression": self.compression_check.isChecked(),
+                "tcp_listen": self.tcp_listen_check.isChecked()
             }
             
             # 收集选中的公益服务器
@@ -3679,7 +3679,8 @@ class VirtualLanPage(BasePage):
             "enable_encryption": self.encryption_check.isChecked(),  # 注意：这里是enable_encryption
             "disable_ipv6": not self.ipv6_check.isChecked(),
             "use_smoltcp": self.smoltcp_check.isChecked(),
-            "enable_compression": self.compression_check.isChecked()
+            "enable_compression": self.compression_check.isChecked(),
+            "tcp_listen": self.tcp_listen_check.isChecked()
         }
 
         # 检查是否启用网络优化
@@ -4193,10 +4194,11 @@ class VirtualLanPage(BasePage):
                 "enable_quic_proxy": config.get("enable_quic_proxy", True),
                 "latency_first": config.get("latency_first", True),
                 "multi_thread": config.get("multi_thread", True),
-                "enable_encryption": not config.get("disable_encryption", True),  # 转换为enable_encryption格式
+                "enable_encryption": config.get("enable_encryption", True),
                 "disable_ipv6": config.get("disable_ipv6", False),
                 "use_smoltcp": config.get("use_smoltcp", False),
-                "enable_compression": config.get("enable_compression", True)
+                "enable_compression": config.get("enable_compression", False),
+                "tcp_listen": config.get("tcp_listen", False)
             }
 
             # 生成并保存配置文件
@@ -4396,7 +4398,7 @@ class VirtualLanPage(BasePage):
 
             # 重置复选框为默认状态
             self.dhcp_check.setChecked(True)
-            self.encryption_check.setChecked(False)  # 默认禁用加密
+            self.encryption_check.setChecked(True)   # 默认启用加密
             self.ipv6_check.setChecked(True)
             self.latency_first_check.setChecked(True)
             self.multi_thread_check.setChecked(True)
@@ -5355,3 +5357,154 @@ class VirtualLanPage(BasePage):
 
         monitor_thread = threading.Thread(target=monitor_task, daemon=True)
         monitor_thread.start()
+
+    def show_params_help(self):
+        """显示参数详解对话框"""
+        try:
+            from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton,
+                                         QScrollArea, QWidget, QHBoxLayout)
+            from PySide6.QtCore import Qt
+
+            # 创建参数详解对话框（参考配置文件对话框风格）
+            dialog = QDialog(self)
+            dialog.setWindowTitle("高级设置参数详解")
+            dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            dialog.setFixedSize(600, 500)
+
+            # 设置对话框样式
+            dialog.setStyleSheet("""
+                QDialog {
+                    background-color: #1e1e2e;
+                    border: 2px solid #89b4fa;
+                    border-radius: 12px;
+                }
+            """)
+
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(20, 20, 20, 20)
+
+            # 标题
+            title_label = QLabel("📖 高级设置参数详解")
+            title_label.setStyleSheet("""
+                QLabel {
+                    color: #89b4fa;
+                    font-size: 16px;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                }
+            """)
+            layout.addWidget(title_label)
+
+            # 创建滚动区域
+            scroll_area = QScrollArea()
+            scroll_area.setStyleSheet("""
+                QScrollArea {
+                    color: #cdd6f4;
+                    font-size: 12px;
+                    font-family: 'Consolas', 'Monaco', monospace;
+                    background-color: #313244;
+                    border: 1px solid #45475a;
+                    border-radius: 8px;
+                    padding: 10px;
+                }
+            """)
+            scroll_widget = QWidget()
+            scroll_layout = QVBoxLayout(scroll_widget)
+
+            # 参数说明内容
+            params_info = [
+                ("🚀 KCP代理", "在UDP丢包网络中优化TCP流传输，减少20-50%延迟，适合游戏联机"),
+                ("⚡ QUIC代理", "现代传输协议，在高带宽网络中提升30-60%吞吐量，支持多路复用"),
+                ("🔧 用户态网络栈", "减少内核切换开销，降低5-15%延迟，提升网络性能"),
+                ("🌐 IPv6支持", "启用IPv6协议支持，提供更大的地址空间和更好的路由性能"),
+                ("⚡ 延迟优先", "优先选择最低延迟路径转发流量，而非最短路径，适合实时游戏"),
+                ("🔀 多线程", "使用多线程运行时提升性能，默认为单线程模式"),
+                ("🗜️ 启用压缩算法", "使用zstd压缩算法减少15-40%网络流量，但会增加CPU使用"),
+                ("🔌 监听TCP", "同时监听TCP端口，如果UDP连接不稳定可尝试勾选此选项"),
+                ("🎮 启用网络优化", "包含WinIPBroadcast和网卡跃点优化，解决游戏房间发现问题")
+            ]
+
+            for title, description in params_info:
+                param_widget = QWidget()
+                param_layout = QVBoxLayout(param_widget)
+                param_layout.setContentsMargins(8, 4, 8, 4)
+
+                # 参数标题
+                param_title = QLabel(title)
+                param_title.setStyleSheet("""
+                    QLabel {
+                        font-weight: bold;
+                        color: #f9e2af;
+                        font-size: 13px;
+                        margin-bottom: 4px;
+                    }
+                """)
+                param_layout.addWidget(param_title)
+
+                # 参数描述
+                param_desc = QLabel(description)
+                param_desc.setStyleSheet("""
+                    QLabel {
+                        color: #bac2de;
+                        font-size: 11px;
+                        margin-left: 16px;
+                        margin-bottom: 8px;
+                    }
+                """)
+                param_desc.setWordWrap(True)
+                param_layout.addWidget(param_desc)
+
+                scroll_layout.addWidget(param_widget)
+
+            # 添加分隔线和提示
+            separator = QLabel("─" * 60)
+            separator.setStyleSheet("""
+                QLabel {
+                    color: #45475a;
+                    font-size: 10px;
+                    margin: 10px 0px;
+                }
+            """)
+            separator.setAlignment(Qt.AlignCenter)
+            scroll_layout.addWidget(separator)
+
+            tip_label = QLabel("💡 提示：建议保持默认设置，遇到连接问题时再调整相关参数")
+            tip_label.setStyleSheet("""
+                QLabel {
+                    color: #f9e2af;
+                    font-size: 11px;
+                    font-style: italic;
+                    margin-top: 5px;
+                }
+            """)
+            tip_label.setWordWrap(True)
+            scroll_layout.addWidget(tip_label)
+
+            scroll_area.setWidget(scroll_widget)
+            scroll_area.setWidgetResizable(True)
+            layout.addWidget(scroll_area)
+
+            # 关闭按钮
+            close_btn = QPushButton("关闭")
+            close_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #89b4fa;
+                    color: #1e1e2e;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                    margin-top: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #74c7ec;
+                }
+            """)
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn)
+
+            dialog.exec()
+
+        except Exception as e:
+            print(f"显示参数详解对话框失败: {e}")
+            self.log_message(f"显示参数详解失败: {e}", "error")

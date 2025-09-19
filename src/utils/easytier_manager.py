@@ -134,7 +134,7 @@ class EasyTierManager(QObject):
                     "peers": ["tcp://public.easytier.top:11010"],  # --peers (默认只使用公共服务器)
                     "dhcp": True,                 # --dhcp (默认启用，与ipv4互斥)
                     # "ipv4": "10.126.126.1",    # --ipv4 (与dhcp互斥，不同时存在)
-                    "disable_encryption": True,  # --disable-encryption (默认禁用加密，提升性能)
+                    "enable_encryption": True,   # --enable-encryption (默认启用加密)
                     "disable_ipv6": False,       # --disable-ipv6 (默认不禁用，即启用IPv6)
                     "latency_first": True,       # --latency-first (默认启用)
                     "multi_thread": True,        # --multi-thread (默认启用)
@@ -142,7 +142,8 @@ class EasyTierManager(QObject):
                     "enable_kcp_proxy": True,    # --enable-kcp-proxy (默认启用KCP代理)
                     "enable_quic_proxy": True,   # --enable-quic-proxy (默认启用QUIC代理)
                     "use_smoltcp": False,        # --use-smoltcp (默认禁用用户态网络栈，提升兼容性)
-                    "enable_compression": True,  # --compression zstd (默认启用压缩)
+                    "enable_compression": False, # --compression zstd (默认不启用压缩)
+                    "tcp_listen": False,         # TCP监听 (默认不启用)
                     # 网络优化配置
                     "network_optimization": {
                         "winip_broadcast": True,
@@ -232,21 +233,19 @@ class EasyTierManager(QObject):
                 listeners = ["udp://0.0.0.0:11010"]
 
             # 构建flags配置（优先使用传入的flags，否则使用配置中的默认值）
-            print(f"🔍 调试：传入的flags = {flags}")
             if flags is None:
-                print("🔍 调试：flags为None，使用默认配置")
                 flags = {
                     "enable_kcp_proxy": self.config.get("enable_kcp_proxy", True),
                     "enable_quic_proxy": self.config.get("enable_quic_proxy", True),
                     "latency_first": self.config.get("latency_first", True),
                     "multi_thread": self.config.get("multi_thread", True),
-                    "enable_encryption": not self.config.get("disable_encryption", True),  # 转换为enable_encryption
+                    "enable_encryption": self.config.get("enable_encryption", True),
                     "disable_ipv6": self.config.get("disable_ipv6", False),
                     "use_smoltcp": self.config.get("use_smoltcp", False),
-                    "enable_compression": self.config.get("enable_compression", True)
+                    "enable_compression": self.config.get("enable_compression", False),
+                    "tcp_listen": self.config.get("tcp_listen", False)
                 }
-            else:
-                print(f"🔍 调试：使用传入的flags，enable_encryption = {flags.get('enable_encryption')}")
+            # 使用传入的flags
 
             # 生成并保存配置文件
             success = self.config_generator.generate_and_save(
@@ -352,7 +351,7 @@ class EasyTierManager(QObject):
 
             # 添加可选参数（统一使用true/false值，直接使用配置中的值）
             # 加密设置
-            if self.config.get("disable_encryption", False):
+            if not self.config.get("enable_encryption", True):
                 cmd.extend(["--disable-encryption", "true"])
             else:
                 cmd.extend(["--disable-encryption", "false"])
