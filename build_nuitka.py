@@ -30,7 +30,7 @@ class NuitkaBuilder:
             "product_version": f"{self.version}.0",  # 3.1.0 -> 3.1.0.0
             "file_version": f"{self.version}.0",
             "file_description": "Nmodm - 游戏模组管理器",
-            "copyright": "Copyright © 2024",
+            "copyright": "Copyright © 2025",
             "trademark": ""
         }
         
@@ -172,16 +172,13 @@ class NuitkaBuilder:
     def get_include_modules(self) -> List[str]:
         """获取需要包含的模块"""
         modules = [
-            # 让Nuitka自动发现依赖，只指定关键模块
+            # 让Nuitka自动发现依赖，只指定关键模块（移除内置模块）
             "--include-package=src",
             "--include-module=urllib.request",
             "--include-module=dataclasses",
             "--include-module=typing",
             "--include-module=enum",
             "--include-module=datetime",
-            "--include-module=time",
-            "--include-module=os",
-            "--include-module=sys",
             "--include-module=re",
 
             # 加密库模块 (存档转换功能)
@@ -223,7 +220,7 @@ class NuitkaBuilder:
 
         return version_args
 
-    def build(self, onefile: bool = True, clean: bool = True, disable_console: bool = True) -> bool:
+    def build(self, onefile: bool = True, clean: bool = True, disable_console: bool = True, verbose_mode: str = 'standard') -> bool:
         """执行打包"""
         mode_name = "单文件" if onefile else "目录"
         print(f"🚀 开始Nuitka打包 ({mode_name}模式)...")
@@ -250,9 +247,9 @@ class NuitkaBuilder:
         else:
             print("⚠️ 图标文件不存在，跳过图标设置")
 
-        # 设置控制台选项
+        # 设置控制台选项（使用新的参数格式）
         if disable_console:
-            cmd.append("--disable-console")
+            cmd.append("--windows-console-mode=disable")
 
         # 添加模式特定参数
         if onefile:
@@ -290,6 +287,14 @@ class NuitkaBuilder:
         version_info_args = self.get_version_info_args()
         cmd.extend(version_info_args)
 
+        # 添加编译信息显示参数
+        if verbose_mode == 'detailed':
+            cmd.extend(["--verbose", "--show-progress"])
+        elif verbose_mode == 'quiet':
+            cmd.extend(["--quiet", "--no-progressbar"])
+        else:  # standard
+            cmd.append("--show-progress")
+
         # 添加主文件
         cmd.append("main.py")
         
@@ -299,9 +304,14 @@ class NuitkaBuilder:
             print(f"执行命令: {' '.join(cmd[:5])}... (共{len(cmd)}个参数)")
             print("⏳ 编译中，这可能需要几分钟时间...")
 
-            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-            result = subprocess.run(cmd, cwd=self.project_root,
-                                  capture_output=True, text=True, creationflags=creation_flags)
+            # 根据verbose_mode决定输出处理方式
+            if verbose_mode == 'quiet':
+                # 简洁模式：捕获输出，但允许用户中断
+                result = subprocess.run(cmd, cwd=self.project_root,
+                                      capture_output=True, text=True)
+            else:
+                # 详细和标准模式：实时显示输出，允许用户看到进度
+                result = subprocess.run(cmd, cwd=self.project_root)
             
             if result.returncode == 0:
                 elapsed = time.time() - start_time
@@ -370,13 +380,18 @@ class NuitkaBuilder:
                 return True
             else:
                 print("❌ 打包失败！")
-                print("错误输出:")
-                print(result.stderr)
-                if result.stdout:
+                # 只有在捕获输出的模式下才显示错误信息
+                if verbose_mode == 'quiet' and hasattr(result, 'stderr') and result.stderr:
+                    print("错误输出:")
+                    print(result.stderr)
+                if verbose_mode == 'quiet' and hasattr(result, 'stdout') and result.stdout:
                     print("标准输出:")
                     print(result.stdout)
                 return False
-                
+
+        except KeyboardInterrupt:
+            print("\n⚠️ 用户取消编译")
+            return False
         except Exception as e:
             print(f"❌ 打包异常: {e}")
             return False
@@ -618,18 +633,28 @@ def main():
     try:
         choice = input("\n请选择 (1/2/3): ").strip()
 
-        # 询问是否禁用控制台窗口
-        print("\n🖥️ 控制台窗口设置:")
-        print("1. 禁用控制台窗口 (推荐，适合发布版本)")
-        print("2. 保留控制台窗口 (适合调试)")
+        # 默认禁用控制台窗口（适合发布版本）
+        disable_console = True
+        print("✅ 将禁用控制台窗口（发布版本推荐设置）")
 
-        console_choice = input("\n请选择 (1/2): ").strip()
-        disable_console = console_choice != '2'  # 默认禁用，除非用户明确选择保留
+        # 询问编译信息显示级别
+        print("\n🖥️ 编译信息显示设置:")
+        print("1. 详细模式 - 显示完整编译过程（推荐调试时使用）")
+        print("2. 标准模式 - 显示基本信息和进度条（推荐）")
+        print("3. 简洁模式 - 最少输出信息（快速编译）")
 
-        if disable_console:
-            print("✅ 将禁用控制台窗口")
+        verbose_choice = input("\n请选择编译信息显示级别 (1/2/3): ").strip()
+
+        # 设置编译信息显示参数
+        if verbose_choice == '1':
+            verbose_mode = 'detailed'
+            print("✅ 将显示详细编译过程信息")
+        elif verbose_choice == '3':
+            verbose_mode = 'quiet'
+            print("✅ 将使用简洁模式编译")
         else:
-            print("✅ 将保留控制台窗口")
+            verbose_mode = 'standard'
+            print("✅ 将显示标准编译信息")
 
         # 显示版本信息配置
         print("\n📋 版本信息配置:")
@@ -647,7 +672,7 @@ def main():
             print(f"\n{'='*50}")
             print("🚀 开始单文件模式打包...")
             total_count += 1
-            if builder.build(onefile=True, disable_console=disable_console):
+            if builder.build(onefile=True, disable_console=disable_console, verbose_mode=verbose_mode):
                 if builder.test_executable(onefile=True):
                     success_count += 1
                     print("✅ 单文件模式打包完成并测试通过")
@@ -660,7 +685,7 @@ def main():
             print(f"\n{'='*50}")
             print("🚀 开始独立模式打包...")
             total_count += 1
-            if builder.build(onefile=False, disable_console=disable_console):
+            if builder.build(onefile=False, disable_console=disable_console, verbose_mode=verbose_mode):
                 if builder.test_executable(onefile=False):
                     success_count += 1
                     print("✅ 独立模式打包完成并测试通过")
