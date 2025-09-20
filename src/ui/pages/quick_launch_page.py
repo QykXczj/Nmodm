@@ -2348,8 +2348,7 @@ class PresetEditorDialog(QDialog):
                 preset_card = self.create_manage_preset_card(preset_file)
                 self.presets_layout.addWidget(preset_card)
 
-            # 添加弹性空间
-            self.presets_layout.addStretch()
+            # 🔧 修复：移除弹性空间，避免刷新时卡片向下移动
 
         except Exception as e:
             print(f"加载现有预设失败: {e}")
