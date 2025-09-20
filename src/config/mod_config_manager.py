@@ -141,7 +141,7 @@ class ModConfigManager:
                 has_regulation = True
 
             # 检查是否包含典型的mod文件夹结构
-            typical_folders = ["msg", "param", "chr", "script", "sfx", "map", "parts"]
+            typical_folders = ["msg", "param", "chr", "script", "sfx", "map", "parts", "menu", "movie", "sd"]
             for folder_name in typical_folders:
                 if (mod_path / folder_name).exists():
                     has_typical_folders = True
