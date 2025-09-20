@@ -592,7 +592,9 @@ class ModsPage(BasePage):
                                for native in self.mod_manager.natives)
 
             # 创建复选框（包含备注信息）
-            comment = self.mod_manager.get_native_comment(clean_name)
+            # 🔧 修复：对于内部DLL，备注key应该使用完整路径，而不是显示名称
+            comment_key = clean_name  # 使用完整路径作为备注key
+            comment = self.mod_manager.get_native_comment(comment_key)
 
             # 检查是否为缺失的外部DLL
             is_missing = is_external and clean_name in missing_mods['natives']
@@ -668,6 +670,9 @@ class ModsPage(BasePage):
             checkbox.stateChanged.connect(
                 lambda state, name=dll_name: self.toggle_native(name, state == 2)
             )
+
+            # 🔧 修复：将完整的DLL路径存储在item的data中，用于右键菜单
+            item.setData(Qt.UserRole, clean_name)  # 存储完整路径
 
             self.natives_list.addItem(item)
             self.natives_list.setItemWidget(item, checkbox)
@@ -1098,17 +1103,19 @@ class ModsPage(BasePage):
         if not checkbox:
             return
 
-        # 获取DLL名称（去除emoji前缀和备注）
-        full_text = checkbox.text().replace("🔧 ", "")
+        # 🔧 修复：从item的data中获取完整的DLL路径，而不是从显示文本解析
+        clean_name = item.data(Qt.UserRole)
+        if not clean_name:
+            # 如果没有存储数据，回退到原来的解析方式
+            full_text = checkbox.text().replace("🔧 ", "")
+            if " - " in full_text:
+                dll_name = full_text.split(" - ")[0]
+            else:
+                dll_name = full_text
+            is_external = dll_name.endswith(" (外部)")
+            clean_name = dll_name.replace(" (外部)", "") if is_external else dll_name
 
-        # 如果包含备注（格式：DLLName - Comment），提取DLLName部分
-        if " - " in full_text:
-            dll_name = full_text.split(" - ")[0]
-        else:
-            dll_name = full_text
-
-        is_external = dll_name.endswith(" (外部)")
-        clean_name = dll_name.replace(" (外部)", "") if is_external else dll_name
+        is_external = clean_name in self.mod_manager.external_natives
 
         menu = QMenu(self)
         menu.setStyleSheet("""
