@@ -465,10 +465,34 @@ def safe_launch_game(bat_path: str) -> bool:
         with DllDirectoryContext():
             print("[DLL管理] 🔒 进入DLL隔离环境")
             import subprocess
-            # 使用start命令创建独立终端窗口，避免覆盖当前控制台
-            process = subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
-            print(f"[DLL管理] ✅ 游戏在独立终端中启动成功，PID: {process.pid}")
-            print("[DLL管理] 💡 独立终端窗口已创建，不会覆盖当前控制台")
+            import sys
+
+            # 渐进式启动方案：优先尝试直接启动，失败时降级
+            try:
+                # 主方案：直接启动bat脚本（bat内部使用start命令）
+                print("[DLL管理] 🎮 主方案：直接启动bat脚本")
+                process = subprocess.Popen([bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE, shell=True)
+                print(f"[DLL管理] ✅ 主方案启动成功，PID: {process.pid}")
+                print("[DLL管理] 💡 bat脚本内部start命令处理窗口创建")
+
+            except Exception as e:
+                print(f"[DLL管理] ❌ 主方案失败: {e}")
+                print("[DLL管理] 🔄 降级到环境判断方案")
+
+                # 降级方案：根据环境选择不同的执行方式
+                if getattr(sys, 'frozen', False):
+                    # 打包环境：直接执行bat，创建新控制台
+                    print("[DLL管理] 🎮 降级-打包环境：CREATE_NEW_CONSOLE")
+                    process = subprocess.Popen(['cmd', '/c', bat_path],
+                                             creationflags=subprocess.CREATE_NEW_CONSOLE,
+                                             shell=True)
+                else:
+                    # 开发环境：使用start命令创建独立终端窗口
+                    print("[DLL管理] 🛠️ 降级-开发环境：start cmd /c")
+                    process = subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
+
+                print(f"[DLL管理] ✅ 降级方案启动成功，PID: {process.pid}")
+                print("[DLL管理] 💡 使用环境判断降级方案")
 
         print("[DLL管理] 🔓 退出DLL隔离环境，自动恢复")
         print("[DLL管理] 💡 使用上下文管理器模式：代码优雅，异常安全")
@@ -480,10 +504,30 @@ def safe_launch_game(bat_path: str) -> bool:
         print("[DLL管理] 🔄 降级到标准启动方式")
         try:
             import subprocess
-            # 降级时也使用独立终端，保持一致性
-            subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
-            print("[DLL管理] ✅ 标准启动成功（独立终端）")
-            return True
+            import sys
+
+            # 最终降级：也尝试渐进式方案
+            try:
+                # 尝试直接启动
+                subprocess.Popen([bat_path], shell=True)
+                print("[DLL管理] ✅ 最终降级-直接启动成功")
+                return True
+            except Exception as e2:
+                print(f"[DLL管理] ❌ 直接启动也失败: {e2}")
+                print("[DLL管理] 🔄 使用环境判断最终方案")
+
+                # 最终方案：环境判断
+                if getattr(sys, 'frozen', False):
+                    # 打包环境：直接执行
+                    subprocess.Popen(['cmd', '/c', bat_path],
+                                   creationflags=subprocess.CREATE_NEW_CONSOLE,
+                                   shell=True)
+                    print("[DLL管理] ✅ 最终方案启动成功（打包环境）")
+                else:
+                    # 开发环境：独立终端
+                    subprocess.Popen(['cmd', '/c', f'start cmd /c {bat_path}'], shell=True)
+                    print("[DLL管理] ✅ 最终方案启动成功（开发环境）")
+                return True
         except Exception as fallback_e:
             print(f"[DLL管理] ❌ 标准启动也失败: {fallback_e}")
             return False
