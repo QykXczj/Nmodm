@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QCheckBox, QSpinBox, QGroupBox, QLineEdit,
                                QTextEdit, QListWidget, QListWidgetItem,
                                QButtonGroup, QMessageBox, QTabWidget,
-                               QScrollArea)
+                               QScrollArea, QMenu)
 from PySide6.QtCore import Qt, Signal
 
 from .base_page import BasePage
@@ -1715,6 +1715,10 @@ class PresetEditorDialog(QDialog):
         # 编辑模式相关
         self.editing_file = None
 
+        # 强制加载状态（临时存储）
+        self.force_load_last_mods = set()
+        self.force_load_first_dlls = set()
+
         # 设置样式
         self.setStyleSheet("""
             QDialog {
@@ -1855,6 +1859,11 @@ class PresetEditorDialog(QDialog):
         self.init_manage_tab(manage_tab)
         self.tab_widget.addTab(manage_tab, "🗂️ 管理预设")
 
+        # 预览选项卡
+        preview_tab = QWidget()
+        self.init_preview_tab(preview_tab)
+        self.tab_widget.addTab(preview_tab, "👁️ 预览配置")
+
         # 选项卡切换事件
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
@@ -1910,6 +1919,87 @@ class PresetEditorDialog(QDialog):
 
         title_bar.setLayout(layout)
         return title_bar
+
+    def init_preview_tab(self, tab):
+        """初始化预览选项卡"""
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # 标题
+        title_label = QLabel("📄 预设配置预览")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                font-weight: bold;
+                color: #cdd6f4;
+                margin-bottom: 10px;
+            }
+        """)
+        layout.addWidget(title_label)
+
+        # 预设信息区域
+        info_group = QGroupBox("预设信息")
+        info_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #45475a;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                color: #cdd6f4;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        info_layout = QVBoxLayout(info_group)
+
+        self.preview_info_label = QLabel("请从管理预设页面选择要预览的预设方案")
+        self.preview_info_label.setStyleSheet("color: #a6adc8; font-size: 12px; padding: 10px;")
+        info_layout.addWidget(self.preview_info_label)
+
+        layout.addWidget(info_group)
+
+        # 配置内容预览区域
+        content_group = QGroupBox("配置文件内容")
+        content_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #45475a;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                color: #cdd6f4;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        content_layout = QVBoxLayout(content_group)
+
+        self.preview_content = QTextEdit()
+        self.preview_content.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e2e;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #cdd6f4;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 11px;
+                padding: 10px;
+                line-height: 1.4;
+            }
+        """)
+        self.preview_content.setPlainText("# 暂无预览内容\n# 请从管理预设页面点击预览按钮")
+        self.preview_content.setReadOnly(True)
+        content_layout.addWidget(self.preview_content)
+
+        layout.addWidget(content_group)
 
     def init_create_tab(self, tab_widget):
         """初始化创建预设选项卡"""
@@ -2154,22 +2244,242 @@ class PresetEditorDialog(QDialog):
                 checkbox.setParent(None)
             self.natives_checkboxes.clear()
 
-            # 加载mod包复选框
+            # 加载mod包复选框（包含备注信息）
             for package in available_mods["packages"]:
-                checkbox = QCheckBox(package)
+                # 处理外部mod标识
+                clean_name = package.replace(" (外部)", "")
+                is_external = package.endswith(" (外部)")
+
+                # 获取备注信息
+                comment = mod_manager.get_mod_comment(clean_name)
+
+                # 构建显示文本
+                if is_external:
+                    display_text = f"📁 {package}"
+                else:
+                    display_text = f"📁 {package}"
+
+                if comment:
+                    display_text += f" - {comment}"
+
+                checkbox = QCheckBox(display_text)
                 checkbox.setObjectName(package)
+                checkbox.setContextMenuPolicy(Qt.CustomContextMenu)
+                checkbox.customContextMenuRequested.connect(
+                    lambda pos, cb=checkbox: self.show_package_context_menu(pos, cb)
+                )
+                # 添加悬停效果
+                checkbox.setStyleSheet("""
+                    QCheckBox {
+                        color: #cdd6f4;
+                        font-size: 12px;
+                        padding: 4px;
+                        spacing: 8px;
+                    }
+                    QCheckBox:hover {
+                        background-color: rgba(255, 255, 255, 0.1);
+                        border-radius: 4px;
+                        color: #f5f5f5;
+                    }
+                    QCheckBox::indicator {
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 3px;
+                        border: 2px solid #45475a;
+                        background-color: #1e1e2e;
+                    }
+                    QCheckBox::indicator:checked {
+                        background-color: #a6e3a1;
+                        border-color: #a6e3a1;
+                    }
+                    QCheckBox::indicator:hover {
+                        border-color: #f5f5f5;
+                        background-color: rgba(255, 255, 255, 0.2);
+                    }
+                """)
                 self.packages_checkboxes.append(checkbox)
                 self.packages_layout.addWidget(checkbox)
 
-            # 加载DLL文件复选框
+            # 加载DLL文件复选框（包含备注信息）
             for native in available_mods["natives"]:
-                checkbox = QCheckBox(native)
+                # 处理外部DLL标识
+                clean_name = native.replace(" (外部)", "")
+                is_external = native.endswith(" (外部)")
+
+                # 获取备注信息
+                comment = mod_manager.get_native_comment(clean_name)
+
+                # 提取DLL文件名（去除路径）
+                display_dll_name = native
+                if "/" in native and not native.endswith(" (外部)"):
+                    # 对于内部DLL，提取文件名部分
+                    display_dll_name = native.split("/")[-1]
+                elif native.endswith(" (外部)"):
+                    # 对于外部DLL，保持原样
+                    display_dll_name = native
+
+                # 构建显示文本
+                display_text = f"🔧 {display_dll_name}"
+
+                if comment:
+                    display_text += f" - {comment}"
+
+                checkbox = QCheckBox(display_text)
                 checkbox.setObjectName(native)
+                checkbox.setContextMenuPolicy(Qt.CustomContextMenu)
+                checkbox.customContextMenuRequested.connect(
+                    lambda pos, cb=checkbox: self.show_native_context_menu(pos, cb)
+                )
+                # 添加悬停效果
+                checkbox.setStyleSheet("""
+                    QCheckBox {
+                        color: #cdd6f4;
+                        font-size: 12px;
+                        padding: 4px;
+                        spacing: 8px;
+                    }
+                    QCheckBox:hover {
+                        background-color: rgba(255, 255, 255, 0.1);
+                        border-radius: 4px;
+                        color: #f5f5f5;
+                    }
+                    QCheckBox::indicator {
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 3px;
+                        border: 2px solid #45475a;
+                        background-color: #1e1e2e;
+                    }
+                    QCheckBox::indicator:checked {
+                        background-color: #a6e3a1;
+                        border-color: #a6e3a1;
+                    }
+                    QCheckBox::indicator:hover {
+                        border-color: #f5f5f5;
+                        background-color: rgba(255, 255, 255, 0.2);
+                    }
+                """)
                 self.natives_checkboxes.append(checkbox)
                 self.natives_layout.addWidget(checkbox)
 
         except Exception as e:
             print(f"加载mod列表失败: {e}")
+
+    def show_package_context_menu(self, position, checkbox):
+        """显示mod包右键菜单"""
+        if not checkbox:
+            return
+
+        # 获取mod名称（去除emoji前缀和备注）
+        full_text = checkbox.text().replace("📁 ", "")
+
+        # 如果包含备注（格式：ModName - Comment），提取ModName部分
+        if " - " in full_text:
+            mod_name = full_text.split(" - ")[0]
+        else:
+            mod_name = full_text
+
+        is_external = mod_name.endswith(" (外部)")
+        clean_name = mod_name.replace(" (外部)", "") if is_external else mod_name
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #cdd6f4;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+            }
+        """)
+
+        # 添加强制最后加载选项
+        # 检查临时状态
+        is_force_last = hasattr(self, 'force_load_last_mods') and clean_name in self.force_load_last_mods
+        if is_force_last:
+            force_last_action = menu.addAction("🔓 取消强制最后加载")
+            force_last_action.triggered.connect(lambda: self.clear_force_load_last(clean_name))
+        else:
+            force_last_action = menu.addAction("🔒 强制最后加载")
+            force_last_action.triggered.connect(lambda: self.set_force_load_last(clean_name))
+
+        menu.exec(checkbox.mapToGlobal(position))
+
+    def show_native_context_menu(self, position, checkbox):
+        """显示DLL右键菜单"""
+        if not checkbox:
+            return
+
+        # 获取DLL名称（去除emoji前缀和备注）
+        full_text = checkbox.text().replace("🔧 ", "")
+
+        # 如果包含备注（格式：DLLName - Comment），提取DLLName部分
+        if " - " in full_text:
+            dll_name = full_text.split(" - ")[0]
+        else:
+            dll_name = full_text
+
+        is_external = dll_name.endswith(" (外部)")
+        clean_name = dll_name.replace(" (外部)", "") if is_external else dll_name
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                color: #cdd6f4;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+            }
+        """)
+
+        # 添加强制优先加载功能
+        # 检查临时状态
+        is_force_load_first = hasattr(self, 'force_load_first_dlls') and clean_name in self.force_load_first_dlls
+
+        if is_force_load_first:
+            clear_load_first_action = menu.addAction("🔓 清除强制优先加载")
+            clear_load_first_action.triggered.connect(lambda: self.clear_force_load_first_native(clean_name))
+        else:
+            load_first_action = menu.addAction("⬆️ 强制优先加载")
+            load_first_action.triggered.connect(lambda: self.set_force_load_first_native(clean_name))
+
+        menu.exec(checkbox.mapToGlobal(position))
+
+
+    def set_force_load_last(self, mod_name: str):
+        """设置mod强制最后加载（临时状态）"""
+        # 添加到强制最后加载集合
+        self.force_load_last_mods.add(mod_name)
+
+    def clear_force_load_last(self, mod_name: str):
+        """清除mod的强制最后加载设置（临时状态）"""
+        self.force_load_last_mods.discard(mod_name)
+
+    def set_force_load_first_native(self, dll_name: str):
+        """设置DLL强制优先加载（临时状态）"""
+        # 添加到强制优先加载集合
+        self.force_load_first_dlls.add(dll_name)
+
+    def clear_force_load_first_native(self, dll_name: str):
+        """清除DLL强制优先加载（临时状态）"""
+        self.force_load_first_dlls.discard(dll_name)
 
     def save_preset(self):
         """保存预设方案"""
@@ -2267,17 +2577,52 @@ class PresetEditorDialog(QDialog):
         # 添加mod包配置
         if packages:
             lines.append("# Mod包配置")
+
+            # 处理强制最后加载的mod
+            force_last_mod = None
+            if hasattr(self, 'force_load_last_mods') and self.force_load_last_mods:
+                # 只取第一个强制最后加载的mod（确保唯一性）
+                for package in packages:
+                    clean_package = package.replace(" (外部)", "")
+                    if clean_package in self.force_load_last_mods:
+                        force_last_mod = clean_package
+                        break
+
+            # 先添加非强制最后加载的mod
+            other_packages = []
             for package in packages:
-                # 移除 (外部) 标记
                 clean_package = package.replace(" (外部)", "")
+                if clean_package != force_last_mod:
+                    other_packages.append(clean_package)
+                    lines.append(f'[[packages]]')
+                    lines.append(f'path = "../{clean_package}"')
+                    lines.append("")
+
+            # 最后添加强制最后加载的mod（带依赖）
+            if force_last_mod:
                 lines.append(f'[[packages]]')
-                lines.append(f'path = "../{clean_package}"')
+                lines.append(f'path = "../{force_last_mod}"')
+                if other_packages:
+                    # 添加load_after依赖
+                    load_after_list = []
+                    for other_pkg in other_packages:
+                        load_after_list.append(f'{{id = "{other_pkg}", optional = true}}')
+                    lines.append(f'load_after = [{", ".join(load_after_list)}]')
                 lines.append("")
 
-        # 添加DLL配置
+        # 添加DLL配置（自动排序确保nighter.dll在nrsc.dll之前）
         if natives:
             lines.append("# Native DLL配置")
-            for native in natives:
+
+            # 对DLL进行排序，确保nighter.dll始终在nrsc.dll之前
+            sorted_natives = self.sort_dlls_for_loading(natives)
+
+            # 处理强制优先加载的DLL
+            force_first_dlls = set()
+            if hasattr(self, 'force_load_first_dlls'):
+                force_first_dlls = self.force_load_first_dlls
+
+            for native in sorted_natives:
                 # 移除 (外部) 标记
                 clean_native = native.replace(" (外部)", "")
                 lines.append(f'[[natives]]')
@@ -2287,9 +2632,66 @@ class PresetEditorDialog(QDialog):
                 else:
                     # 根目录下的DLL
                     lines.append(f'path = "../{clean_native}"')
+
+                # 添加特定的DLL依赖关系（确保nighter.dll在nrsc.dll之前）
+                if clean_native.endswith("nighter.dll") or "nighter.dll" in clean_native:
+                    # 检查是否有nrsc.dll
+                    has_nrsc = any("nrsc.dll" in n.replace(" (外部)", "") for n in sorted_natives)
+                    if has_nrsc:
+                        lines.append('load_before = [{id = "nrsc.dll", optional = false}]')
+
+                # 如果是强制优先加载的DLL，添加load_before依赖
+                elif clean_native in force_first_dlls:
+                    other_dlls = []
+                    for other_native in sorted_natives:
+                        other_clean = other_native.replace(" (外部)", "")
+                        if other_clean != clean_native:
+                            other_dlls.append(other_clean)
+
+                    if other_dlls:
+                        load_before_list = []
+                        for other_dll in other_dlls:
+                            load_before_list.append(f'{{id = "{other_dll}", optional = true}}')
+                        lines.append(f'load_before = [{", ".join(load_before_list)}]')
+
                 lines.append("")
 
         return "\n".join(lines)
+
+    def sort_dlls_for_loading(self, natives):
+        """对DLL进行排序，确保特定的加载顺序"""
+        if not natives:
+            return natives
+
+        # 定义特定的DLL优先级顺序
+        priority_order = {
+            'nighter.dll': 1,  # nighter.dll最高优先级
+            'nrsc.dll': 2,     # nrsc.dll次优先级
+        }
+
+        def get_dll_priority(native):
+            """获取DLL的优先级"""
+            # 移除 (外部) 标记
+            clean_native = native.replace(" (外部)", "")
+
+            # 提取DLL文件名
+            if "/" in clean_native:
+                dll_name = clean_native.split("/")[-1]
+            else:
+                dll_name = clean_native
+
+            # 检查是否匹配特定DLL
+            for priority_dll, priority in priority_order.items():
+                if dll_name.endswith(priority_dll) or priority_dll in dll_name:
+                    return priority
+
+            # 其他DLL使用默认优先级
+            return 999
+
+        # 按优先级排序
+        sorted_natives = sorted(natives, key=get_dll_priority)
+
+        return sorted_natives
 
     def load_existing_presets(self):
         """加载现有预设方案 - 卡片布局"""
@@ -2454,6 +2856,28 @@ class PresetEditorDialog(QDialog):
         edit_btn.clicked.connect(lambda: self.edit_preset(preset_file))
         buttons_layout.addWidget(edit_btn)
 
+        # 预览按钮
+        preview_btn = QPushButton("👁️ 预览")
+        preview_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                border: none;
+                border-radius: 4px;
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #94d3a2;
+            }
+            QPushButton:pressed {
+                background-color: #82c991;
+            }
+        """)
+        preview_btn.clicked.connect(lambda: self.preview_preset(preset_file))
+        buttons_layout.addWidget(preview_btn)
+
         # 删除按钮
         delete_btn = QPushButton("🗑️ 删除")
         delete_btn.setStyleSheet("""
@@ -2551,6 +2975,10 @@ class PresetEditorDialog(QDialog):
             # 设置mod选择
             self.set_mod_selections(preset_data['packages'], preset_data['natives'])
 
+            # 恢复强制加载状态
+            self.force_load_last_mods = preset_data.get('force_load_last_mods', set())
+            self.force_load_first_dlls = preset_data.get('force_load_first_dlls', set())
+
             # 保存当前编辑的文件路径
             self.editing_file = preset_file
 
@@ -2561,6 +2989,35 @@ class PresetEditorDialog(QDialog):
 
         except Exception as e:
             self.show_message("错误", f"加载预设失败: {e}")
+
+    def preview_preset(self, preset_file):
+        """预览预设方案"""
+        try:
+            # 解析预设文件
+            preset_data = self.parse_preset_file_detailed(preset_file)
+
+            # 切换到预览选项卡
+            self.tab_widget.setCurrentIndex(2)  # 预览选项卡是第3个（索引2）
+
+            # 更新预设信息
+            info_text = f"""
+📁 文件名: {preset_file.name}
+🎮 方案名称: {preset_data['icon']} {preset_data['name']}
+📝 描述: {preset_data['description']}
+📦 Mod包数量: {len(preset_data['packages'])}
+🔧 DLL数量: {len(preset_data['natives'])}
+⚡ 强制最后加载: {len(preset_data.get('force_load_last_mods', set()))} 个
+🚀 强制优先加载: {len(preset_data.get('force_load_first_dlls', set()))} 个
+            """.strip()
+            self.preview_info_label.setText(info_text)
+
+            # 读取并显示配置文件内容
+            with open(preset_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            self.preview_content.setPlainText(content)
+
+        except Exception as e:
+            self.show_message("错误", f"预览预设失败: {e}")
 
     def parse_preset_file_detailed(self, preset_file):
         """详细解析预设文件"""
@@ -2573,11 +3030,14 @@ class PresetEditorDialog(QDialog):
                 'description': '无描述',
                 'icon': '🎮',
                 'packages': [],
-                'natives': []
+                'natives': [],
+                'force_load_last_mods': set(),
+                'force_load_first_dlls': set()
             }
 
             lines = content.split('\n')
             current_section = None
+            current_item_path = None
 
             for line in lines:
                 line = line.strip()
@@ -2591,13 +3051,26 @@ class PresetEditorDialog(QDialog):
                     data['description'] = line.split(':', 1)[1].strip()
                 elif line.startswith('[[packages]]'):
                     current_section = 'packages'
+                    current_item_path = None
                 elif line.startswith('[[natives]]'):
                     current_section = 'natives'
+                    current_item_path = None
                 elif line.startswith('path = '):
                     if current_section:
                         # 提取路径，移除引号和../前缀
                         path = line.split('=', 1)[1].strip().strip('"').replace('../', '')
                         data[current_section].append(path)
+                        current_item_path = path
+                elif line.startswith('load_after = ') and current_section == 'packages' and current_item_path:
+                    # 检查是否是强制最后加载（包含多个其他mod的依赖）
+                    if '[' in line and '{' in line:
+                        data['force_load_last_mods'].add(current_item_path)
+                elif line.startswith('load_before = ') and current_section == 'natives' and current_item_path:
+                    # 检查是否是强制优先加载或特定顺序
+                    if '[' in line and '{' in line:
+                        # 如果是nighter.dll对nrsc.dll的依赖，不算强制优先加载
+                        if not (current_item_path.endswith('nighter.dll') and 'nrsc.dll' in line):
+                            data['force_load_first_dlls'].add(current_item_path)
 
             return data
 
@@ -2608,7 +3081,9 @@ class PresetEditorDialog(QDialog):
                 'description': '无法读取文件',
                 'icon': '❌',
                 'packages': [],
-                'natives': []
+                'natives': [],
+                'force_load_last_mods': set(),
+                'force_load_first_dlls': set()
             }
 
     def set_mod_selections(self, packages, natives):
