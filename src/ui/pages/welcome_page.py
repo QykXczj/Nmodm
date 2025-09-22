@@ -119,10 +119,9 @@ class WelcomePage(BasePage):
             ("⚙️", "基础配置", "游戏基础设置和参数配置"),
             ("📥", "工具下载", "自动下载和管理游戏工具"),
             ("🔧", "Mod配置", "便捷的Mod安装和管理"),
-            ("🔗", "BIN合并", "游戏文件合并和优化"),
             ("🌐", "局域网配置", "局域网游戏设置和管理"),
             ("🌍", "虚拟局域网", "虚拟网络连接和配置"),
-            ("ℹ️", "关于信息", "软件版本和更新信息")
+            ("📦", "杂项", "战绩查询、存档转换等额外功能")
         ]
 
         for i, (icon, title, desc) in enumerate(features):
@@ -234,7 +233,7 @@ class WelcomePage(BasePage):
 
         # 最新Mods按钮
         mods_btn = self.create_link_button(
-            "📦 最新Mods",
+            "📦 最新Mods整合包",
             "https://pan.quark.cn/s/7360b153d049",
             "#fab387"
         )
