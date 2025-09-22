@@ -249,15 +249,35 @@ class PresetManager:
         import re
         dependencies = {'packages': [], 'natives': []}
 
-        # 解析packages
-        package_pattern = r'source\s*=\s*"([^"]+)"'
-        packages = re.findall(package_pattern, content)
-        dependencies['packages'] = packages
+        # 解析packages - 需要检查source或path路径
+        package_blocks = re.findall(r'\[\[packages\]\](.*?)(?=\[\[|\Z)', content, re.DOTALL)
+        for block in package_blocks:
+            # 优先查找source路径
+            source_match = re.search(r'source\s*=\s*["\']([^"\']+)["\']', block)
+            if source_match:
+                source_path = source_match.group(1).rstrip('/')
+                dependencies['packages'].append(source_path)
+            else:
+                # 如果没有source，查找path路径
+                path_match = re.search(r'path\s*=\s*["\']([^"\']+)["\']', block)
+                if path_match:
+                    path_value = path_match.group(1).rstrip('/')
+                    dependencies['packages'].append(path_value)
+                else:
+                    # 最后fallback：使用id作为路径
+                    id_match = re.search(r'id\s*=\s*["\']([^"\']+)["\']', block)
+                    if id_match:
+                        pkg_id = id_match.group(1)
+                        dependencies['packages'].append(pkg_id)
 
-        # 解析natives
-        native_pattern = r'path\s*=\s*"([^"]+\.dll)"'
-        natives = re.findall(native_pattern, content)
-        dependencies['natives'] = natives
+        # 解析natives - 需要检查path路径
+        native_blocks = re.findall(r'\[\[natives\]\](.*?)(?=\[\[|\Z)', content, re.DOTALL)
+        for block in native_blocks:
+            # 查找path路径
+            path_match = re.search(r'path\s*=\s*["\']([^"\']+)["\']', block)
+            if path_match:
+                native_path = path_match.group(1)
+                dependencies['natives'].append(native_path)
 
         return dependencies
 
