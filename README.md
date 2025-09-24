@@ -4,7 +4,7 @@
 
 ![Nmodm Logo](zwnr.ico)
 
-**专为《艾尔登法环：夜之君临》设计的现代化游戏管理工具**
+**专为《艾尔登法环：黑夜君临》设计的现代化游戏管理工具**
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![PySide6](https://img.shields.io/badge/PySide6-6.0+-green.svg)](https://pyside.org)
@@ -16,7 +16,7 @@
 
 ## 📖 项目简介
 
-Nmodm 是一款专为《艾尔登法环：夜之君临》(Elden Ring: Nightreign) 设计的现代化游戏管理工具。它集成了 Mod 管理、局域网联机、工具下载、配置管理等多项功能，为玩家提供一站式的游戏增强体验。
+Nmodm 是一款专为《艾尔登法环：黑夜君临》(Elden Ring: Nightreign) 设计的现代化游戏管理工具。它集成了 Mod 管理、局域网联机、工具下载、配置管理等多项功能，为玩家提供一站式的游戏增强体验。
 
 ### 🎯 设计理念
 
@@ -48,11 +48,6 @@ Nmodm 是一款专为《艾尔登法环：夜之君临》(Elden Ring: Nightreign
 - **房间管理**: 创建、加入、管理联机房间
 - **网络优化**: 内置网络加速和优化功能
 - **一键启动**: 配置完成后一键启动联机模式
-
-### 🔗 BIN 文件合并
-- **ERModsMerger 集成**: 内置 regulation.bin 文件合并工具
-- **智能合并**: 自动处理 Mod 冲突和依赖关系
-- **备份恢复**: 自动备份原始文件，支持一键恢复
 
 ### 🎨 现代化界面
 - **无边框设计**: 现代化的无边框窗口界面
@@ -236,11 +231,6 @@ Nmodm 是一款专为《艾尔登法环：夜之君临》(Elden Ring: Nightreign
 - **参数配置**: 为特定 Mod 配置参数
 - **注释系统**: 添加自定义说明和备注
 
-### 🔗 BIN 合并页面
-- **文件选择**: 选择要合并的 regulation.bin 文件
-- **冲突检测**: 自动检测和处理文件冲突
-- **备份管理**: 自动备份原始文件
-
 ### 🌐 局域网联机页面
 - **房间创建**: 创建新的联机房间
 - **房间加入**: 加入现有房间
@@ -304,9 +294,6 @@ Nmodm/
 │   ├── easytier-core.exe       # 核心程序
 │   ├── easytier.toml           # 配置文件
 │   └── 📁 rooms_config/        # 房间配置
-├── 📁 ERM/                      # ERModsMerger 工具
-│   ├── ERModsMerger.exe        # 合并工具
-│   └── 📁 MergedMods/          # 合并输出
 ├── 📁 me3p/                     # ME3 工具包
 │   ├── 📁 bin/                 # 可执行文件
 │   ├── eldenring-default.me3   # 默认配置
