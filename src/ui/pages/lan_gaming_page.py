@@ -674,6 +674,8 @@ class LanGamingPage(BasePage):
         self.update_esl_initialization_ui(result)
         return result.get('ready', False)
 
+
+
     def validate_esl_structure(self):
         """验证ESL文件结构完整性（增强版本）"""
         try:

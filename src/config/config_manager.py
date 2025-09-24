@@ -73,10 +73,108 @@ class ConfigManager:
         if game_path and self.validate_game_path(game_path):
             return os.path.dirname(game_path)
         return None
-    
+
+    def ensure_onlinefix_available(self) -> bool:
+        """确保OnlineFix文件可用"""
+        try:
+            # 检查关键的破解文件是否存在
+            required_files = [
+                "OnlineFix.ini",
+                "OnlineFix64.dll",
+                "dlllist.txt",
+                "winmm.dll"
+            ]
+
+            missing_files = []
+            for filename in required_files:
+                file_path = self.onlinefix_dir / filename
+                if not file_path.exists():
+                    missing_files.append(filename)
+
+            if not missing_files:
+                print("✅ OnlineFix文件完整")
+                return True
+
+            print(f"⚠️ 发现缺失的OnlineFix文件: {', '.join(missing_files)}")
+
+            # 检查OnlineFix.zip是否存在
+            onlinefix_zip = self.onlinefix_dir / "OnlineFix.zip"
+            if onlinefix_zip.exists():
+                print("📦 发现OnlineFix.zip，尝试解压...")
+                if self.extract_onlinefix_zip():
+                    # 重新检查文件完整性
+                    missing_files = []
+                    for filename in required_files:
+                        file_path = self.onlinefix_dir / filename
+                        if not file_path.exists():
+                            missing_files.append(filename)
+
+                    if not missing_files:
+                        print("✅ OnlineFix文件解压完成")
+                        return True
+                    else:
+                        print(f"❌ 解压后仍缺失文件: {', '.join(missing_files)}")
+                        return False
+                else:
+                    print("❌ OnlineFix.zip解压失败")
+                    return False
+            else:
+                # OnlineFix.zip也不存在，无法继续
+                print("❌ OnlineFix.zip不存在，无法修复破解文件")
+                return False
+
+        except Exception as e:
+            print(f"❌ 检查OnlineFix可用性失败: {e}")
+            return False
+
+    def extract_onlinefix_zip(self) -> bool:
+        """解压OnlineFix.zip文件"""
+        try:
+            import zipfile
+            import time
+
+            onlinefix_zip = self.onlinefix_dir / "OnlineFix.zip"
+            if not onlinefix_zip.exists():
+                return False
+
+            print(f"📦 开始解压OnlineFix.zip")
+
+            with zipfile.ZipFile(onlinefix_zip, 'r') as zip_ref:
+                for file_info in zip_ref.infolist():
+                    if file_info.is_dir():
+                        continue
+
+                    filename = Path(file_info.filename).name
+                    target_path = self.onlinefix_dir / filename
+
+                    if target_path.exists():
+                        target_path.unlink()
+
+                    with zip_ref.open(file_info) as source, open(target_path, 'wb') as target:
+                        shutil.copyfileobj(source, target)
+
+                    print(f"✅ 解压完成: {filename}")
+
+            # 创建解压完成标志
+            extracted_flag = self.onlinefix_dir / ".onlinefix_extracted"
+            extracted_flag.write_text(f"OnlineFix extracted at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("🎉 OnlineFix解压完成")
+            return True
+
+        except Exception as e:
+            print(f"❌ OnlineFix解压失败: {e}")
+            return False
+
+
+
     def apply_crack(self) -> bool:
         """应用破解文件"""
         try:
+            # 首先确保OnlineFix文件可用
+            if not self.ensure_onlinefix_available():
+                print("❌ OnlineFix文件不可用，无法应用破解")
+                return False
+
             game_dir = self.get_game_directory()
             if not game_dir:
                 print("❌ 无法获取游戏目录")
@@ -146,6 +244,7 @@ class ConfigManager:
     def remove_crack(self) -> bool:
         """移除破解文件"""
         try:
+            # 移除破解时不需要检查OnlineFix可用性，因为我们只是删除文件
             game_dir = self.get_game_directory()
             if not game_dir:
                 print("❌ 无法获取游戏目录")

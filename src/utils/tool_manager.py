@@ -410,9 +410,10 @@ class ToolManager:
                         log_callback("✅ tool.zip已迁移到OnlineFix文件夹", "success")
                     print("✅ tool.zip已迁移到OnlineFix文件夹")
                 else:
+                    # tool.zip不存在，无法继续
                     if log_callback:
                         log_callback("❌ 工具包不存在，请重新下载程序", "error")
-                    print("❌ 工具包不存在")
+                    print("❌ 工具包不存在，无法继续")
                     return False
 
             # 4. 尝试解压工具包
@@ -445,6 +446,8 @@ class ToolManager:
                 log_callback(f"❌ 工具可用性检查失败: {e}", "error")
             print(f"❌ 工具可用性检查失败: {e}")
             return False
+
+
 
     def extract_tools_with_ui_feedback(self, log_callback=None) -> bool:
         """解压工具包（带UI反馈）"""

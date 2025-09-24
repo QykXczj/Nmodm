@@ -481,12 +481,39 @@ class ModConfigManager:
             "natives": enabled_natives
         }
     
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """比较版本号，返回 1(v1>v2), 0(相等), -1(v1<v2)"""
+        if not v1 or not v2:
+            return 0 if not v1 and not v2 else (1 if v1 else -1)
+
+        # 移除v前缀，分割版本号
+        v1_clean = v1.lstrip('v').split('.')
+        v2_clean = v2.lstrip('v').split('.')
+
+        # 补齐长度
+        max_len = max(len(v1_clean), len(v2_clean))
+        v1_clean.extend(['0'] * (max_len - len(v1_clean)))
+        v2_clean.extend(['0'] * (max_len - len(v2_clean)))
+
+        # 逐段比较
+        for i in range(max_len):
+            try:
+                n1, n2 = int(v1_clean[i]), int(v2_clean[i])
+                if n1 > n2:
+                    return 1
+                elif n1 < n2:
+                    return -1
+            except ValueError:
+                continue
+        return 0
+
     def get_me3_executable_path(self) -> Optional[str]:
-        """获取ME3可执行文件路径（支持完整版和便携版）"""
-        # 1. 优先检查完整安装版
+        """获取ME3可执行文件路径（基于版本号智能选择）"""
+        # 1. 获取安装版信息
+        full_available = False
+        full_version = None
         try:
             import subprocess
-            # 使用系统环境变量运行me3 -V命令检测
             env = self._get_system_env()
             import sys
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -494,17 +521,62 @@ class ModConfigManager:
                                   capture_output=True, text=True, timeout=5,
                                   env=env, creationflags=creation_flags)
             if result.returncode == 0:
-                return "me3"  # 系统PATH中的命令
+                full_available = True
+                # 解析版本号
+                import re
+                output = result.stdout.strip()
+                version_match = re.search(r'v?(\d+\.\d+\.\d+)', output)
+                if version_match:
+                    full_version = f"v{version_match.group(1)}"
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
             pass
 
-        # 2. 备用检查便携版
+        # 2. 获取便携版信息
+        portable_available = False
+        portable_version = None
         me3_path = self.root_dir / "me3p" / "bin" / "me3.exe"
         if me3_path.exists():
-            return str(me3_path)
+            portable_available = True
+            # 获取便携版版本
+            try:
+                import subprocess
+                import sys
+                creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                result = subprocess.run([str(me3_path), '-V'],
+                                      capture_output=True, text=True, timeout=5,
+                                      creationflags=creation_flags)
+                if result.returncode == 0:
+                    import re
+                    output = result.stdout.strip()
+                    version_match = re.search(r'v?(\d+\.\d+\.\d+)', output)
+                    if version_match:
+                        portable_version = f"v{version_match.group(1)}"
+            except Exception:
+                pass
 
-        # 3. 都没有
-        return None
+        # 3. 智能版本选择决策
+        if full_available and portable_available:
+            # 两个都有，比较版本
+            if portable_version and full_version:
+                comparison = self._compare_versions(portable_version, full_version)
+                if comparison > 0:
+                    return str(me3_path)  # 便携版更新
+                elif comparison < 0:
+                    return "me3"  # 安装版更新
+                else:
+                    return "me3"  # 同版本优先安装版
+            elif portable_version:
+                return str(me3_path)  # 只有便携版有版本信息
+            elif full_version:
+                return "me3"  # 只有安装版有版本信息
+            else:
+                return "me3"  # 都没有版本信息，优先安装版
+        elif full_available:
+            return "me3"  # 只有安装版
+        elif portable_available:
+            return str(me3_path)  # 只有便携版
+        else:
+            return None  # 都没有
 
     def _get_system_env(self):
         """获取系统环境变量（排除虚拟环境）"""

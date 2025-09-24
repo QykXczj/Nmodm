@@ -226,6 +226,7 @@ class ToolDownloadPage(BasePage):
         self.me3_download_worker = None
         self.me3_installer_download_worker = None  # ME3安装程序下载工作线程
         self.easytier_download_worker = None
+        self.onlinefix_download_worker = None  # OnlineFix下载工作线程
         self.status_check_worker = None  # 状态检查工作线程
         self.update_check_worker = None  # 更新检查工作线程
         self.setup_content()
@@ -236,13 +237,6 @@ class ToolDownloadPage(BasePage):
 
     def delayed_init(self):
         """延迟初始化"""
-        if self.download_manager is None:
-            from ...utils.download_manager import DownloadManager
-            self.download_manager = DownloadManager()
-            # 连接EasyTier安装完成信号
-            self.download_manager.easytier_install_finished.connect(self.on_easytier_install_finished)
-            # 连接ME3安装程序下载完成信号
-            self.download_manager.me3_installer_download_finished.connect(self.on_me3_installer_download_finished)
         # 异步检查状态，避免阻塞UI
         QTimer.singleShot(100, self.check_current_status)
 
@@ -255,6 +249,10 @@ class ToolDownloadPage(BasePage):
             self.download_manager.easytier_install_finished.connect(self.on_easytier_install_finished)
             # 连接ME3安装程序下载完成信号
             self.download_manager.me3_installer_download_finished.connect(self.on_me3_installer_download_finished)
+            # 连接OnlineFix下载完成信号
+            self.download_manager.onlinefix_download_finished.connect(self.on_onlinefix_download_finished)
+            # 连接OnlineFix下载进度信号
+            self.download_manager.onlinefix_download_progress.connect(self.update_onlinefix_progress)
         return self.download_manager
 
     def setup_content(self):
@@ -275,10 +273,10 @@ class ToolDownloadPage(BasePage):
         me3_row_layout.setContentsMargins(0, 0, 0, 0)
 
         me3_widget = self.create_me3_section()
-        help_widget = self.create_help_section()
+        onlinefix_widget = self.create_onlinefix_section()
 
         me3_row_layout.addWidget(me3_widget, 2)  # ME3工具占2份
-        me3_row_layout.addWidget(help_widget, 1)  # 说明栏占1份
+        me3_row_layout.addWidget(onlinefix_widget, 1)  # OnlineFix工具包占1份
 
         # 第二行：EasyTier（重要工具）
         easytier_widget = self.create_easytier_section()
@@ -327,9 +325,9 @@ class ToolDownloadPage(BasePage):
         section.setLayout(layout)
         return section
 
-    def create_help_section(self):
-        """创建说明栏区域"""
-        section = QGroupBox("相关说明")
+    def create_onlinefix_section(self):
+        """创建OnlineFix工具包区域"""
+        section = QGroupBox("OnlineFix工具包")
         section.setStyleSheet("""
             QGroupBox {
                 color: #cdd6f4;
@@ -349,30 +347,154 @@ class ToolDownloadPage(BasePage):
         """)
 
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(12)
 
-        # 说明内容
-        help_text = QLabel("""默认安装ME3便携版，安装版需要手动点击一次安装；
+        # 版本信息卡片
+        self.onlinefix_version_card = self.create_onlinefix_version_card()
+        layout.addWidget(self.onlinefix_version_card)
 
-ME3一般情况便携版就能正常使用；
-
-如果出现"动态链接库初始化例程失败"1114的报错，可尝试运行库修复或安装完整安装版""")
-        help_text.setStyleSheet("""
-            QLabel {
-                color: #fab387;
-                font-size: 13px;
-                line-height: 1.4;
-                padding: 10px;
-                background-color: #1e1e2e;
-                border-radius: 6px;
-                border: 1px solid #313244;
-            }
-        """)
-        help_text.setWordWrap(True)
-        layout.addWidget(help_text)
+        # 下载控制区域
+        self.create_onlinefix_download_controls(layout)
 
         section.setLayout(layout)
         return section
+
+    def create_onlinefix_version_card(self):
+        """创建OnlineFix版本信息卡片"""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e2e;
+                border: 1px solid #313244;
+                border-radius: 8px;
+                padding: 8px;
+            }
+        """)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(6)
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        # 状态标题
+        status_label = QLabel("📦 工具包状态")
+        status_label.setStyleSheet("""
+            QLabel {
+                color: #89b4fa;
+                font-size: 13px;
+                font-weight: bold;
+                margin-bottom: 4px;
+            }
+        """)
+        layout.addWidget(status_label)
+
+        # 状态信息
+        self.onlinefix_status_label = QLabel("检查中...")
+        self.onlinefix_status_label.setStyleSheet("""
+            QLabel {
+                color: #fab387;
+                font-size: 12px;
+                padding: 4px 8px;
+                background-color: #313244;
+                border-radius: 4px;
+                border: 1px solid #fab387;
+            }
+        """)
+        layout.addWidget(self.onlinefix_status_label)
+
+        # 详细信息
+        self.onlinefix_detail_label = QLabel("包含: esl2.zip, tool.zip, 破解补丁等")
+        self.onlinefix_detail_label.setStyleSheet("""
+            QLabel {
+                color: #6c7086;
+                font-size: 11px;
+                margin-top: 4px;
+            }
+        """)
+        layout.addWidget(self.onlinefix_detail_label)
+
+        card.setLayout(layout)
+        return card
+
+    def create_onlinefix_download_controls(self, layout):
+        """创建OnlineFix下载控制区域"""
+        # 下载按钮区域
+        button_container = QWidget()
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 下载按钮
+        self.onlinefix_download_btn = QPushButton("📥 下载工具包")
+        self.onlinefix_download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                border: none;
+                border-radius: 6px;
+                color: #1e1e2e;
+                font-weight: bold;
+                padding: 8px 16px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #94d3a2;
+            }
+            QPushButton:pressed {
+                background-color: #82c3a3;
+            }
+            QPushButton:disabled {
+                background-color: #45475a;
+                color: #6c7086;
+            }
+        """)
+        self.onlinefix_download_btn.clicked.connect(self.download_onlinefix)
+
+        # 检查按钮
+        self.onlinefix_check_btn = QPushButton("🔍 检查状态")
+        self.onlinefix_check_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #74c7ec;
+                border: none;
+                border-radius: 6px;
+                color: #1e1e2e;
+                font-weight: bold;
+                padding: 8px 16px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #89dceb;
+            }
+            QPushButton:pressed {
+                background-color: #5fb3d4;
+            }
+        """)
+        self.onlinefix_check_btn.clicked.connect(self.check_onlinefix_status)
+
+        button_layout.addWidget(self.onlinefix_download_btn)
+        button_layout.addWidget(self.onlinefix_check_btn)
+        button_layout.addStretch()
+
+        button_container.setLayout(button_layout)
+        layout.addWidget(button_container)
+
+        # 进度条（初始隐藏）
+        self.onlinefix_progress = QProgressBar()
+        self.onlinefix_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #313244;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                font-size: 11px;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #a6e3a1;
+                border-radius: 3px;
+            }
+        """)
+        self.onlinefix_progress.setVisible(False)
+        layout.addWidget(self.onlinefix_progress)
 
     def create_me3_download_controls(self, layout):
         """创建ME3下载控制区域"""
@@ -589,6 +711,8 @@ ME3一般情况便携版就能正常使用；
             self.me3_status_label.setText("正在检查状态...")
         if hasattr(self, 'easytier_status_label'):
             self.easytier_status_label.setText("正在检查状态...")
+        if hasattr(self, 'onlinefix_status_label'):
+            self.onlinefix_status_label.setText("正在检查状态...")
 
         # 如果已有工作线程在运行，先停止它
         if self.status_check_worker and self.status_check_worker.isRunning():
@@ -652,6 +776,10 @@ ME3一般情况便携版就能正常使用；
                 )
                 self.easytier_download_btn.setText("下载EasyTier")
 
+            # 更新OnlineFix状态
+            if hasattr(self, 'onlinefix_status_label'):
+                self.check_onlinefix_status()
+
             # 加载镜像列表（这个操作比较快，可以在UI线程执行）
             self.load_mirrors()
 
@@ -665,6 +793,8 @@ ME3一般情况便携版就能正常使用；
                 self.me3_status_label.setText("状态检查失败")
             if hasattr(self, 'easytier_status_label'):
                 self.easytier_status_label.setText("状态检查失败")
+            if hasattr(self, 'onlinefix_status_label'):
+                self.onlinefix_status_label.setText("状态检查失败")
 
     def start_update_check(self):
         """启动异步更新检查"""
@@ -673,6 +803,7 @@ ME3一般情况便携版就能正常使用；
             self.me3_status_label.setText("正在检查最新版本...")
         if hasattr(self, 'easytier_status_label'):
             self.easytier_status_label.setText("正在检查最新版本...")
+        # OnlineFix不需要检查最新版本，保持当前状态
 
         # 如果已有更新检查线程在运行，先停止它
         if self.update_check_worker and self.update_check_worker.isRunning():
@@ -2092,7 +2223,145 @@ ME3一般情况便携版就能正常使用；
             print(f"检查安装进度失败: {e}")
             self.install_check_timer.stop()
 
+    # ==================== OnlineFix 相关方法 ====================
+
+    def download_onlinefix(self):
+        """下载OnlineFix工具包"""
+        try:
+            download_manager = self.get_download_manager()
+
+            # 禁用下载按钮，显示进度条
+            self.onlinefix_download_btn.setEnabled(False)
+            self.onlinefix_download_btn.setText("📥 下载中...")
+            self.onlinefix_progress.setVisible(True)
+            self.onlinefix_progress.setValue(0)
+
+            # 更新状态
+            self.onlinefix_status_label.setText("正在下载...")
+            self.onlinefix_status_label.setStyleSheet("""
+                QLabel {
+                    color: #fab387;
+                    font-size: 12px;
+                    padding: 4px 8px;
+                    background-color: #313244;
+                    border-radius: 4px;
+                    border: 1px solid #fab387;
+                }
+            """)
+
+            # 开始下载
+            success = download_manager.download_onlinefix()
+            if not success:
+                self.reset_onlinefix_download_ui()
+                self.onlinefix_status_label.setText("下载启动失败")
+                self.onlinefix_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #f38ba8;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #f38ba8;
+                    }
+                """)
+
+        except Exception as e:
+            print(f"下载OnlineFix失败: {e}")
+            self.reset_onlinefix_download_ui()
+            self.onlinefix_status_label.setText(f"下载失败: {str(e)}")
+
+    def check_onlinefix_status(self):
+        """检查OnlineFix状态"""
+        try:
+            download_manager = self.get_download_manager()
+
+            # 检查OnlineFix是否可用
+            if download_manager.is_onlinefix_available():
+                self.onlinefix_status_label.setText("✅ 工具包完整")
+                self.onlinefix_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #a6e3a1;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #a6e3a1;
+                    }
+                """)
+                self.onlinefix_detail_label.setText("所有必需文件已就绪")
+            else:
+                self.onlinefix_status_label.setText("❌ 工具包缺失")
+                self.onlinefix_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #f38ba8;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #f38ba8;
+                    }
+                """)
+                self.onlinefix_detail_label.setText("需要下载OnlineFix工具包")
+
+        except Exception as e:
+            print(f"检查OnlineFix状态失败: {e}")
+            self.onlinefix_status_label.setText("检查失败")
+
+    def on_onlinefix_download_finished(self, success: bool, message: str):
+        """OnlineFix下载完成回调"""
+        try:
+            self.reset_onlinefix_download_ui()
+
+            if success:
+                self.onlinefix_status_label.setText("✅ 下载完成")
+                self.onlinefix_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #a6e3a1;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #a6e3a1;
+                    }
+                """)
+                self.onlinefix_detail_label.setText("OnlineFix工具包已安装完成")
+                # 延迟一点时间确保文件系统同步，然后重新检查状态
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(500, self.check_onlinefix_status)
+            else:
+                self.onlinefix_status_label.setText(f"❌ 下载失败")
+                self.onlinefix_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #f38ba8;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                        background-color: #313244;
+                        border-radius: 4px;
+                        border: 1px solid #f38ba8;
+                    }
+                """)
+                self.onlinefix_detail_label.setText(f"错误: {message}")
+
+        except Exception as e:
+            print(f"处理OnlineFix下载完成回调失败: {e}")
+
+    def update_onlinefix_progress(self, progress: int):
+        """更新OnlineFix下载进度"""
+        try:
+            self.onlinefix_progress.setValue(progress)
+        except Exception as e:
+            print(f"更新OnlineFix下载进度失败: {e}")
+
+    def reset_onlinefix_download_ui(self):
+        """重置OnlineFix下载UI状态"""
+        try:
+            self.onlinefix_download_btn.setEnabled(True)
+            self.onlinefix_download_btn.setText("📥 下载工具包")
+            self.onlinefix_progress.setVisible(False)
+            self.onlinefix_progress.setValue(0)
+        except Exception as e:
+            print(f"重置OnlineFix下载UI失败: {e}")
+
+
 # 为了向后兼容，保留原来的类名作为别名
 ME3Page = ToolDownloadPage
-    
-

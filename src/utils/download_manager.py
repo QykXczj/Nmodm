@@ -34,6 +34,11 @@ class DownloadWorker(QThread):
             if self._is_cancelled:
                 return
 
+            # 确保父目录存在
+            from pathlib import Path
+            save_path = Path(self.save_path)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+
             response = requests.get(self.url, stream=True, timeout=30)
             response.raise_for_status()
 
@@ -70,6 +75,8 @@ class DownloadManager(QObject):
     # 信号定义
     easytier_install_finished = Signal(bool, str)  # EasyTier安装完成信号(成功, 消息)
     me3_installer_download_finished = Signal(bool, str, str)  # ME3安装程序下载完成信号(成功, 消息, 文件路径)
+    onlinefix_download_finished = Signal(bool, str)  # OnlineFix下载完成信号(成功, 消息)
+    onlinefix_download_progress = Signal(int)  # OnlineFix下载进度信号(进度百分比)
 
     # GitHub加速镜像地址
     DEFAULT_PROXY_URLS = [
@@ -84,6 +91,7 @@ class DownloadManager(QObject):
         self.me3_dir = self.root_dir / "me3p"
         # self.erm_dir = self.root_dir / "ERM"  # ERModsMerger已移除
         self.esr_dir = self.root_dir / "ESR"  # EasyTier目录
+        self.onlinefix_dir = self.root_dir / "OnlineFix"  # OnlineFix目录
         self.version_file = self.me3_dir / "version.json"
         # self.erm_version_file = self.erm_dir / "version.json"  # ERModsMerger已移除
         self.esr_version_file = self.esr_dir / "version.json"  # EasyTier版本文件
@@ -93,6 +101,7 @@ class DownloadManager(QObject):
         self.me3_dir.mkdir(exist_ok=True)
         # self.erm_dir.mkdir(exist_ok=True)  # ERModsMerger已移除
         self.esr_dir.mkdir(exist_ok=True)  # 确保ESR目录存在
+        self.onlinefix_dir.mkdir(exist_ok=True)  # 确保OnlineFix目录存在
 
         # 加载镜像配置
         self.PROXY_URLS = self.load_mirrors()
@@ -279,37 +288,40 @@ class DownloadManager(QObject):
         if not download_url:
             return None
 
-        # 使用指定的镜像或默认镜像列表
-        mirrors_to_try = [mirror_url] if mirror_url else (self.PROXY_URLS + [""])
+        # 智能选择镜像或使用指定镜像
+        if mirror_url:
+            # 使用指定的镜像
+            proxy = mirror_url
+        else:
+            # 智能选择最佳下载源
+            proxy = self.get_best_download_source(download_url)
 
-        for proxy in mirrors_to_try:
-            try:
-                url = f"{proxy}{download_url}" if proxy else download_url
-                zip_path = self.me3_dir / "me3-windows-amd64.zip"
+        try:
+            url = f"{proxy}{download_url}" if proxy else download_url
+            zip_path = self.me3_dir / "me3-windows-amd64.zip"
 
-                # 如果文件已存在，先删除
-                if zip_path.exists():
-                    zip_path.unlink()
+            # 如果文件已存在，先删除
+            if zip_path.exists():
+                zip_path.unlink()
 
-                worker = DownloadWorker(url, str(zip_path))
+            worker = DownloadWorker(url, str(zip_path))
 
-                def on_finished(success, message):
-                    if success:
-                        if self.extract_me3(str(zip_path)):
-                            self.save_version_info(release_info['tag_name'], release_info)
-                            # 不要重复发送信号，让调用者处理
-                        else:
-                            # 解压失败时发送失败信号
-                            pass
+            def on_finished(success, message):
+                if success:
+                    if self.extract_me3(str(zip_path)):
+                        self.save_version_info(release_info['tag_name'], release_info)
+                        # 不要重复发送信号，让调用者处理
+                    else:
+                        # 解压失败时发送失败信号
+                        pass
 
-                worker.finished.connect(on_finished)
-                return worker
+            worker.finished.connect(on_finished)
+            return worker
 
-            except Exception as e:
-                print(f"创建下载任务失败 ({proxy or 'direct'}): {e}")
-                continue
-
-        return None
+        except Exception as e:
+            mirror_name = self._get_mirror_display_name(proxy)
+            print(f"创建ME3下载任务失败 ({mirror_name}): {e}")
+            return None
 
     def download_me3_installer(self, mirror_url: str = None) -> DownloadWorker:
         """下载ME3安装程序"""
@@ -321,36 +333,39 @@ class DownloadManager(QObject):
         if not download_url:
             return None
 
-        # 使用指定的镜像或默认镜像列表
-        mirrors_to_try = [mirror_url] if mirror_url else (self.PROXY_URLS + [""])
+        # 智能选择镜像或使用指定镜像
+        if mirror_url:
+            # 使用指定的镜像
+            proxy = mirror_url
+        else:
+            # 智能选择最佳下载源
+            proxy = self.get_best_download_source(download_url)
 
-        for proxy in mirrors_to_try:
-            try:
-                url = f"{proxy}{download_url}" if proxy else download_url
+        try:
+            url = f"{proxy}{download_url}" if proxy else download_url
 
-                # 保存到me3p目录
-                installer_path = self.me3_dir / "me3_installer.exe"
+            # 保存到me3p目录
+            installer_path = self.me3_dir / "me3_installer.exe"
 
-                # 如果文件已存在，先删除
-                if installer_path.exists():
-                    installer_path.unlink()
+            # 如果文件已存在，先删除
+            if installer_path.exists():
+                installer_path.unlink()
 
-                worker = DownloadWorker(url, str(installer_path))
+            worker = DownloadWorker(url, str(installer_path))
 
-                def on_finished(success, message):
-                    if success:
-                        self.me3_installer_download_finished.emit(True, "ME3安装程序下载完成", str(installer_path))
-                    else:
-                        self.me3_installer_download_finished.emit(False, f"下载失败: {message}", "")
+            def on_finished(success, message):
+                if success:
+                    self.me3_installer_download_finished.emit(True, "ME3安装程序下载完成", str(installer_path))
+                else:
+                    self.me3_installer_download_finished.emit(False, f"下载失败: {message}", "")
 
-                worker.finished.connect(on_finished)
-                return worker
+            worker.finished.connect(on_finished)
+            return worker
 
-            except Exception as e:
-                print(f"创建ME3安装程序下载任务失败 ({proxy or 'direct'}): {e}")
-                continue
-
-        return None
+        except Exception as e:
+            mirror_name = self._get_mirror_display_name(proxy)
+            print(f"创建ME3安装程序下载任务失败 ({mirror_name}): {e}")
+            return None
 
     def is_me3_installed(self) -> bool:
         """检查ME3是否已安装（便携版）"""
@@ -696,41 +711,94 @@ class DownloadManager(QObject):
 
             # 如果指定了镜像，优先使用指定的镜像
             if selected_mirror:
-                mirrors_to_try = [selected_mirror] + [m for m in self.PROXY_URLS if m != selected_mirror] + [""]
+                self.easytier_mirrors_to_try = [selected_mirror] + [m for m in self.PROXY_URLS if m != selected_mirror] + [""]
             else:
-                mirrors_to_try = [""] + self.PROXY_URLS
+                # 智能选择最佳下载源
+                best_source = self.get_best_download_source(download_url)
+                if best_source:
+                    self.easytier_mirrors_to_try = [best_source] + [m for m in self.PROXY_URLS if m != best_source] + [""]
+                else:
+                    self.easytier_mirrors_to_try = [""] + self.PROXY_URLS
 
-            # 尝试使用镜像下载
-            for proxy in mirrors_to_try:
-                try:
-                    url = f"{proxy}{download_url}" if proxy else download_url
-                    mirror_name = self._get_mirror_display_name(proxy)
-                    print(f"尝试从 {mirror_name} 下载EasyTier...")
+            # 保存下载参数
+            self.easytier_download_params = {
+                'version': version,
+                'include_prerelease': include_prerelease,
+                'download_url': download_url
+            }
 
-                    # 下载文件
-                    filename = f"easytier-windows-x86_64-v{version}.zip"
-                    save_path = self.esr_dir / filename
-
-                    # 创建下载工作线程
-                    self.easytier_download_worker = DownloadWorker(url, str(save_path))
-                    self.easytier_download_worker.finished.connect(
-                        lambda success, msg: self._on_easytier_download_finished(success, msg, version, save_path, include_prerelease)
-                    )
-                    self.easytier_download_worker.start()
-
-                    return True  # 下载已开始
-
-                except Exception as e:
-                    mirror_name = self._get_mirror_display_name(proxy)
-                    print(f"从 {mirror_name} 下载失败: {e}")
-                    continue
-
-            print("所有下载源都失败")
-            return False
+            # 开始尝试第一个镜像
+            self.easytier_current_mirror_index = 0
+            return self._try_next_easytier_mirror()
 
         except Exception as e:
             print(f"下载EasyTier失败: {e}")
             return False
+
+    def _try_next_easytier_mirror(self) -> bool:
+        """尝试下一个EasyTier镜像"""
+        try:
+            if self.easytier_current_mirror_index >= len(self.easytier_mirrors_to_try):
+                print("所有EasyTier下载源都失败")
+                if hasattr(self, 'easytier_install_finished'):
+                    self.easytier_install_finished.emit(False, "所有下载源都失败")
+                return False
+
+            proxy = self.easytier_mirrors_to_try[self.easytier_current_mirror_index]
+            download_url = self.easytier_download_params['download_url']
+            version = self.easytier_download_params['version']
+
+            url = f"{proxy}{download_url}" if proxy else download_url
+            mirror_name = self._get_mirror_display_name(proxy)
+            print(f"尝试从 {mirror_name} 下载EasyTier...")
+
+            # 下载文件
+            filename = f"easytier-windows-x86_64-v{version}.zip"
+            save_path = self.esr_dir / filename
+
+            # 创建下载工作线程
+            self.easytier_download_worker = DownloadWorker(url, str(save_path))
+            self.easytier_download_worker.finished.connect(
+                lambda success, msg: self._on_easytier_download_finished_with_retry(success, msg, save_path)
+            )
+            self.easytier_download_worker.start()
+
+            return True  # 下载已开始
+
+        except Exception as e:
+            mirror_name = self._get_mirror_display_name(self.easytier_mirrors_to_try[self.easytier_current_mirror_index])
+            print(f"从 {mirror_name} 创建EasyTier下载任务失败: {e}")
+            # 尝试下一个镜像
+            self.easytier_current_mirror_index += 1
+            return self._try_next_easytier_mirror()
+
+    def _on_easytier_download_finished_with_retry(self, success: bool, message: str, save_path: Path):
+        """EasyTier下载完成回调（带重试逻辑）"""
+        if success:
+            version = self.easytier_download_params['version']
+            include_prerelease = self.easytier_download_params['include_prerelease']
+
+            print("EasyTier下载完成，开始解压...")
+            if self._extract_easytier(save_path, version):
+                print("EasyTier安装完成")
+                # 发送安装完成信号
+                if hasattr(self, 'easytier_install_finished'):
+                    self.easytier_install_finished.emit(True, "EasyTier安装完成")
+            else:
+                print("EasyTier解压失败")
+                if hasattr(self, 'easytier_install_finished'):
+                    self.easytier_install_finished.emit(False, "EasyTier解压失败")
+        else:
+            # 下载失败，尝试下一个镜像
+            mirror_name = self._get_mirror_display_name(self.easytier_mirrors_to_try[self.easytier_current_mirror_index])
+            print(f"从 {mirror_name} 下载EasyTier失败: {message}")
+
+            # 尝试下一个镜像
+            self.easytier_current_mirror_index += 1
+            if not self._try_next_easytier_mirror():
+                # 所有镜像都失败了
+                if hasattr(self, 'easytier_install_finished'):
+                    self.easytier_install_finished.emit(False, f"所有下载源都失败，最后错误: {message}")
 
     def _get_mirror_display_name(self, mirror_url: str) -> str:
         """获取镜像显示名称"""
@@ -744,6 +812,46 @@ class DownloadManager(QObject):
             return "ghfast.top"
         else:
             return mirror_url.replace("https://", "").replace("http://", "").rstrip("/")
+
+    def test_connectivity(self, url: str, timeout: int = 5) -> bool:
+        """测试URL连通性"""
+        try:
+            import requests
+            response = requests.head(url, timeout=timeout, allow_redirects=True)
+            return response.status_code < 400
+        except Exception as e:
+            print(f"连通性测试失败 {url}: {e}")
+            return False
+
+    def get_best_download_source(self, github_url: str) -> str:
+        """获取最佳下载源（基于连通性测试）"""
+        try:
+            print("🔍 正在测试下载源连通性...")
+
+            # 首先测试GitHub官方
+            if self.test_connectivity("https://github.com", timeout=3):
+                print("✅ GitHub官方连接正常")
+                return ""  # 空字符串表示直接使用GitHub
+            else:
+                print("❌ GitHub官方连接失败，测试镜像站...")
+
+                # 测试镜像站连通性
+                for mirror in self.PROXY_URLS:
+                    mirror_name = self._get_mirror_display_name(mirror)
+                    test_url = f"{mirror}https://github.com"
+
+                    if self.test_connectivity(test_url, timeout=3):
+                        print(f"✅ {mirror_name} 连接正常")
+                        return mirror
+                    else:
+                        print(f"❌ {mirror_name} 连接失败")
+
+                print("⚠️ 所有镜像站都无法连接，将使用GitHub官方（可能较慢）")
+                return ""  # 如果所有镜像都失败，还是尝试GitHub官方
+
+        except Exception as e:
+            print(f"连通性测试异常: {e}")
+            return ""  # 异常时使用GitHub官方
 
     def _on_easytier_download_finished(self, success: bool, message: str, version: str, zip_path: Path, is_prerelease: bool = False):
         """EasyTier下载完成回调"""
@@ -814,4 +922,181 @@ class DownloadManager(QObject):
 
         except Exception as e:
             print(f"解压EasyTier失败: {e}")
+            return False
+
+    # ==================== OnlineFix 相关方法 ====================
+
+    def download_onlinefix(self, selected_mirror: str = None) -> bool:
+        """下载OnlineFix工具包
+
+        Args:
+            selected_mirror: 选择的镜像
+        """
+        try:
+            download_url = "https://github.com/QykXczj/test/releases/download/tests/OnlineFix.zip"
+
+            # 如果指定了镜像，优先使用指定的镜像
+            if selected_mirror:
+                self.onlinefix_mirrors_to_try = [selected_mirror] + [m for m in self.PROXY_URLS if m != selected_mirror] + [""]
+            else:
+                # 智能选择最佳下载源
+                best_source = self.get_best_download_source(download_url)
+                if best_source:
+                    self.onlinefix_mirrors_to_try = [best_source] + [m for m in self.PROXY_URLS if m != best_source] + [""]
+                else:
+                    self.onlinefix_mirrors_to_try = [""] + self.PROXY_URLS
+
+            # 开始尝试第一个镜像
+            self.onlinefix_current_mirror_index = 0
+            return self._try_next_onlinefix_mirror(download_url)
+
+        except Exception as e:
+            print(f"下载OnlineFix失败: {e}")
+            return False
+
+    def _try_next_onlinefix_mirror(self, download_url: str) -> bool:
+        """尝试下一个OnlineFix镜像"""
+        try:
+            if self.onlinefix_current_mirror_index >= len(self.onlinefix_mirrors_to_try):
+                print("所有OnlineFix下载源都失败")
+                self.onlinefix_download_finished.emit(False, "所有下载源都失败")
+                return False
+
+            proxy = self.onlinefix_mirrors_to_try[self.onlinefix_current_mirror_index]
+            url = f"{proxy}{download_url}" if proxy else download_url
+            mirror_name = self._get_mirror_display_name(proxy)
+            print(f"尝试从 {mirror_name} 下载OnlineFix...")
+
+            # 下载文件
+            save_path = self.onlinefix_dir / "OnlineFix.zip"
+
+            # 创建下载工作线程
+            self.onlinefix_download_worker = DownloadWorker(url, str(save_path))
+            self.onlinefix_download_worker.finished.connect(
+                lambda success, msg: self._on_onlinefix_download_finished_with_retry(success, msg, save_path, download_url)
+            )
+            # 连接进度信号
+            self.onlinefix_download_worker.progress.connect(self.onlinefix_download_progress.emit)
+            self.onlinefix_download_worker.start()
+
+            return True  # 下载已开始
+
+        except Exception as e:
+            mirror_name = self._get_mirror_display_name(self.onlinefix_mirrors_to_try[self.onlinefix_current_mirror_index])
+            print(f"从 {mirror_name} 创建下载任务失败: {e}")
+            # 尝试下一个镜像
+            self.onlinefix_current_mirror_index += 1
+            return self._try_next_onlinefix_mirror(download_url)
+
+    def _on_onlinefix_download_finished_with_retry(self, success: bool, message: str, zip_path: Path, download_url: str):
+        """OnlineFix下载完成回调（带重试逻辑）"""
+        if success:
+            print("OnlineFix下载完成，开始解压...")
+            if self.extract_onlinefix(zip_path):
+                print("OnlineFix工具包安装完成")
+                # 发送安装完成信号
+                self.onlinefix_download_finished.emit(True, "OnlineFix工具包安装完成")
+            else:
+                print("OnlineFix解压失败")
+                self.onlinefix_download_finished.emit(False, "OnlineFix解压失败")
+        else:
+            # 下载失败，尝试下一个镜像
+            mirror_name = self._get_mirror_display_name(self.onlinefix_mirrors_to_try[self.onlinefix_current_mirror_index])
+            print(f"从 {mirror_name} 下载OnlineFix失败: {message}")
+
+            # 尝试下一个镜像
+            self.onlinefix_current_mirror_index += 1
+            if not self._try_next_onlinefix_mirror(download_url):
+                # 所有镜像都失败了
+                self.onlinefix_download_finished.emit(False, f"所有下载源都失败，最后错误: {message}")
+
+    def _on_onlinefix_download_finished(self, success: bool, message: str, zip_path: Path):
+        """OnlineFix下载完成回调"""
+        if success:
+            print("OnlineFix下载完成，开始解压...")
+            if self.extract_onlinefix(zip_path):
+                print("OnlineFix工具包安装完成")
+                # 发送安装完成信号
+                self.onlinefix_download_finished.emit(True, "OnlineFix工具包安装完成")
+            else:
+                print("OnlineFix解压失败")
+                self.onlinefix_download_finished.emit(False, "OnlineFix解压失败")
+        else:
+            print(f"OnlineFix下载失败: {message}")
+            self.onlinefix_download_finished.emit(False, f"下载失败: {message}")
+
+    def extract_onlinefix(self, zip_path: Path) -> bool:
+        """解压OnlineFix工具包"""
+        try:
+            import zipfile
+            import time
+
+            if not zip_path.exists():
+                print("❌ OnlineFix.zip文件不存在")
+                return False
+
+            print(f"📦 开始解压OnlineFix.zip: {zip_path}")
+
+            # 解压文件到OnlineFix目录
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # 获取压缩包内的文件列表
+                file_list = zip_ref.namelist()
+                print(f"📋 压缩包包含 {len(file_list)} 个文件")
+
+                # 解压所有文件
+                for file_info in zip_ref.infolist():
+                    # 跳过目录
+                    if file_info.is_dir():
+                        continue
+
+                    # 获取文件名（去除路径）
+                    filename = Path(file_info.filename).name
+                    target_path = self.onlinefix_dir / filename
+
+                    # 如果文件已存在，先删除
+                    if target_path.exists():
+                        target_path.unlink()
+
+                    # 解压文件
+                    with zip_ref.open(file_info) as source, open(target_path, 'wb') as target:
+                        import shutil
+                        shutil.copyfileobj(source, target)
+
+                    print(f"✅ 解压完成: {filename}")
+
+            # 创建解压完成标志
+            extracted_flag = self.onlinefix_dir / ".onlinefix_extracted"
+            extracted_flag.write_text(f"OnlineFix extracted at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("🎉 OnlineFix解压完成")
+            print("📦 原压缩包已保留")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ OnlineFix解压失败: {e}")
+            return False
+
+    def is_onlinefix_available(self) -> bool:
+        """检查OnlineFix工具包是否可用"""
+        try:
+            # 检查关键文件是否存在
+            required_files = [
+                "steam_api64.dll",
+                "OnlineFix.ini",
+                "OnlineFix64.dll",
+                "winmm.dll",
+                "dlllist.txt",
+                "esl2.zip",
+                "tool.zip"
+            ]
+
+            for filename in required_files:
+                file_path = self.onlinefix_dir / filename
+                if not file_path.exists():
+                    return False
+
+            return True
+
+        except Exception as e:
+            print(f"检查OnlineFix可用性失败: {e}")
             return False
