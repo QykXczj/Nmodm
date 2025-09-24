@@ -69,9 +69,10 @@ class PyInstallerBuilder:
         required_files = [
             self.project_root / "main.py",
             self.project_root / "zwnr.png",
-            self.project_root / "OnlineFix",
             self.src_dir,
         ]
+
+        # OnlineFix目录不再需要检查 - 现在通过网络下载获取
         
         for file_path in required_files:
             if file_path.exists():
@@ -123,14 +124,18 @@ a = Analysis(
         # 静态资源文件
         ('zwnr.png', '.'),
 
-        # OnlineFix目录 - 包含破解文件、ESL工具包、网络优化工具包等
-        ('OnlineFix', 'OnlineFix'),
+        # OnlineFix目录不再打包 - 现在通过网络下载获取
+        # 注释：OnlineFix工具包现在支持智能网络下载，包含：
+        # - OnlineFix.zip（破解文件）
+        # - esl2.zip（ESL局域网工具）
+        # - tool.zip（网络优化工具）
+        # 程序运行时会自动从GitHub下载最新版本，支持镜像加速
 
         # ESR和me3p目录不需要打包 - 这些是用户通过"工具下载"界面下载的工具
         # 注释：ESR(EasyTier)和me3p(ME3)工具由用户按需下载，不预置在安装包中
 
-        # ESL目录不再需要打包 - 现在从OnlineFix/esl2.zip解压
-        # 注释：ESL工具现在统一从OnlineFix文件夹的esl2.zip解压，无需预置ESL目录
+        # ESL目录不再需要打包 - 现在从网络下载的OnlineFix/esl2.zip解压
+        # 注释：ESL工具现在统一从网络下载的OnlineFix文件夹的esl2.zip解压，无需预置ESL目录
 
         # 源代码目录
         ('src', 'src'),

@@ -103,9 +103,10 @@ class NuitkaBuilder:
         required_files = [
             self.project_root / "main.py",
             self.project_root / "zwnr.png",
-            self.project_root / "OnlineFix",
             self.src_dir,
         ]
+
+        # OnlineFix目录不再需要检查 - 现在通过网络下载获取
         
         for file_path in required_files:
             if file_path.exists():
@@ -152,14 +153,12 @@ class NuitkaBuilder:
         if icon_file.exists():
             data_files.append(f"--include-data-file={icon_file}=zwnr.png")
 
-        # 添加OnlineFix目录 - 逐个文件添加以确保包含所有文件
-        onlinefix_dir = self.project_root / "OnlineFix"
-        if onlinefix_dir.exists():
-            # 递归添加OnlineFix目录中的所有文件
-            for file_path in onlinefix_dir.rglob("*"):
-                if file_path.is_file():
-                    rel_path = file_path.relative_to(self.project_root)
-                    data_files.append(f"--include-data-file={file_path}={rel_path}")
+        # OnlineFix目录不再打包 - 现在通过网络下载获取
+        # 注释：OnlineFix工具包现在支持智能网络下载，包含：
+        # - OnlineFix.zip（破解文件）
+        # - esl2.zip（ESL局域网工具）
+        # - tool.zip（网络优化工具）
+        # 程序运行时会自动从GitHub下载最新版本
 
         # ESR和me3p目录不需要打包 - 这些是用户通过"工具下载"界面下载的工具
         # 注释：ESR(EasyTier)和me3p(ME3)工具由用户按需下载，不预置在安装包中
