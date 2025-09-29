@@ -586,6 +586,33 @@ class ToolDownloadPage(BasePage):
         """)
         self.me3_vcredist_btn.clicked.connect(self.fix_vcredist)
 
+        # 卸载安装版按钮
+        self.me3_uninstall_btn = QPushButton("🗑️ 卸载安装版")
+        self.me3_uninstall_btn.setFixedHeight(35)
+        self.me3_uninstall_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f38ba8;
+                border: none;
+                border-radius: 6px;
+                color: #1e1e2e;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #eba0ac;
+            }
+            QPushButton:pressed {
+                background-color: #d67a8a;
+            }
+            QPushButton:disabled {
+                background-color: #45475a;
+                color: #6c7086;
+            }
+        """)
+        self.me3_uninstall_btn.clicked.connect(self.uninstall_me3_full)
+        self.me3_uninstall_btn.setVisible(False)  # 初始隐藏，根据安装状态动态显示
+
         # 取消下载按钮
         self.me3_cancel_btn = QPushButton("取消下载")
         self.me3_cancel_btn.setFixedHeight(35)
@@ -613,6 +640,7 @@ class ToolDownloadPage(BasePage):
         btn_row.addWidget(self.me3_cancel_btn)
         btn_row.addWidget(self.me3_check_update_btn)
         btn_row.addWidget(self.me3_vcredist_btn)
+        btn_row.addWidget(self.me3_uninstall_btn)
         btn_row.addStretch()
 
         button_layout.addLayout(btn_row)
@@ -759,6 +787,9 @@ class ToolDownloadPage(BasePage):
 
             # 更新ME3版本显示（在设置单选框状态后）
             self.update_me3_version_display()
+
+            # 更新卸载按钮显示状态
+            self.update_uninstall_button_visibility(is_me3_full_installed)
 
             # 更新EasyTier状态
             easytier_current_version = status_info.get('easytier_version')
@@ -1464,6 +1495,9 @@ class ToolDownloadPage(BasePage):
         # 检查是否存在安装程序
         installer_path = download_manager.me3_dir / "me3_installer.exe"
         installer_exists = installer_path.exists()
+
+        # 更新卸载按钮显示状态
+        self.update_uninstall_button_visibility(is_full_installed)
 
         if self.me3_portable_radio.isChecked():
             # 选择便携版
@@ -2361,6 +2395,87 @@ class ToolDownloadPage(BasePage):
             self.onlinefix_progress.setValue(0)
         except Exception as e:
             print(f"重置OnlineFix下载UI失败: {e}")
+
+    def uninstall_me3_full(self):
+        """卸载ME3完整安装版"""
+        try:
+            # 禁用按钮，显示卸载状态
+            self.me3_uninstall_btn.setEnabled(False)
+            self.me3_uninstall_btn.setText("🗑️ 卸载中...")
+            self.me3_status_label.setText("正在卸载ME3安装版...")
+
+            # 执行卸载
+            download_manager = self.get_download_manager()
+            success, message = download_manager.uninstall_me3_full()
+
+            if success:
+                # 卸载成功
+                self.me3_status_label.setText(message)
+                self.me3_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #a6e3a1;
+                        font-size: 11px;
+                        padding: 3px;
+                        border-radius: 3px;
+                        border: 1px solid #a6e3a1;
+                    }
+                """)
+
+                # 隐藏卸载按钮
+                self.me3_uninstall_btn.setVisible(False)
+
+                # 延迟刷新状态
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(2000, self.check_current_status)
+
+            else:
+                # 卸载失败
+                self.me3_status_label.setText(message)
+                self.me3_status_label.setStyleSheet("""
+                    QLabel {
+                        color: #f38ba8;
+                        font-size: 11px;
+                        padding: 3px;
+                        border-radius: 3px;
+                        border: 1px solid #f38ba8;
+                    }
+                """)
+
+                # 重新启用按钮
+                self.me3_uninstall_btn.setEnabled(True)
+                self.me3_uninstall_btn.setText("🗑️ 卸载安装版")
+
+        except Exception as e:
+            print(f"卸载ME3安装版失败: {e}")
+            self.me3_status_label.setText(f"卸载失败: {str(e)}")
+            self.me3_status_label.setStyleSheet("""
+                QLabel {
+                    color: #f38ba8;
+                    font-size: 11px;
+                    padding: 3px;
+                    border-radius: 3px;
+                    border: 1px solid #f38ba8;
+                }
+            """)
+
+            # 重新启用按钮
+            self.me3_uninstall_btn.setEnabled(True)
+            self.me3_uninstall_btn.setText("🗑️ 卸载安装版")
+
+    def update_uninstall_button_visibility(self, is_me3_full_installed):
+        """更新卸载按钮的显示状态"""
+        try:
+            if hasattr(self, 'me3_uninstall_btn'):
+                # 只有在检测到安装版时才显示卸载按钮
+                self.me3_uninstall_btn.setVisible(is_me3_full_installed)
+
+                if is_me3_full_installed:
+                    # 确保按钮可用且文本正确
+                    self.me3_uninstall_btn.setEnabled(True)
+                    self.me3_uninstall_btn.setText("🗑️ 卸载安装版")
+
+        except Exception as e:
+            print(f"更新卸载按钮显示状态失败: {e}")
 
 
 # 为了向后兼容，保留原来的类名作为别名

@@ -23,7 +23,7 @@ class PyInstallerBuilder:
         self.dist_dir = self.builds_dir / "PyInstaller"
         self.build_dir = self.project_root / "build"
         self.spec_file = self.project_root / "nmodm.spec"
-        self.version = "3.1.0"  # 应用版本号
+        self.version = "3.1.1"  # 应用版本号
         
     def check_environment(self) -> bool:
         """检查打包环境"""

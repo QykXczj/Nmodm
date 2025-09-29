@@ -437,6 +437,105 @@ class DownloadManager(QObject):
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
             return False
 
+    def find_me3_install_path(self) -> Optional[str]:
+        """使用where命令定位ME3安装版的me3.exe位置"""
+        try:
+            import subprocess
+            import sys
+
+            # 使用系统环境变量执行where命令
+            system_env = self._get_system_env()
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+            result = subprocess.run(['where', 'me3'],
+                                  capture_output=True, text=True, timeout=10,
+                                  env=system_env, creationflags=creation_flags)
+
+            if result.returncode == 0 and result.stdout.strip():
+                # where命令可能返回多个路径，取第一个
+                me3_path = result.stdout.strip().split('\n')[0].strip()
+                if me3_path and Path(me3_path).exists():
+                    return me3_path
+
+            return None
+
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+            print(f"查找ME3安装路径失败: {e}")
+            return None
+
+    def find_uninstaller_path(self, me3_exe_path: str) -> Optional[str]:
+        """根据me3.exe路径找到uninstall.exe（通常在../../uninstall.exe）"""
+        try:
+            from pathlib import Path
+
+            me3_path = Path(me3_exe_path)
+            if not me3_path.exists():
+                return None
+
+            # 尝试常见的卸载程序位置
+            possible_paths = [
+                me3_path.parent.parent / "uninstall.exe",  # ../../uninstall.exe
+                me3_path.parent.parent / "Uninstall.exe",  # 大写版本
+                me3_path.parent / "uninstall.exe",         # ../uninstall.exe
+                me3_path.parent / "Uninstall.exe",         # ../Uninstall.exe
+            ]
+
+            for uninstall_path in possible_paths:
+                if uninstall_path.exists():
+                    return str(uninstall_path)
+
+            return None
+
+        except Exception as e:
+            print(f"查找卸载程序路径失败: {e}")
+            return None
+
+    def uninstall_me3_full(self) -> tuple[bool, str]:
+        """卸载ME3完整安装版
+
+        Returns:
+            tuple[bool, str]: (是否成功, 状态消息)
+        """
+        try:
+            # 1. 检查是否有安装版
+            if not self.is_me3_full_installed():
+                return False, "未检测到ME3完整安装版"
+
+            # 2. 定位me3.exe
+            me3_path = self.find_me3_install_path()
+            if not me3_path:
+                return False, "无法定位ME3安装路径"
+
+            # 3. 找到卸载程序
+            uninstaller_path = self.find_uninstaller_path(me3_path)
+            if not uninstaller_path:
+                return False, "未找到卸载程序，请手动卸载"
+
+            # 4. 执行静默卸载
+            import subprocess
+            import sys
+
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            result = subprocess.run([uninstaller_path, '/S'],  # /S 参数用于静默卸载
+                                  capture_output=True, text=True, timeout=60,
+                                  creationflags=creation_flags)
+
+            # 5. 验证卸载结果
+            # 等待一段时间让卸载程序完成
+            import time
+            time.sleep(2)
+
+            # 检查是否还能检测到安装版
+            if not self.is_me3_full_installed():
+                return True, "ME3完整安装版卸载成功"
+            else:
+                return False, "卸载可能未完全成功，请检查"
+
+        except subprocess.TimeoutExpired:
+            return False, "卸载超时，请手动检查卸载状态"
+        except Exception as e:
+            return False, f"卸载过程中发生错误: {str(e)}"
+
 
 
     def get_me3_full_version(self) -> Optional[str]:
