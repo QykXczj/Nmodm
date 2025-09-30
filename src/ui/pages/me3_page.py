@@ -140,30 +140,13 @@ class VersionInfoCard(QFrame):
         right_layout = QVBoxLayout()
         right_layout.setAlignment(Qt.AlignCenter)
 
-        # 状态
-        self.status_label = QLabel("状态: 未安装")
-        self.status_label.setFixedHeight(60)
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #f38ba8;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 8px 12px;
-                border-radius: 6px;
-                border: 2px solid #f38ba8;
-            }
-        """)
-
-        right_layout.addWidget(self.status_label)
-
         # 添加到主布局
         main_layout.addLayout(left_layout, 2)  # 左侧占2份
         main_layout.addLayout(right_layout, 1)  # 右侧占1份
 
         self.setLayout(main_layout)
     
-    def update_info(self, current_version=None, latest_version=None, status=None, version_type=None, current_version_type=None):
+    def update_info(self, current_version=None, latest_version=None, version_type=None, current_version_type=None):
         """更新版本信息"""
         if current_version is not None:
             current_text = f"当前版本: {current_version or '未安装'}"
@@ -178,40 +161,7 @@ class VersionInfoCard(QFrame):
                 latest_text += f" ({version_type})"
             self.latest_version_label.setText(latest_text)
         
-        if status is not None:
-            # 根据状态设置不同的颜色和样式
-            if any(keyword in status for keyword in ["已安装", "安装完成", "已是最新版本", "最新版本", "已是最新正式版", "已是最新预发行版"]):
-                # 成功状态：绿色
-                color = "#a6e3a1"
-                border_color = "#a6e3a1"
-                bg_color = "#1e1e2e"
-            elif any(keyword in status for keyword in ["检查中", "下载中", "安装中", "正在"]):
-                # 进行中状态：橙色
-                color = "#fab387"
-                border_color = "#fab387"
-                bg_color = "#313244"
-            elif any(keyword in status for keyword in ["未安装", "未知"]):
-                # 未安装状态：蓝色
-                color = "#89b4fa"
-                border_color = "#89b4fa"
-                bg_color = "#313244"
-            else:
-                # 错误状态：红色
-                color = "#f38ba8"
-                border_color = "#f38ba8"
-                bg_color = "#313244"
 
-            self.status_label.setText(f"状态: {status}")
-            self.status_label.setStyleSheet(f"""
-                QLabel {{
-                    color: {color};
-                    font-size: 16px;
-                    font-weight: bold;
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    border: 2px solid {border_color};
-                }}
-            """)
 
 
 class ToolDownloadPage(BasePage):
@@ -645,58 +595,7 @@ class ToolDownloadPage(BasePage):
 
         button_layout.addLayout(btn_row)
 
-        # 镜像选择
-        mirror_row = QHBoxLayout()
-        mirror_row.setSpacing(10)
 
-        self.me3_mirror_combo = QComboBox()
-        self.me3_mirror_combo.setFixedHeight(30)
-        self.me3_mirror_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #313244;
-                border: 1px solid #45475a;
-                border-radius: 4px;
-                padding: 4px 8px;
-                color: #cdd6f4;
-                font-size: 12px;
-                min-width: 180px;
-            }
-            QComboBox:focus {
-                border-color: #89b4fa;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 4px solid #cdd6f4;
-                margin-right: 5px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #313244;
-                border: 1px solid #45475a;
-                selection-background-color: #89b4fa;
-                selection-color: #1e1e2e;
-                color: #cdd6f4;
-            }
-        """)
-
-        mirror_tip_label = QLabel("💡 更多镜像: https://yishijie.gitlab.io/ziyuan/")
-        mirror_tip_label.setStyleSheet("""
-            QLabel {
-                color: #fab387;
-                font-size: 11px;
-            }
-        """)
-
-        mirror_row.addWidget(self.me3_mirror_combo)
-        mirror_row.addWidget(mirror_tip_label)
-        mirror_row.addStretch()
-
-        button_layout.addLayout(mirror_row)
 
         button_container.setLayout(button_layout)
         layout.addWidget(button_container)
@@ -796,14 +695,12 @@ class ToolDownloadPage(BasePage):
 
             if easytier_current_version:
                 self.easytier_version_card.update_info(
-                    current_version=easytier_current_version,
-                    status="已安装"
+                    current_version=easytier_current_version
                 )
                 self.easytier_download_btn.setText("重新下载")
             else:
                 self.easytier_version_card.update_info(
-                    current_version=None,
-                    status="未安装"
+                    current_version=None
                 )
                 self.easytier_download_btn.setText("下载EasyTier")
 
@@ -811,8 +708,7 @@ class ToolDownloadPage(BasePage):
             if hasattr(self, 'onlinefix_status_label'):
                 self.check_onlinefix_status()
 
-            # 加载镜像列表（这个操作比较快，可以在UI线程执行）
-            self.load_mirrors()
+
 
             # 启动异步更新检查
             self.start_update_check()
@@ -896,7 +792,6 @@ class ToolDownloadPage(BasePage):
                 self.easytier_version_card.update_info(
                     current_version=current_version,
                     latest_version=latest_version,
-                    status=message,
                     version_type=version_type
                 )
 
@@ -937,7 +832,7 @@ class ToolDownloadPage(BasePage):
                     """)
             else:
                 error = result.get('error', '未知错误')
-                self.easytier_version_card.update_info(status=f"检查失败: {error}")
+                # 检查失败时不更新版本卡片，只更新状态标签
                 self.easytier_status_label.setText(f"检查更新失败: {error}")
                 self.easytier_status_label.setStyleSheet("""
                     QLabel {
@@ -948,7 +843,7 @@ class ToolDownloadPage(BasePage):
                     }
                 """)
         except Exception as e:
-            self.easytier_version_card.update_info(status=f"处理更新信息失败: {str(e)}")
+            # 处理更新信息失败时不更新版本卡片，只更新状态标签
             self.easytier_status_label.setText(f"处理更新信息失败: {str(e)}")
             self.easytier_status_label.setStyleSheet("""
                 QLabel {
@@ -1005,7 +900,6 @@ class ToolDownloadPage(BasePage):
             self.easytier_version_card.update_info(
                 current_version=current_version,
                 latest_version=latest_version,
-                status=message,
                 version_type=version_type
             )
 
@@ -1020,7 +914,7 @@ class ToolDownloadPage(BasePage):
 
         except Exception as e:
             print(f"检查EasyTier更新失败: {e}")
-            self.easytier_version_card.update_info(status="检查失败")
+            # 检查失败时不更新版本卡片，只更新状态标签
     
     def start_me3_download(self):
         """开始ME3下载"""
@@ -1046,13 +940,8 @@ class ToolDownloadPage(BasePage):
                 self.start_me3_installer_download()
                 return
 
-        # 获取选中的镜像
-        selected_mirror = None
-        if hasattr(self, 'me3_mirror_combo') and self.me3_mirror_combo.currentData():
-            selected_mirror = self.me3_mirror_combo.currentData()
-
-        # 下载便携版
-        self.me3_download_worker = self.get_download_manager().download_me3(selected_mirror)
+        # 下载便携版（使用智能镜像选择）
+        self.me3_download_worker = self.get_download_manager().download_me3()
         if not self.me3_download_worker:
             self.me3_status_label.setText("无法创建下载任务，请检查网络连接")
             return
@@ -1065,7 +954,6 @@ class ToolDownloadPage(BasePage):
         self.me3_download_btn.setVisible(False)
         self.me3_cancel_btn.setVisible(True)
         self.me3_check_update_btn.setEnabled(False)
-        self.me3_mirror_combo.setEnabled(False)
         self.me3_progress_bar.setVisible(True)
         self.me3_progress_bar.setValue(0)
         self.me3_status_label.setText("正在下载ME3便携版...")
@@ -1079,12 +967,8 @@ class ToolDownloadPage(BasePage):
             self.me3_status_label.setText("安装程序下载正在进行中，请稍候")
             return
 
-        # 获取选中的镜像
-        selected_mirror = None
-        if hasattr(self, 'me3_mirror_combo') and self.me3_mirror_combo.currentData():
-            selected_mirror = self.me3_mirror_combo.currentData()
-
-        self.me3_installer_download_worker = self.get_download_manager().download_me3_installer(selected_mirror)
+        # 下载ME3安装程序（使用智能镜像选择）
+        self.me3_installer_download_worker = self.get_download_manager().download_me3_installer()
         if not self.me3_installer_download_worker:
             self.me3_status_label.setText("无法创建下载任务，请检查网络连接")
             return
@@ -1097,7 +981,6 @@ class ToolDownloadPage(BasePage):
         self.me3_download_btn.setEnabled(False)
         self.me3_cancel_btn.setVisible(True)
         self.me3_check_update_btn.setEnabled(False)
-        self.me3_mirror_combo.setEnabled(False)
         self.me3_progress_bar.setVisible(True)
         self.me3_progress_bar.setValue(0)
         self.me3_status_label.setText("正在下载ME3安装程序...")
@@ -1132,7 +1015,6 @@ class ToolDownloadPage(BasePage):
         self.me3_download_btn.setEnabled(True)
         self.me3_cancel_btn.setVisible(False)
         self.me3_check_update_btn.setEnabled(True)
-        self.me3_mirror_combo.setEnabled(True)
         self.me3_progress_bar.setVisible(False)
         self.me3_progress_bar.setValue(0)
 
@@ -1372,53 +1254,7 @@ class ToolDownloadPage(BasePage):
                 }
             """)
 
-    def load_mirrors(self):
-        """加载镜像列表到下拉框"""
-        mirrors = self.get_download_manager().get_mirrors()
 
-        # 加载ME3镜像
-        if hasattr(self, 'me3_mirror_combo'):
-            self.me3_mirror_combo.clear()
-            for mirror in mirrors:
-                # 显示简化的镜像名称
-                if "gh-proxy.com" in mirror:
-                    display_name = "gh-proxy.com (GitHub代理)"
-                elif "ghproxy.net" in mirror:
-                    display_name = "ghproxy.net (GitHub镜像)"
-                elif "ghfast.top" in mirror:
-                    display_name = "ghfast.top (GitHub加速)"
-                elif "github.com" in mirror:
-                    display_name = "直连GitHub (备用)"
-                else:
-                    display_name = mirror.replace("https://", "").replace("http://", "").rstrip("/")
-
-                self.me3_mirror_combo.addItem(display_name, mirror)
-
-            # 设置当前选中的镜像（第一个）
-            if mirrors:
-                self.me3_mirror_combo.setCurrentIndex(0)
-
-        # 加载EasyTier镜像
-        if hasattr(self, 'easytier_mirror_combo'):
-            self.easytier_mirror_combo.clear()
-            for mirror in mirrors:
-                # 显示简化的镜像名称
-                if "gh-proxy.com" in mirror:
-                    display_name = "gh-proxy.com (GitHub代理)"
-                elif "ghproxy.net" in mirror:
-                    display_name = "ghproxy.net (GitHub镜像)"
-                elif "ghfast.top" in mirror:
-                    display_name = "ghfast.top (GitHub加速)"
-                elif "github.com" in mirror:
-                    display_name = "直连GitHub (备用)"
-                else:
-                    display_name = mirror.replace("https://", "").replace("http://", "").rstrip("/")
-
-                self.easytier_mirror_combo.addItem(display_name, mirror)
-
-            # 设置当前选中的镜像（第一个）
-            if mirrors:
-                self.easytier_mirror_combo.setCurrentIndex(0)
 
     def create_me3_version_type_selection(self):
         """创建ME3版本类型选择"""
@@ -1552,30 +1388,26 @@ class ToolDownloadPage(BasePage):
             if is_me3_installed:
                 self.me3_version_card.update_info(
                     current_version=me3_current_version,
-                    current_version_type="便携版",
-                    status="已安装（便携版）"
+                    current_version_type="便携版"
                 )
             else:
                 # 便携版未安装，显示未安装（即使安装版已安装）
                 self.me3_version_card.update_info(
                     current_version=None,
-                    current_version_type=None,
-                    status="未安装"
+                    current_version_type=None
                 )
         else:
             # 显示安装版信息 - 只有安装版安装了才显示版本
             if is_me3_full_installed:
                 self.me3_version_card.update_info(
                     current_version=me3_full_version,
-                    current_version_type="安装版",
-                    status="已安装（安装版）"
+                    current_version_type="安装版"
                 )
             else:
                 # 安装版未安装，显示未安装（即使便携版已安装）
                 self.me3_version_card.update_info(
                     current_version=None,
-                    current_version_type=None,
-                    status="未安装"
+                    current_version_type=None
                 )
 
     def update_me3_status_text(self):
@@ -1634,8 +1466,7 @@ class ToolDownloadPage(BasePage):
         # EasyTier下载控制区域
         self.create_easytier_download_controls(layout)
 
-        # EasyTier镜像选择区域
-        self.create_easytier_mirror_controls(layout)
+
 
         section.setLayout(layout)
         return section
@@ -1798,6 +1629,18 @@ class ToolDownloadPage(BasePage):
         button_container.setLayout(button_layout)
         layout.addWidget(button_container)
 
+        # 状态标签
+        self.easytier_status_label = QLabel("准备就绪")
+        self.easytier_status_label.setStyleSheet("""
+            QLabel {
+                color: #a6e3a1;
+                font-size: 12px;
+                font-style: italic;
+                margin-top: 5px;
+            }
+        """)
+        layout.addWidget(self.easytier_status_label)
+
     def auto_select_version_type(self):
         """根据当前安装的版本类型自动选择单选框"""
         try:
@@ -1821,7 +1664,7 @@ class ToolDownloadPage(BasePage):
         if hasattr(self, 'easytier_version_card'):
             version_type = "预发行版" if (hasattr(self, 'easytier_prerelease_radio') and
                                       self.easytier_prerelease_radio.isChecked()) else "正式版"
-            self.easytier_version_card.update_info(status=f"正在切换到{version_type}...")
+            # 版本类型切换时不更新版本卡片，只更新状态标签
 
         # 使用防抖定时器，避免快速切换时频繁请求
         if hasattr(self, 'easytier_version_check_timer'):
@@ -1832,83 +1675,6 @@ class ToolDownloadPage(BasePage):
         """延迟执行的版本检查"""
         if hasattr(self, 'easytier_version_card'):
             self.check_easytier_update()
-
-    def create_easytier_mirror_controls(self, layout):
-        """创建EasyTier镜像选择控件"""
-        # 镜像选择区域
-        mirror_container = QWidget()
-        mirror_layout = QVBoxLayout()
-        mirror_layout.setContentsMargins(0, 5, 0, 0)
-        mirror_layout.setSpacing(8)
-
-        # 镜像选择标签和下拉框
-        mirror_row = QHBoxLayout()
-        mirror_row.setSpacing(10)
-
-        mirror_label = QLabel("下载镜像:")
-        mirror_label.setStyleSheet("""
-            QLabel {
-                color: #cdd6f4;
-                font-size: 13px;
-                font-weight: bold;
-                min-width: 70px;
-            }
-        """)
-
-        self.easytier_mirror_combo = QComboBox()
-        self.easytier_mirror_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #1e1e2e;
-                border: 2px solid #313244;
-                border-radius: 4px;
-                padding: 6px 8px;
-                color: #cdd6f4;
-                font-size: 12px;
-                min-width: 200px;
-            }
-            QComboBox:focus {
-                border-color: #89b4fa;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 4px solid #cdd6f4;
-                margin-right: 5px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #1e1e2e;
-                border: 1px solid #313244;
-                selection-background-color: #89b4fa;
-                selection-color: #1e1e2e;
-                color: #cdd6f4;
-            }
-        """)
-
-        mirror_row.addWidget(mirror_label)
-        mirror_row.addWidget(self.easytier_mirror_combo)
-        mirror_row.addStretch()
-
-        mirror_layout.addLayout(mirror_row)
-
-        # 状态标签
-        self.easytier_status_label = QLabel("准备就绪")
-        self.easytier_status_label.setStyleSheet("""
-            QLabel {
-                color: #a6e3a1;
-                font-size: 12px;
-                font-style: italic;
-                margin-top: 5px;
-            }
-        """)
-        mirror_layout.addWidget(self.easytier_status_label)
-
-        mirror_container.setLayout(mirror_layout)
-        layout.addWidget(mirror_container)
 
     def download_easytier(self):
         """下载EasyTier"""
@@ -1925,22 +1691,15 @@ class ToolDownloadPage(BasePage):
             self.easytier_progress.setValue(0)  # 初始化为0
 
             # 更新状态
-            self.easytier_version_card.update_info(status="下载中...")
             self.easytier_status_label.setText("正在下载...")
-
-            # 获取选中的镜像
-            selected_mirror = None
-            if hasattr(self, 'easytier_mirror_combo') and self.easytier_mirror_combo.currentData():
-                selected_mirror = self.easytier_mirror_combo.currentData()
 
             # 获取版本类型选择
             include_prerelease = False
             if hasattr(self, 'easytier_prerelease_radio') and self.easytier_prerelease_radio.isChecked():
                 include_prerelease = True
 
-            # 开始下载
+            # 开始下载（使用智能镜像选择）
             success = download_manager.download_easytier(
-                selected_mirror=selected_mirror,
                 include_prerelease=include_prerelease
             )
 
@@ -1949,7 +1708,7 @@ class ToolDownloadPage(BasePage):
                 if hasattr(download_manager, 'easytier_download_worker') and download_manager.easytier_download_worker:
                     download_manager.easytier_download_worker.progress.connect(self.easytier_progress.setValue)
             else:
-                self.easytier_version_card.update_info(status="下载失败")
+                # 下载失败时不更新版本卡片，只更新状态标签
                 self.easytier_status_label.setText("下载失败")
                 self.easytier_download_btn.setEnabled(True)
                 self.easytier_check_btn.setEnabled(True)
@@ -1957,7 +1716,7 @@ class ToolDownloadPage(BasePage):
 
         except Exception as e:
             print(f"下载EasyTier失败: {e}")
-            self.easytier_version_card.update_info(status="下载失败")
+            # 下载失败时不更新版本卡片，只更新状态标签
             self.easytier_status_label.setText(f"下载失败: {e}")
             self.easytier_download_btn.setEnabled(True)
             self.easytier_check_btn.setEnabled(True)
@@ -1970,7 +1729,7 @@ class ToolDownloadPage(BasePage):
 
             # 禁用按钮
             self.easytier_check_btn.setEnabled(False)
-            self.easytier_version_card.update_info(status="检查中...")
+            # 检查中时不更新版本卡片，只更新状态标签
 
             # 获取版本类型选择
             include_prerelease = False
@@ -1986,7 +1745,6 @@ class ToolDownloadPage(BasePage):
             self.easytier_version_card.update_info(
                 current_version=current_version,
                 latest_version=latest_version,
-                status=message,
                 version_type=version_type
             )
 
@@ -1999,7 +1757,7 @@ class ToolDownloadPage(BasePage):
 
         except Exception as e:
             print(f"检查EasyTier更新失败: {e}")
-            self.easytier_version_card.update_info(status="检查失败")
+            # 检查失败时不更新版本卡片，只更新状态标签
         finally:
             self.easytier_check_btn.setEnabled(True)
 
@@ -2018,8 +1776,7 @@ class ToolDownloadPage(BasePage):
 
             if success:
                 # 安装成功
-                if hasattr(self, 'easytier_version_card'):
-                    self.easytier_version_card.update_info(status="安装完成")
+                # 安装完成时不更新版本卡片，只更新状态标签
                 if hasattr(self, 'easytier_status_label'):
                     self.easytier_status_label.setText(message)
                     self.easytier_status_label.setStyleSheet("""
@@ -2039,8 +1796,7 @@ class ToolDownloadPage(BasePage):
                 self.check_current_status()
             else:
                 # 安装失败
-                if hasattr(self, 'easytier_version_card'):
-                    self.easytier_version_card.update_info(status="安装失败")
+                # 安装失败时不更新版本卡片，只更新状态标签
                 if hasattr(self, 'easytier_status_label'):
                     self.easytier_status_label.setText(message)
                     self.easytier_status_label.setStyleSheet("""
