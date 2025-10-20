@@ -1,0 +1,99 @@
+{
+  "page_title": "🌐 LAN Config",
+  "section": {
+    "esl_status": "🔧 ESL Tool Status",
+    "lan_config": "🔧 LAN Config",
+    "launch": "🚀 Enter LAN Mode",
+    "launch_in_lan": "🌐 LAN Mode Management",
+    "help": "📖 Instructions"
+  },
+  "label": {
+    "steamid": "Steam ID (17 digits starting with 76):",
+    "player_name": "Player Name:",
+    "status_ready": "Ready",
+    "esl_status_checking": "Checking ESL tool status..."
+  },
+  "button": {
+    "save_config": "💾 Save Config",
+    "locate_save": "📁 Locate Save",
+    "launch_lan": "🌐 Enter LAN Mode",
+    "exit_lan": "🚪 Exit LAN",
+    "check_dll": "🔍 Check DLL",
+    "save": "💾 Save",
+    "cancel": "❌ Cancel"
+  },
+  "tooltip": {
+    "locate_save": "Locate save folder"
+  },
+  "placeholder": {
+    "steamid": "e.g.: 76561198368389836",
+    "player_name": "Enter virtual Steam player name"
+  },
+  "status": {
+    "esl_extracting": "Extracting ESL tool...",
+    "esl_extracted": "ESL tool extracted",
+    "esl_initializing": "🚀 Initializing ESL tool...",
+    "esl_ready": "✅ ESL tool ready",
+    "esl_found_zip": "📦 Found ESL archive, preparing to extract...",
+    "esl_migrated": "📦 Found old ESL archive, migrated, preparing to extract...",
+    "esl_complete": "✅ ESL tool initialized",
+    "esl_incomplete": "❌ ESL tool extraction incomplete",
+    "config_saved": "Config saved",
+    "config_save_failed": "Failed to save config",
+    "config_load_failed": "Failed to load config: {error}",
+    "save_folder_opened": "Save folder opened, check folder name for Steam ID",
+    "save_folder_not_found": "Save folder not found, ensure game has been run",
+    "save_folder_locate_failed": "Failed to locate save folder: {error}",
+    "launching": "Launching LAN mode...",
+    "launch_success": "LAN mode launching, program will restart",
+    "launch_failed": "Launch failed: {error}",
+    "in_lan_mode": "🌐 Currently in LAN mode",
+    "exiting_lan": "Safely exiting LAN mode...",
+    "exit_step_1": "Step 1/4: Preparing safe exit...",
+    "exit_step_2": "Step 2/4: Unloading steamclient DLL...",
+    "exit_step_3": "Step 3/4: Restarting Steam...",
+    "exit_step_4": "Step 4/4: Cleaning state files...",
+    "exit_complete": "✅ Safe exit complete, restarting Nmodm...",
+    "exit_failed": "Safe exit failed: {error}",
+    "dll_unload_failed": "DLL unload failed: {error}",
+    "steam_restart_failed": "Steam restart failed: {error}",
+    "state_clean_failed": "State file clean failed: {error}",
+    "checking_dll": "Checking DLL status...",
+    "dll_loaded": "🌐 Detected steamclient DLL loaded",
+    "dll_not_loaded": "✅ No steamclient DLL detected",
+    "dll_check_failed": "DLL check failed: {error}"
+  },
+  "error": {
+    "extract_failed": "Extract failed: {error}",
+    "init_failed": "❌ Init failed: {error}",
+    "esl_missing": "❌ ESL tool missing, please re-download program",
+    "esl_not_ready": "ESL tool not ready, please wait for initialization",
+    "steamid_required": "Please enter Steam ID",
+    "steamid_invalid": "Invalid Steam ID format, should be 17 digits starting with 76",
+    "name_required": "Please enter player name",
+    "config_not_exist": "Config file not exist, please save config first",
+    "save_config_first": "Please save config first",
+    "steamclient_loader_not_exist": "steamclient_loader.exe not exist"
+  },
+  "help": {
+    "steamid_title": "How to Get Steam ID:",
+    "steamid_method_1": "1. Steam Profile URL:",
+    "steamid_method_1_example": "   https://steamcommunity.com/profiles/76561198368389836/",
+    "steamid_method_1_note": "   76561198368389836 is the Steam ID",
+    "steamid_method_2": "2. Local Save Folder:",
+    "steamid_method_2_example": "   C:\\Users\\Username\\AppData\\Roaming\\Nightreign\\76561198368389836",
+    "steamid_method_2_note": "   Folder name is the Steam ID",
+    "steamid_method_3": "3. Click 📁 button to open save folder",
+    "usage_title": "Usage Steps:",
+    "usage_step_1": "1. ESL tool will auto-extract on first launch",
+    "usage_step_2": "2. Configure Steam ID and player name",
+    "usage_step_3": "3. Click \"Save Config\"",
+    "usage_step_4": "4. Click \"Enter LAN Mode\"",
+    "usage_step_5": "5. Program will restart in LAN mode",
+    "notes_title": "Notes:",
+    "notes_1": "• Player name can be changed freely",
+    "notes_2": "• Steam ID must be unique",
+    "notes_3": "• Ensure all players are on same network"
+  }
+}
+

@@ -1,0 +1,99 @@
+{
+  "page_title": "🌐 局域网配置",
+  "section": {
+    "esl_status": "🔧 ESL工具状态",
+    "lan_config": "🔧 局域网配置",
+    "launch": "🚀 进入局域网联机模式",
+    "launch_in_lan": "🌐 局域网联机模式管理",
+    "help": "📖 使用说明"
+  },
+  "label": {
+    "steamid": "Steam ID (76开头的17位数字):",
+    "player_name": "玩家名称:",
+    "status_ready": "准备就绪",
+    "esl_status_checking": "正在检查ESL工具状态..."
+  },
+  "button": {
+    "save_config": "💾 保存配置",
+    "locate_save": "📁 定位存档",
+    "launch_lan": "🌐 进入局域网联机模式",
+    "exit_lan": "🚪 退出局域网联机",
+    "check_dll": "🔍 检查DLL状态",
+    "save": "💾 保存",
+    "cancel": "❌ 取消"
+  },
+  "tooltip": {
+    "locate_save": "定位存档文件夹"
+  },
+  "placeholder": {
+    "steamid": "例如: 76561198368389836",
+    "player_name": "输入虚拟Steam玩家名称"
+  },
+  "status": {
+    "esl_extracting": "正在解压ESL工具...",
+    "esl_extracted": "ESL工具解压完成",
+    "esl_initializing": "🚀 正在初始化ESL工具...",
+    "esl_ready": "✅ ESL工具已就绪",
+    "esl_found_zip": "📦 发现ESL压缩包，准备解压...",
+    "esl_migrated": "📦 发现旧版ESL压缩包，已迁移，准备解压...",
+    "esl_complete": "✅ ESL工具初始化完成",
+    "esl_incomplete": "❌ ESL工具解压不完整",
+    "config_saved": "配置保存成功",
+    "config_save_failed": "配置保存失败",
+    "config_load_failed": "加载配置失败: {error}",
+    "save_folder_opened": "已打开存档文件夹，请查看文件夹名称获取Steam ID",
+    "save_folder_not_found": "未找到存档文件夹，请确保游戏已运行过",
+    "save_folder_locate_failed": "定位存档文件夹失败: {error}",
+    "launching": "正在启动局域网联机模式...",
+    "launch_success": "局域网联机模式启动中，程序将重新启动",
+    "launch_failed": "启动失败: {error}",
+    "in_lan_mode": "🌐 当前处于局域网联机模式",
+    "exiting_lan": "正在安全退出局域网联机模式...",
+    "exit_step_1": "步骤1/4: 准备安全退出...",
+    "exit_step_2": "步骤2/4: 卸载steamclient DLL...",
+    "exit_step_3": "步骤3/4: 重启Steam程序...",
+    "exit_step_4": "步骤4/4: 清理状态文件...",
+    "exit_complete": "✅ 安全退出完成，正在重启Nmodm...",
+    "exit_failed": "安全退出失败: {error}",
+    "dll_unload_failed": "DLL卸载失败: {error}",
+    "steam_restart_failed": "Steam重启失败: {error}",
+    "state_clean_failed": "状态文件清理失败: {error}",
+    "checking_dll": "正在检查DLL状态...",
+    "dll_loaded": "🌐 检测到steamclient DLL已加载",
+    "dll_not_loaded": "✅ 未检测到steamclient DLL",
+    "dll_check_failed": "检查DLL状态失败: {error}"
+  },
+  "error": {
+    "extract_failed": "解压失败: {error}",
+    "init_failed": "❌ 初始化失败: {error}",
+    "esl_missing": "❌ ESL工具缺失，请重新下载程序",
+    "esl_not_ready": "ESL工具未就绪，请等待初始化完成",
+    "steamid_required": "请输入Steam ID",
+    "steamid_invalid": "Steam ID格式错误，应为76开头的17位数字",
+    "name_required": "请输入玩家名称",
+    "config_not_exist": "配置文件不存在，请先保存配置",
+    "save_config_first": "请先保存配置",
+    "steamclient_loader_not_exist": "steamclient_loader.exe不存在"
+  },
+  "help": {
+    "steamid_title": "Steam ID 获取方法：",
+    "steamid_method_1": "1. Steam个人主页链接：",
+    "steamid_method_1_example": "   https://steamcommunity.com/profiles/76561198368389836/",
+    "steamid_method_1_note": "   其中 76561198368389836 就是Steam ID",
+    "steamid_method_2": "2. 本地存档文件夹：",
+    "steamid_method_2_example": "   C:\\Users\\用户名\\AppData\\Roaming\\Nightreign\\76561198368389836",
+    "steamid_method_2_note": "   文件夹名称就是Steam ID",
+    "steamid_method_3": "3. 点击 📁 按钮可直接打开存档文件夹",
+    "usage_title": "使用步骤：",
+    "usage_step_1": "1. 首次启动会自动解压ESL工具",
+    "usage_step_2": "2. 配置Steam ID和玩家名称",
+    "usage_step_3": "3. 点击\"保存配置\"",
+    "usage_step_4": "4. 点击\"启动局域网联机\"",
+    "usage_step_5": "5. 程序会重新启动进入联机模式",
+    "notes_title": "注意事项：",
+    "notes_1": "• 玩家名称可随意更改",
+    "notes_2": "• Steam ID需保证唯一性",
+    "notes_3": "• 确保所有玩家在同一网络环境"
+  }
+}
+

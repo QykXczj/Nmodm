@@ -1,0 +1,31 @@
+{
+  "error": {
+    "path_not_set": "游戏路径未配置",
+    "file_not_exist": "游戏文件不存在",
+    "get_info_failed": "获取游戏信息失败: {error}",
+    "cannot_get_dir": "无法获取游戏目录",
+    "missing_files": "缺失文件: {files}",
+    "check_failed": "检查失败: {error}",
+    "get_file_info_failed": "获取文件信息失败: {error}",
+    "check_path_failed": "检测路径失败: {error}",
+    "get_nmodm_info_failed": "获取Nmodm信息失败: {error}",
+    "check_desktop_failed": "检测桌面位置失败: {error}"
+  },
+  "status": {
+    "files_complete": "所有破解文件完整",
+    "unknown": "未知",
+    "packaged": "打包环境",
+    "development": "开发环境",
+    "path_safe": "路径安全，无中文字符",
+    "location_good": "软件位置合适"
+  },
+  "warning": {
+    "chinese_path": "路径包含中文字符，可能导致某些功能异常",
+    "on_desktop": "软件位于桌面，可能影响性能和整理"
+  },
+  "recommendation": {
+    "move_to_english": "建议将软件移动到纯英文路径下",
+    "move_to_program": "建议将软件移动到专门的程序目录（如 C:\\Program Files 或 D:\\Software）"
+  }
+}
+

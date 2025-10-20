@@ -1,0 +1,46 @@
+{
+  "title": "Nmodm - Game Management Tool",
+  "title_full": "Nmodm v3.1.1",
+  "lan_mode_prefix": "🌐 【LAN Gaming Mode】",
+  "window": {
+    "maximize": "□",
+    "restore": "❐",
+    "minimize": "—",
+    "close": "×"
+  },
+  "close_warning": {
+    "title": "Cannot Close Application",
+    "lan_mode": {
+      "title": "Currently in LAN Gaming Mode",
+      "message": "LAN gaming feature is currently active.\n\nClosing the application may cause:\n• Game connection interruption\n• Other players unable to connect\n\nRecommendation:\n1. Exit the game first\n2. Ensure you're not in gaming session\n3. Then close the application",
+      "detailed_message": "LAN gaming feature is currently active.\n\nTo avoid game connection interruption, please exit LAN gaming mode before closing the application.\n\nSteps:\n1. Switch to「LAN Gaming」page\n2. Click「Exit Gaming」button\n3. Wait for exit to complete, then close the application",
+      "button_force_close": "Force Close",
+      "button_cancel": "Cancel"
+    },
+    "network_running": {
+      "title": "Network is Running",
+      "message": "Your virtual LAN is currently running.\n\nClosing the application will:\n• Disconnect virtual network\n• Affect ongoing gaming sessions\n\nPlease stop the network before closing.",
+      "detailed_message": "Your virtual LAN is currently running.\n\nTo avoid abnormal network disconnection, please stop the network before closing the application.\n\nSteps:\n1. Switch to「Virtual LAN」page\n2. Click「Stop Network」button\n3. Wait for network to stop, then close the application",
+      "button_force_close": "Force Close",
+      "button_cancel": "Cancel"
+    }
+  },
+  "lan_status": {
+    "active": "🌐 Currently in LAN Gaming Mode - Can play with LAN players",
+    "inactive": "LAN gaming not active"
+  },
+  "menu": {
+    "file": "File",
+    "edit": "Edit",
+    "view": "View",
+    "tools": "Tools",
+    "help": "Help"
+  },
+  "tooltip": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  }
+}
+

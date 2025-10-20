@@ -1,0 +1,30 @@
+{
+  "app_name": "Nmodm",
+  "app_subtitle": "Mod Tool",
+  "version": "v3.1.1",
+  "menu": {
+    "welcome": "🏠 Home",
+    "home": "🚀 Quick",
+    "config": "⚙️ Basic",
+    "me3": "📥 Tool",
+    "mods": "🔧 Mod",
+    "lan_gaming": "🌐 LAN",
+    "virtual_lan": "🌍 Virtual",
+    "misc": "📦 Misc"
+  },
+  "menu_text": {
+    "welcome": "Home",
+    "home": "Quick",
+    "config": "Basic",
+    "me3": "Tool",
+    "mods": "Mod",
+    "lan_gaming": "LAN",
+    "virtual_lan": "Virtual",
+    "misc": "Misc"
+  },
+  "language_switcher": {
+    "title": "Language",
+    "tooltip": "Switch interface language"
+  }
+}
+

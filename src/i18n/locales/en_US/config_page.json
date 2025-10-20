@@ -1,0 +1,119 @@
+{
+  "page_title": "Basic Config",
+  
+  "section": {
+    "game_path": "Game Path",
+    "game_info": "Game Info",
+    "software_info": "Software Path",
+    "crack": "Crack Manager",
+    "system_check": "System Check"
+  },
+  
+  "form": {
+    "game_path_hint": "Select nightreign.exe path",
+    "game_path_placeholder": "Select game path...",
+    "crack_hint": "Manage OnlineFix crack files",
+    "game_info_hint": "Detect game version and files",
+    "software_info_hint": "Check software path safety",
+    "game_version": "Version:",
+    "dll_info": "DLL:",
+    "software_path": "Path:",
+    "chinese_char": "Chinese:",
+    "desktop_loc": "Desktop:",
+    "safety": "Safety:",
+    "crack_files": "Files: dlllist.txt, OnlineFix.ini, OnlineFix64.dll, winmm.dll"
+  },
+  
+  "button": {
+    "browse": "Browse",
+    "save": "Save",
+    "apply_crack": "Apply",
+    "remove_crack": "Remove",
+    "detect": "Detect",
+    "restore_onlinefix": "🔧 Fix OnlineFix",
+    "restore_dll": "🔧 Fix DLL"
+  },
+  
+  "status": {
+    "path_valid": "✅ Path valid",
+    "path_invalid": "❌ Path invalid",
+    "crack_applied": "✅ Crack applied",
+    "crack_not_applied": "❌ Crack not applied"
+  },
+  
+  "check": {
+    "path_not_set": "Path not set",
+    "path_invalid": "❌ Invalid path",
+    "path_valid": "✅ Valid path",
+    "detecting": "Detecting...",
+    "detect_failed": "Failed",
+    "missing_files": "❌ Missing {count} files",
+    "files_complete": "✅ Complete",
+    "missing_list": "Missing: {files}",
+    "missing_no_zip": "Missing: {files} (no zip)",
+    "all_files_ok": "All {count} files OK",
+    "file_not_exist": "❌ Not found",
+    "size_mismatch": "⚠️ Size mismatch",
+    "size_ok": "✅ Size OK",
+    "missing_onlinefix": "❌ No OnlineFix",
+    "size_compare": "Current: {current:.1f} KB | Target: {target:.1f} KB",
+    "file_size_normal": "Size: {size:.1f} KB (OK)",
+    "missing_onlinefix_file": "Files: No OnlineFix ({size:.1f} KB)",
+    "path_title": "📍 Path Check",
+    "onlinefix_title": "📦 OnlineFix Check",
+    "dll_title": "🔧 DLL Check",
+    "path_status_detecting": "Path: Detecting...",
+    "path_status_not_set": "Path: Not set",
+    "path_status_valid": "Path: OK, no Chinese",
+    "issues": "Issues: {issues}",
+    "has_chinese": "Has Chinese",
+    "on_desktop": "On desktop",
+    "file_status_detecting": "Files: Detecting...",
+    "file_status_not_detected": "Files: Not detected",
+    "file_status_not_exist": "Files: Not found",
+    "file_status_detect_failed": "Files: Failed",
+    "detect_error": "Failed: {error}"
+  },
+  
+  "info": {
+    "not_detected": "Not detected",
+    "unavailable": "Unavailable",
+    "file_not_found": "Not found",
+    "failed": "Failed",
+    "no_chinese": "No Chinese",
+    "has_chinese": "Chinese: {chars}",
+    "on_desktop": "On desktop",
+    "not_on_desktop": "Not on desktop",
+    "safe": "Safe",
+    "warning": "⚠️ Warning: {warning}"
+  },
+  
+  "message": {
+    "path_saved": "Path saved",
+    "crack_applied": "Crack applied",
+    "crack_removed": "Crack removed",
+    "dll_restored": "DLL restored",
+    "onlinefix_fixed": "OnlineFix fixed",
+    "game_info_done": "Game info detected",
+    "software_info_done": "Path check done",
+    "set_path_first": "Set path first",
+    "select_path_first": "Select path first",
+    "select_exe": "Select nightreign.exe",
+    "file_not_exist": "File not exist",
+    "set_valid_path": "Set valid path first",
+    "dll_not_found": "DLL not found",
+    "onlinefix_dll_not_found": "OnlineFix DLL not found",
+    "no_zip": "OnlineFix.zip not found",
+    "path_warning": "⚠️ Path has Chinese or on desktop",
+    "save_failed": "Save failed",
+    "apply_failed": "Apply failed",
+    "remove_failed": "Remove failed",
+    "restore_failed": "Restore failed: {error}",
+    "fix_failed": "Fix failed",
+    "repair_failed": "Repair failed: {error}",
+    "detect_failed": "Detect failed: {error}",
+    "game_info_error": "Game info error: {error}",
+    "software_info_error": "Path check error: {error}"
+  }
+}
+

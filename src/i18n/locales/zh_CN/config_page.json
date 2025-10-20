@@ -1,0 +1,119 @@
+{
+  "page_title": "基础配置",
+  
+  "section": {
+    "game_path": "游戏路径配置",
+    "game_info": "游戏信息检测",
+    "software_info": "软件路径检测",
+    "crack": "破解文件管理",
+    "system_check": "系统检查与修复"
+  },
+  
+  "form": {
+    "game_path_hint": "请选择 nightreign.exe 游戏文件的路径",
+    "game_path_placeholder": "请选择游戏文件路径...",
+    "crack_hint": "管理OnlineFix破解文件的应用和移除",
+    "game_info_hint": "检测游戏版本和相关文件信息",
+    "software_info_hint": "检测Nmodm软件路径的安全性",
+    "game_version": "游戏版本:",
+    "dll_info": "steam_api64.dll:",
+    "software_path": "软件路径:",
+    "chinese_char": "中文字符:",
+    "desktop_loc": "桌面位置:",
+    "safety": "综合安全:",
+    "crack_files": "破解文件: dlllist.txt, OnlineFix.ini, OnlineFix64.dll, winmm.dll"
+  },
+  
+  "button": {
+    "browse": "浏览",
+    "save": "保存配置",
+    "apply_crack": "应用破解",
+    "remove_crack": "移除破解",
+    "detect": "检测",
+    "restore_onlinefix": "🔧 一键修复 OnlineFix文件",
+    "restore_dll": "🔧 一键修复\nsteam_api64.dll"
+  },
+  
+  "status": {
+    "path_valid": "✅ 游戏路径配置正确",
+    "path_invalid": "❌ 游戏路径无效或未配置",
+    "crack_applied": "✅ 破解已应用",
+    "crack_not_applied": "❌ 破解未应用"
+  },
+  
+  "check": {
+    "path_not_set": "未配置游戏路径",
+    "path_invalid": "❌ 路径不合规",
+    "path_valid": "✅ 路径合规",
+    "detecting": "检测中...",
+    "detect_failed": "检测失败",
+    "missing_files": "❌ 缺失{count}个文件",
+    "files_complete": "✅ 文件完整",
+    "missing_list": "缺失文件: {files}",
+    "missing_no_zip": "缺失文件: {files} (无修复包)",
+    "all_files_ok": "所有{count}个必需文件完整",
+    "file_not_exist": "❌ 文件不存在",
+    "size_mismatch": "⚠️ 文件大小不匹配",
+    "size_ok": "✅ 文件大小正常",
+    "missing_onlinefix": "❌ 缺少OnlineFix",
+    "size_compare": "当前: {current:.1f} KB | 目标: {target:.1f} KB",
+    "file_size_normal": "文件大小: {size:.1f} KB (正常)",
+    "missing_onlinefix_file": "文件状态: 缺少OnlineFix文件 ({size:.1f} KB)",
+    "path_title": "📍 软件路径检测",
+    "onlinefix_title": "📦 OnlineFix完整性检测",
+    "dll_title": "🔧 steam_api64.dll检测",
+    "path_status_detecting": "路径状态: 检测中...",
+    "path_status_not_set": "路径状态: 请先配置游戏路径",
+    "path_status_valid": "路径状态: 符合要求，无中文字符",
+    "issues": "问题: {issues}",
+    "has_chinese": "包含中文字符",
+    "on_desktop": "位于桌面",
+    "file_status_detecting": "文件状态: 检测中...",
+    "file_status_not_detected": "文件状态: 未检测",
+    "file_status_not_exist": "文件状态: 文件不存在",
+    "file_status_detect_failed": "文件状态: 检测失败",
+    "detect_error": "检测失败: {error}"
+  },
+  
+  "info": {
+    "not_detected": "未检测",
+    "unavailable": "无法获取",
+    "file_not_found": "文件不存在",
+    "failed": "检测失败",
+    "no_chinese": "无中文字符",
+    "has_chinese": "包含中文: {chars}",
+    "on_desktop": "在桌面上",
+    "not_on_desktop": "不在桌面",
+    "safe": "安全",
+    "warning": "⚠️ 警告: {warning}"
+  },
+  
+  "message": {
+    "path_saved": "游戏路径保存成功",
+    "crack_applied": "破解文件应用成功",
+    "crack_removed": "破解文件移除成功",
+    "dll_restored": "steam_api64.dll恢复成功",
+    "onlinefix_fixed": "OnlineFix文件修复成功",
+    "game_info_done": "游戏信息检测完成",
+    "software_info_done": "软件路径检测完成",
+    "set_path_first": "请先配置游戏路径",
+    "select_path_first": "请先选择游戏文件路径",
+    "select_exe": "请选择 nightreign.exe 文件",
+    "file_not_exist": "选择的文件不存在",
+    "set_valid_path": "请先配置有效的游戏路径",
+    "dll_not_found": "未找到steam_api64.dll文件",
+    "onlinefix_dll_not_found": "未找到OnlineFix文件夹中的steam_api64.dll",
+    "no_zip": "OnlineFix.zip文件不存在，无法修复",
+    "path_warning": "⚠️ 游戏路径包含中文字符或位于桌面，可能导致运行异常",
+    "save_failed": "保存游戏路径失败",
+    "apply_failed": "应用破解失败",
+    "remove_failed": "移除破解失败",
+    "restore_failed": "恢复失败: {error}",
+    "fix_failed": "OnlineFix文件修复失败",
+    "repair_failed": "修复失败: {error}",
+    "detect_failed": "检测失败: {error}",
+    "game_info_error": "检测游戏信息时出错: {error}",
+    "software_info_error": "检测软件路径时出错: {error}"
+  }
+}
+

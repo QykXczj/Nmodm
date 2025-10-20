@@ -1,0 +1,120 @@
+{
+  "page_title": "工具下载",
+  "section": {
+    "me3_tool": "ME3工具"
+  },
+  "label": {
+    "current_version": "当前版本:",
+    "latest_version": "最新版本:",
+    "version_type": "版本类型:"
+  },
+  "type": {
+    "portable": "便携版",
+    "full_install": "完整安装版"
+  },
+  "button": {
+    "download_portable": "下载ME3工具（便携版）",
+    "check_update": "检查更新",
+    "fix_runtime": "运行库修复",
+    "uninstall": "🗑️ 卸载安装版",
+    "cancel": "取消下载",
+    "update": "更新ME3工具",
+    "install": "安装ME3工具",
+    "download_full": "下载ME3安装版",
+    "redownload_portable": "重新下载（便携版）",
+    "redownload_full": "重新下载（安装版）",
+    "get_update_portable": "获取更新（便携版）",
+    "get_update_full": "获取更新（安装版）"
+  },
+  "status": {
+    "not_installed": "未安装",
+    "checking": "检查中...",
+    "checking_status": "正在检查状态...",
+    "check_failed": "状态检查失败",
+    "checking_version": "正在检查最新版本...",
+    "new_version": "发现新版本: {version} ({type})",
+    "up_to_date": "已是最新版本 ({type})",
+    "can_download": "可以下载最新版本 ({type})",
+    "downloading_portable": "正在下载ME3便携版...",
+    "downloading_installer": "正在下载ME3安装程序...",
+    "download_cancelled": "下载已取消",
+    "installer_cancelled": "安装程序下载已取消",
+    "install_success": "ME3工具下载并安装成功",
+    "download_failed": "下载失败: {message}",
+    "downloading_vcredist": "正在下载VC++运行库...",
+    "fixing": "正在修复...",
+    "vcredist_fixed": "VC++运行库修复完成",
+    "vcredist_failed": "VC++运行库安装失败 (错误码: {code})",
+    "installing": "正在安装ME3...",
+    "me3_installed": "ME3安装完成！",
+    "install_may_failed": "ME3安装可能失败，请检查",
+    "uninstalling": "正在卸载ME3安装版...",
+    "uninstall_progress": "卸载中...",
+    "download_in_progress": "下载正在进行中，请稍候",
+    "installer_in_progress": "安装程序下载正在进行中，请稍候",
+    "cannot_create_task": "无法创建下载任务，请检查网络连接",
+    "cannot_get_version": "无法获取版本信息，请检查网络连接",
+    "check_update_failed": "检查更新失败: {error}",
+    "process_update_failed": "处理更新信息失败: {error}",
+    "installer_downloaded": "ME3安装程序下载完成",
+    "installer_download_failed": "安装程序下载失败: {message}",
+    "start_installer_failed": "启动安装程序失败: {error}"
+  },
+  "error": {
+    "unknown": "未知",
+    "get_failed": "获取失败",
+    "cannot_get_version": "无法获取版本信息",
+    "unknown_error": "未知错误",
+    "detection_failed": "检测失败"
+  },
+  "version_type": {
+    "portable": "便携版",
+    "full": "安装版",
+    "prerelease": "预发行版",
+    "release": "正式版"
+  },
+  "easytier_section": {
+    "title": "EasyTier虚拟局域网工具",
+    "label": {
+      "version_type": "版本类型:"
+    },
+    "type": {
+      "release": "正式版",
+      "prerelease": "预发行版"
+    },
+    "button": {
+      "download": "下载EasyTier",
+      "check_update": "检查更新"
+    }
+  },
+  "onlinefix_section": {
+    "title": "OnlineFix工具包",
+    "label": {
+      "toolkit_status": "📦 工具包状态"
+    },
+    "status": {
+      "checking": "检查中...",
+      "complete": "✅ 工具包完整",
+      "missing": "❌ 工具包缺失",
+      "download_complete": "✅ 下载完成",
+      "download_failed": "❌ 下载失败",
+      "downloading": "正在下载...",
+      "start_failed": "下载启动失败",
+      "check_failed": "检查失败",
+      "status_check_failed": "状态检查失败"
+    },
+    "detail": {
+      "includes": "包含: esl2.zip, tool.zip, 破解补丁等",
+      "ready": "所有必需文件已就绪",
+      "need_download": "需要下载OnlineFix工具包",
+      "installed": "OnlineFix工具包已安装完成",
+      "error": "错误: {message}"
+    },
+    "button": {
+      "download": "📥 下载工具包",
+      "downloading": "📥 下载中...",
+      "check_status": "🔍 检查状态"
+    }
+  }
+}
+

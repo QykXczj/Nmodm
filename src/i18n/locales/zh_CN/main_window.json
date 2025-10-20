@@ -1,0 +1,46 @@
+{
+  "title": "Nmodm - 游戏管理工具",
+  "title_full": "Nmodm v3.1.1",
+  "lan_mode_prefix": "🌐 【局域网联机模式】",
+  "window": {
+    "maximize": "□",
+    "restore": "❐",
+    "minimize": "—",
+    "close": "×"
+  },
+  "close_warning": {
+    "title": "无法关闭软件",
+    "lan_mode": {
+      "title": "当前处于局域网联机模式",
+      "message": "检测到您正在使用局域网联机功能。\n\n关闭软件可能会导致：\n• 游戏联机中断\n• 其他玩家无法连接\n\n建议：\n1. 先退出游戏\n2. 确保不在联机状态\n3. 再关闭本软件",
+      "detailed_message": "检测到您正在使用局域网联机功能。\n\n为了避免游戏连接中断，请先退出局域网联机模式再关闭软件。\n\n操作步骤：\n1. 切换到「局域网联机」页面\n2. 点击「退出联机」按钮\n3. 等待退出完成后再关闭软件",
+      "button_force_close": "强制关闭",
+      "button_cancel": "取消"
+    },
+    "network_running": {
+      "title": "检测到网络正在运行",
+      "message": "检测到您的虚拟局域网正在运行中。\n\n关闭软件将会：\n• 断开虚拟网络连接\n• 影响正在进行的联机\n\n建议先停止网络再关闭软件。",
+      "detailed_message": "检测到您的虚拟局域网正在运行中。\n\n为了避免网络连接异常中断，请先停止网络再关闭软件。\n\n操作步骤：\n1. 切换到「虚拟局域网」页面\n2. 点击「停止网络」按钮\n3. 等待网络停止完成后再关闭软件",
+      "button_force_close": "强制关闭",
+      "button_cancel": "取消"
+    }
+  },
+  "lan_status": {
+    "active": "🌐 当前处于局域网联机模式 - 可与局域网内玩家联机游戏",
+    "inactive": "局域网联机未激活"
+  },
+  "menu": {
+    "file": "文件",
+    "edit": "编辑",
+    "view": "视图",
+    "tools": "工具",
+    "help": "帮助"
+  },
+  "tooltip": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭"
+  }
+}
+

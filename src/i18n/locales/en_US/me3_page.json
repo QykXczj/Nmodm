@@ -1,0 +1,120 @@
+{
+  "page_title": "Tools Download",
+  "section": {
+    "me3_tool": "ME3 Tool"
+  },
+  "label": {
+    "current_version": "Current:",
+    "latest_version": "Latest:",
+    "version_type": "Type:"
+  },
+  "type": {
+    "portable": "Portable",
+    "full_install": "Full Install"
+  },
+  "button": {
+    "download_portable": "Download ME3 (Portable)",
+    "check_update": "Check Update",
+    "fix_runtime": "Fix Runtime",
+    "uninstall": "🗑️ Uninstall",
+    "cancel": "Cancel",
+    "update": "Update ME3",
+    "install": "Install ME3",
+    "download_full": "Download ME3 (Full)",
+    "redownload_portable": "Re-download (Portable)",
+    "redownload_full": "Re-download (Full)",
+    "get_update_portable": "Get Update (Portable)",
+    "get_update_full": "Get Update (Full)"
+  },
+  "status": {
+    "not_installed": "Not installed",
+    "checking": "Checking...",
+    "checking_status": "Checking status...",
+    "check_failed": "Status check failed",
+    "checking_version": "Checking latest version...",
+    "new_version": "New version: {version} ({type})",
+    "up_to_date": "Up to date ({type})",
+    "can_download": "Can download ({type})",
+    "downloading_portable": "Downloading ME3 (Portable)...",
+    "downloading_installer": "Downloading ME3 installer...",
+    "download_cancelled": "Download cancelled",
+    "installer_cancelled": "Installer download cancelled",
+    "install_success": "ME3 installed successfully",
+    "download_failed": "Download failed: {message}",
+    "downloading_vcredist": "Downloading VC++ runtime...",
+    "fixing": "Fixing...",
+    "vcredist_fixed": "VC++ runtime fixed",
+    "vcredist_failed": "VC++ install failed (code: {code})",
+    "installing": "Installing ME3...",
+    "me3_installed": "ME3 installed!",
+    "install_may_failed": "ME3 install may have failed",
+    "uninstalling": "Uninstalling ME3...",
+    "uninstall_progress": "Uninstalling...",
+    "download_in_progress": "Download in progress",
+    "installer_in_progress": "Installer download in progress",
+    "cannot_create_task": "Cannot create download task",
+    "cannot_get_version": "Cannot get version info",
+    "check_update_failed": "Check update failed: {error}",
+    "process_update_failed": "Process update failed: {error}",
+    "installer_downloaded": "ME3 installer downloaded",
+    "installer_download_failed": "Installer download failed: {message}",
+    "start_installer_failed": "Start installer failed: {error}"
+  },
+  "error": {
+    "unknown": "Unknown",
+    "get_failed": "Failed",
+    "cannot_get_version": "Cannot get version",
+    "unknown_error": "Unknown error",
+    "detection_failed": "Detection failed"
+  },
+  "version_type": {
+    "portable": "Portable",
+    "full": "Full Install",
+    "prerelease": "Pre-release",
+    "release": "Release"
+  },
+  "easytier_section": {
+    "title": "EasyTier Virtual LAN Tool",
+    "label": {
+      "version_type": "Type:"
+    },
+    "type": {
+      "release": "Release",
+      "prerelease": "Pre-release"
+    },
+    "button": {
+      "download": "Download EasyTier",
+      "check_update": "Check Update"
+    }
+  },
+  "onlinefix_section": {
+    "title": "OnlineFix Toolkit",
+    "label": {
+      "toolkit_status": "📦 Toolkit Status"
+    },
+    "status": {
+      "checking": "Checking...",
+      "complete": "✅ Complete",
+      "missing": "❌ Missing",
+      "download_complete": "✅ Downloaded",
+      "download_failed": "❌ Failed",
+      "downloading": "Downloading...",
+      "start_failed": "Start failed",
+      "check_failed": "Check failed",
+      "status_check_failed": "Status check failed"
+    },
+    "detail": {
+      "includes": "Includes: esl2.zip, tool.zip, patches, etc.",
+      "ready": "All files ready",
+      "need_download": "Need to download toolkit",
+      "installed": "Toolkit installed",
+      "error": "Error: {message}"
+    },
+    "button": {
+      "download": "📥 Download",
+      "downloading": "📥 Downloading...",
+      "check_status": "🔍 Check Status"
+    }
+  }
+}
+

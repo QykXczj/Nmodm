@@ -1,0 +1,64 @@
+{
+  "page_title": "🏠 Home",
+  "title": "Welcome to Nmodm Mod Manager",
+  "subtitle": "Modern game management tool for better gaming experience",
+  "section": {
+    "features": "Main Features",
+    "links": "Related Links",
+    "contact": "Contact Us"
+  },
+  "feature": {
+    "quick_launch": {
+      "icon": "🚀",
+      "title": "Quick Launch",
+      "description": "One-click game launch with multiple modes"
+    },
+    "config": {
+      "icon": "⚙️",
+      "title": "Basic Config",
+      "description": "Game settings and parameter configuration"
+    },
+    "tools": {
+      "icon": "📥",
+      "title": "Tool Download",
+      "description": "Automatic download and management of game tools"
+    },
+    "mods": {
+      "icon": "🔧",
+      "title": "Mod Config",
+      "description": "Easy mod installation and management"
+    },
+    "lan": {
+      "icon": "🌐",
+      "title": "LAN Config",
+      "description": "LAN gaming setup and management"
+    },
+    "virtual_lan": {
+      "icon": "🌍",
+      "title": "Virtual LAN",
+      "description": "Virtual network connection and configuration"
+    },
+    "misc": {
+      "icon": "📦",
+      "title": "Misc",
+      "description": "Stats query, save conversion and more"
+    }
+  },
+  "link": {
+    "github": "📂 Project Repository",
+    "video": "📺 Video Tutorial",
+    "mods_package": "📦 Latest Mods Package"
+  },
+  "contact": {
+    "qq_group_label": "QQ Group:",
+    "qq_group_number": "726070139",
+    "qq_group_copied": "QQ group number copied to clipboard!",
+    "qq_group_tooltip": "Click to copy QQ group number"
+  },
+  "url": {
+    "github": "https://github.com/QykXczj/Nmodm",
+    "video": "https://www.bilibili.com/video/BV1LK3CztE54",
+    "mods_package": "https://pan.quark.cn/s/7360b153d049"
+  }
+}
+

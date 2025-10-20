@@ -1,0 +1,256 @@
+{
+  "page_title": "Misc",
+  
+  "section": {
+    "seamless_mod": "Seamless Mod Update",
+    "player_search": "Player Stats",
+    "save_backup": "Save Backup",
+    "save_converter": "Save Converter"
+  },
+  
+  "seamless_mod": {
+    "title": "🔄 Seamless Mod Update",
+    "current_version": "Current",
+    "checking": "Checking...",
+    "not_installed": "Not installed",
+    "check_failed": "Check failed",
+    "can_update": "Update available",
+    "latest": "Latest",
+    "button": {
+      "check_update": "Check",
+      "download_update": "Download",
+      "downloading": "Downloading...",
+      "install_complete": "Installed",
+      "is_latest": "Latest",
+      "gamepad_fix": "🎮 Gamepad Fix Guide"
+    },
+    "status": {
+      "preparing": "Preparing v{version}...",
+      "downloading": "Downloading: {status}",
+      "complete": "v{version} installed (cleaned up)"
+    },
+    "error": {
+      "no_update_info": "Error: No update info",
+      "update_failed": "Update failed: {error}",
+      "check_failed": "Check failed: {error}"
+    }
+  },
+  
+  "player_search": {
+    "title": "🎮 Player Stats (requires stats upload mod)",
+    "placeholder": "Enter username or Steam ID...",
+    "button": {
+      "search": "🔍",
+      "view_details": "Details"
+    },
+    "status": {
+      "initial": "💡 Enter username or Steam ID",
+      "searching": "🔄 Searching...",
+      "not_found": "User not found",
+      "error": "❌ {error}"
+    },
+    "error": {
+      "empty_input": "Please enter username or Steam ID"
+    },
+    "result": {
+      "summary": "👤 {username} | 🎮 {total_games} games | 🏆 {total_wins} wins | 📊 {win_rate:.1f}% | ⏱️ {time_str}"
+    }
+  },
+  
+  "save_backup": {
+    "title": "🛡️ Save Backup",
+    "path_setting": {
+      "title": "📂 Save Path",
+      "placeholder": "Select save folder path...",
+      "button": "📁",
+      "tooltip": "Select save folder"
+    },
+    "operation": {
+      "title": "🔧 Operations",
+      "create": "Create",
+      "restore": "Restore",
+      "delete": "Delete",
+      "creating": "Creating...",
+      "restoring": "Restoring...",
+      "progress": "{operation}... {progress}%"
+    },
+    "list": {
+      "title": "📋 Backup List (CDBAK)",
+      "warning": "⚠️ Restore will overwrite current save!",
+      "empty": "No backups"
+    },
+    "settings": {
+      "title": "⚙️ Settings",
+      "auto_backup": "Auto Backup",
+      "keep_count": "Keep:",
+      "tooltip_disabled": "Select save folder first",
+      "tooltip_enabled": "Auto backup on launch"
+    },
+    "dialog": {
+      "title": {
+        "warning": "Warning",
+        "error": "Error",
+        "info": "Info",
+        "success": "Success",
+        "backup_success": "Backup Success",
+        "backup_failed": "Backup Failed",
+        "restore_success": "Restore Success",
+        "restore_failed": "Restore Failed",
+        "delete_success": "Success",
+        "delete_failed": "Error",
+        "restore_confirm": "Confirm Restore",
+        "delete_confirm": "Confirm Delete"
+      },
+      "select_path_first": "Select save folder first",
+      "path_not_exist": "Save path not exist",
+      "select_backup_first": "Select backup to {operation} first",
+      "no_backup_available": "No backups available",
+      "backup_not_exist": "Backup not exist",
+      "restore_confirm": "⚠️ Restore will overwrite current save!\n\nBackup: {file}\nTarget: {path}\n\nRecommend creating backup before restore.\nContinue?",
+      "delete_confirm": "Delete backup?\n\nFile: {file}\n\nThis cannot be undone!",
+      "backup_success": "Backup created!\nFile: {file}\nSize: {size}MB\nLocation: {path}",
+      "restore_success": "Save restored!\nRestored to: {path}",
+      "delete_success": "Backup deleted",
+      "restore_button": "Restore",
+      "delete_button": "Delete",
+      "cancel_button": "Cancel"
+    },
+    "error": {
+      "backup_failed": "Backup failed: {error}",
+      "restore_failed": "Restore failed: {error}",
+      "delete_failed": "Delete failed: {error}"
+    }
+  },
+  
+  "save_converter": {
+    "title": "🔄 Save Converter",
+    "warning": {
+      "title": "Irreversible process, backup first"
+    },
+    "file_selection": {
+      "title": "📁 Select Save File",
+      "placeholder": "Select save file...",
+      "button": "Select"
+    },
+    "steam_id": {
+      "title": "🆔 Enter Steam ID",
+      "placeholder": "Enter your 17-digit Steam ID...",
+      "button": "📁",
+      "tooltip": "Locate save folder"
+    },
+    "button": {
+      "convert": "Convert",
+      "converting": "Converting...",
+      "help": "❓ Help"
+    },
+    "progress": {
+      "reading": "Reading save file...",
+      "parsing": "Parsing structure...",
+      "decrypting": "Decrypting {count} entries...",
+      "replacing": "Replacing Steam ID...",
+      "checksum": "Recalculating checksum...",
+      "saving": "Saving converted file...",
+      "complete": "Complete!"
+    },
+    "dialog": {
+      "title": {
+        "warning": "Warning",
+        "error": "Error",
+        "info": "Info",
+        "convert_confirm": "Confirm Convert",
+        "convert_success": "Convert Success",
+        "convert_failed": "Convert Failed"
+      },
+      "select_file_first": "Select save file first!",
+      "enter_steam_id": "Enter Steam ID!",
+      "invalid_steam_id": "Invalid Steam ID!\n\nSteam ID must be 17 digits, e.g.: 76561198000000000\nFind it in your Steam profile URL",
+      "file_not_exist": "File not exist:\n{path}",
+      "confirm_convert": "Start conversion:\n\nSource: {file}\nTarget Steam ID: {steam_id}\n\n⚠️ Backup original save first!\nConversion is irreversible. Continue?",
+      "convert_success": "🎉 Conversion complete!\n\n{message}\n\n📋 Instructions:\n1. Copy converted file to game save folder\n2. Launch game to use converted save\n3. Restore backup if issues occur\n\n💡 Tip: Test save loading first",
+      "save_folder_opened": "Save folder opened, check folder name for Steam ID",
+      "save_folder_not_found": "Save folder not found, ensure game has run",
+      "locate_failed": "Locate failed: {error}",
+      "convert_button": "Convert",
+      "cancel_button": "Cancel"
+    },
+    "error": {
+      "format_error": "Format error:\n{error}\n\nPossible causes:\n• Not a valid Nightreign save\n• File corrupted or incomplete\n• Unsupported format\n\nSolutions:\n• Select correct save file\n• Copy save from game folder again",
+      "decrypt_error": "Decrypt error:\n{error}\n\nPossible causes:\n• Save file corrupted\n• File modified by other programs\n• Not a Nightreign save\n\nSolutions:\n• Use original, unmodified save\n• Verify file source",
+      "permission_error": "Permission error:\n{error}\n\nPossible causes:\n• File in use by other programs\n• No write permission\n• Target path not exist\n\nSolutions:\n• Close programs using the file\n• Run as administrator\n• Select different location",
+      "convert_failed": "Convert failed:\n{error}\n\nSuggestions:\n• Check file integrity\n• Verify Steam ID format\n• Retry conversion\n• Contact support if persists"
+    },
+    "help": {
+      "title": "Save Converter Help",
+      "content": "🎯 Principle:\nModify Steam ID in save file to use other players' saves on your account.\n\n📋 Steps:\n1. Select .sl2 save file;      2. Enter your 17-digit Steam ID\n3. Click convert, choose save location; 4. Copy converted file to game save folder\n\n🔍 How to get Steam ID:\n• Steam profile URL:\n   https://steamcommunity.com/profiles/76561198378589834/\n   76561198368389836 is the Steam ID\n\n• Local save folder:\n   C:\\Users\\username\\AppData\\Roaming\\Nightreign\\76521198568389835\n   Folder name is Steam ID, click 📁 to open save folder\n\n⚠️ Important:\n• Backup original save, conversion is irreversible\n• Supports .sl2, .co2 files, test save loading first\n\n💡 Technical:\nAES-CBC decryption to replace Steam ID and recalculate checksum for integrity.",
+      "close": "Close"
+    }
+  },
+  
+  "other": {
+    "hint": "💡 More features coming soon...",
+    "gamepad_solution": {
+      "opened": "Gamepad solution opened",
+      "not_found": "Solution file not found: OnlineFix/无缝手柄问题解决方案.png",
+      "error": "Failed to open file: {error}"
+    }
+  },
+  
+  "file_dialog": {
+    "select_save_file": "Select Nightreign Save File",
+    "save_converted_file": "Save Converted File",
+    "save_file_filter": "Save Files (*.sl2 *.sl *.co2);;SL2 Files (*.sl2);;SL Files (*.sl);;CO2 Files (*.co2);;All Files (*.*)"
+  },
+  
+  "worker": {
+    "backup": {
+      "preparing": "Preparing backup...",
+      "compressing": "Compressing save files...",
+      "compressing_progress": "Compressing {current}/{total}",
+      "complete": "Backup complete!",
+      "source_not_exist": "Source not exist: {path}"
+    },
+    "restore": {
+      "preparing": "Preparing restore...",
+      "extracting": "Extracting backup...",
+      "extracting_progress": "Restoring {current}/{total}",
+      "complete": "Restore complete!",
+      "backup_not_exist": "Backup not exist: {path}"
+    },
+    "converter": {
+      "reading": "Reading save file...",
+      "parsing": "Parsing structure...",
+      "decrypting": "Decrypting {count} entries...",
+      "replacing": "Replacing Steam ID...",
+      "checksum": "Recalculating checksum...",
+      "saving": "Saving converted file...",
+      "complete": "Complete!",
+      "success": "Save converted!\nModified {count} entries\nSaved to: {path}",
+      "invalid_bnd4": "Not a valid SL2 save (missing BND4 header)",
+      "decrypt_failed": "Decrypt failed: {error}"
+    },
+    "mod_checker": {
+      "no_version_info": "Cannot get version info",
+      "check_failed": "Check failed: {error}"
+    },
+    "mod_downloader": {
+      "downloading": "Downloading SeamlessCoop v{version}...",
+      "download_complete": "Download complete, installing...",
+      "installing": "Installing...",
+      "saving_version": "Saving version info...",
+      "cleaning": "Cleaning temp files...",
+      "complete": "Install complete!",
+      "success": "SeamlessCoop v{version} installed!",
+      "download_failed": "Download failed: {error}",
+      "install_failed": "Install failed: {error}",
+      "folder_not_found": "SeamlessCoop folder not found in download"
+    },
+    "player_search": {
+      "search_failed": "Search failed: {error}",
+      "user_not_found": "User not found",
+      "network_failed": "Network failed: {error}",
+      "format_error": "Result format error",
+      "no_data": "No user data"
+    }
+  }
+}
+

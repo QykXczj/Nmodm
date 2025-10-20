@@ -1,0 +1,31 @@
+{
+  "error": {
+    "path_not_set": "Game path not set",
+    "file_not_exist": "Game file not found",
+    "get_info_failed": "Failed to get game info: {error}",
+    "cannot_get_dir": "Cannot get game directory",
+    "missing_files": "Missing files: {files}",
+    "check_failed": "Check failed: {error}",
+    "get_file_info_failed": "Failed to get file info: {error}",
+    "check_path_failed": "Failed to check path: {error}",
+    "get_nmodm_info_failed": "Failed to get Nmodm info: {error}",
+    "check_desktop_failed": "Failed to check desktop location: {error}"
+  },
+  "status": {
+    "files_complete": "All crack files complete",
+    "unknown": "Unknown",
+    "packaged": "Packaged",
+    "development": "Development",
+    "path_safe": "Path safe, no Chinese chars",
+    "location_good": "Location good"
+  },
+  "warning": {
+    "chinese_path": "Path contains Chinese chars, may cause issues",
+    "on_desktop": "Software on desktop, may affect performance"
+  },
+  "recommendation": {
+    "move_to_english": "Recommend moving to English path",
+    "move_to_program": "Recommend moving to program directory (e.g., C:\\Program Files or D:\\Software)"
+  }
+}
+

@@ -1,0 +1,64 @@
+{
+  "page_title": "🏠 首页",
+  "title": "欢迎使用黑环Mod管理器",
+  "subtitle": "现代化的游戏管理工具，让您的游戏体验更加便捷",
+  "section": {
+    "features": "主要功能",
+    "links": "相关链接",
+    "contact": "联系我们"
+  },
+  "feature": {
+    "quick_launch": {
+      "icon": "🚀",
+      "title": "快速启动",
+      "description": "一键启动游戏，支持多种启动模式"
+    },
+    "config": {
+      "icon": "⚙️",
+      "title": "基础配置",
+      "description": "游戏基础设置和参数配置"
+    },
+    "tools": {
+      "icon": "📥",
+      "title": "工具下载",
+      "description": "自动下载和管理游戏工具"
+    },
+    "mods": {
+      "icon": "🔧",
+      "title": "Mod配置",
+      "description": "便捷的Mod安装和管理"
+    },
+    "lan": {
+      "icon": "🌐",
+      "title": "局域网配置",
+      "description": "局域网游戏设置和管理"
+    },
+    "virtual_lan": {
+      "icon": "🌍",
+      "title": "虚拟局域网",
+      "description": "虚拟网络连接和配置"
+    },
+    "misc": {
+      "icon": "📦",
+      "title": "杂项",
+      "description": "战绩查询、存档转换等额外功能"
+    }
+  },
+  "link": {
+    "github": "📂 项目地址",
+    "video": "📺 视频教程",
+    "mods_package": "📦 最新Mods整合包"
+  },
+  "contact": {
+    "qq_group_label": "QQ交流群:",
+    "qq_group_number": "726070139",
+    "qq_group_copied": "QQ群号已复制到剪切板！",
+    "qq_group_tooltip": "点击复制QQ群号"
+  },
+  "url": {
+    "github": "https://github.com/QykXczj/Nmodm",
+    "video": "https://www.bilibili.com/video/BV1LK3CztE54",
+    "mods_package": "https://pan.quark.cn/s/7360b153d049"
+  }
+}
+
