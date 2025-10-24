@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont
 
 from src.i18n import t, TLabel, TranslationManager
+from src.utils.version_loader import get_version
 
 
 class SidebarButton(QPushButton):
@@ -268,7 +269,7 @@ class Sidebar(QWidget):
         footer_layout.setContentsMargins(15, 10, 15, 0)
         
         # 版本信息
-        version_label = QLabel("v3.1.1")
+        version_label = QLabel(f"v{get_version()}")
         version_label.setStyleSheet("""
             QLabel {
                 color: #6c7086;

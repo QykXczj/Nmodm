@@ -259,12 +259,12 @@ class VirtualLanPage(BasePage):
                         # 清理成功，静默处理
                         pass
                     else:
-                        self.log_message("⚠️ 部分后台进程需要手动清理", "warning")
+                        self.log_message(t("virtual_lan_page.log.backend_cleanup_partial"), "warning")
 
                     return cleanup_success
                 except Exception as e:
                     print(f"❌ 后台清理失败: {e}")
-                    self.log_message(f"❌ 后台清理失败: {e}", "error")
+                    self.log_message(t("virtual_lan_page.log.backend_cleanup_failed", error=str(e)), "error")
                     return False
 
             # 在线程池中执行清理
@@ -276,7 +276,7 @@ class VirtualLanPage(BasePage):
 
         except Exception as e:
             print(f"❌ 启动异步清理失败: {e}")
-            self.log_message(f"⚠️ 启动后台清理时出现问题: {e}", "warning")
+            self.log_message(t("virtual_lan_page.log.cleanup_startup_warning", error=str(e)), "warning")
 
 
 
@@ -389,7 +389,7 @@ class VirtualLanPage(BasePage):
 
                 if final_check:
                     print(f"⚠️ 仍有 {len(final_check)} 个WinIPBroadcast进程未能清理")
-                    self.log_message(f"⚠️ 检测到 {len(final_check)} 个WinIPBroadcast进程仍在运行", "warning")
+                    self.log_message(t("virtual_lan_page.log.winip_processes_detected", count=len(final_check)), "warning")
                     
                     # 尝试使用系统命令强制终止（静默方式）
                     try:
@@ -410,12 +410,12 @@ class VirtualLanPage(BasePage):
                                     # 清理成功，静默处理
                                 else:
                                     print(f"⚠️ 管理员权限清理失败: {result.stderr}")
-                                    self.log_message("⚠️ 部分后台进程可能未完全清理", "warning")
+                                    self.log_message(t("virtual_lan_page.log.backend_cleanup_partial_admin"), "warning")
                             else:
                                 # 没有管理员权限，静默处理，不弹窗
                                 print("⚠️ WinIPBroadcast进程以管理员权限运行，当前权限无法清理")
-                                self.log_message("⚠️ WinIPBroadcast进程以管理员权限运行，无法静默清理", "warning")
-                                self.log_message("💡 如需完全清理，请以管理员权限重启程序", "info")
+                                self.log_message(t("virtual_lan_page.log.winip_admin_required"), "warning")
+                                self.log_message(t("virtual_lan_page.log.admin_restart_tip"), "info")
                         else:
                             # 非Windows系统
                             result = subprocess.run(['pkill', '-f', 'WinIPBroadcast'], 
@@ -425,11 +425,11 @@ class VirtualLanPage(BasePage):
                                 # 清理成功，静默处理
                             else:
                                 print(f"⚠️ pkill执行失败: {result.stderr}")
-                                self.log_message("⚠️ 部分后台进程可能未完全清理", "warning")
+                                self.log_message(t("virtual_lan_page.log.backend_cleanup_partial_admin"), "warning")
                                 
                     except Exception as e:
                         print(f"⚠️ 系统命令清理失败: {e}")
-                        self.log_message("⚠️ 部分后台进程可能未完全清理", "warning")
+                        self.log_message(t("virtual_lan_page.log.backend_cleanup_partial_admin"), "warning")
                 else:
                     print("✅ 所有WinIPBroadcast进程已成功清理")
                     # 清理成功，静默处理
@@ -438,7 +438,7 @@ class VirtualLanPage(BasePage):
 
         except Exception as e:
             print(f"❌ 清理WinIPBroadcast进程失败: {e}")
-            self.log_message(f"❌ 进程清理失败: {e}", "error")
+            self.log_message(t("virtual_lan_page.log.process_cleanup_failed", error=str(e)), "error")
 
     # KCP进程清理功能已移除，因为EasyTier自带KCP支持
     
@@ -1549,7 +1549,7 @@ class VirtualLanPage(BasePage):
                         self.log_message(t("virtual_lan_page.log.player_name_empty", room_name=current_room_name), "warning")
             else:
                 # 没有配置房间名称
-                self.log_message("请先创建或加载房间", "warning")
+                self.log_message(t("virtual_lan_page.log.create_room_first"), "warning")
 
         except Exception as e:
             print(f"检查房间状态失败: {e}")
@@ -1797,11 +1797,11 @@ class VirtualLanPage(BasePage):
             if self.easytier_manager.is_running:
                 current_network_name = self.network_name_edit.text().strip()
                 if current_network_name != room_name:
-                    self.log_message(f"❌ 加载失败：网络正在运行中，请先停止网络再切换到房间 '{room_name}'", "error")
+                    self.log_message(t("virtual_lan_page.log.room_load_network_running", room_name=room_name), "error")
                     return
                 else:
                     # 如果是当前房间，允许重新加载（刷新配置）
-                    self.log_message(f"🔄 重新加载当前房间 '{room_name}' 的配置", "info")
+                    self.log_message(t("virtual_lan_page.log.room_reload_config", room_name=room_name), "info")
 
             # 读取房间配置
             rooms_dir = self.get_rooms_dir()
@@ -1831,7 +1831,7 @@ class VirtualLanPage(BasePage):
                 # 配置已更新，保存回文件
                 with open(room_file, 'w', encoding='utf-8') as f:
                     json.dump(updated_config, f, indent=2, ensure_ascii=False)
-                self.log_message(f"🔄 已更新房间 '{room_name}' 的配置格式", "info")
+                self.log_message(t("virtual_lan_page.log.room_config_format_updated", room_name=room_name), "info")
                 room_config = updated_config
 
             # 应用房间配置到界面
@@ -1846,7 +1846,7 @@ class VirtualLanPage(BasePage):
                     radio_button.setChecked(False)
                 radio_button.setEnabled(False)  # 重新禁用
 
-            self.log_message(f"✅ 已加载房间 '{room_name}' 的配置", "success")
+            self.log_message(t("virtual_lan_page.log.room_config_loaded", room_name=room_name), "success")
 
         except Exception as e:
             self.log_message(t("virtual_lan_page.log.room_load_failed", error=str(e)), "error")
@@ -2027,7 +2027,7 @@ class VirtualLanPage(BasePage):
 
             # 如果是当前加载的房间且网络正在运行，则拒绝删除
             if is_current_room and self.easytier_manager.is_running:
-                self.log_message(f"❌ 删除失败：房间 '{room_name}' 正在运行中，请先停止网络", "error")
+                self.log_message(t("virtual_lan_page.log.room_delete_network_running", room_name=room_name), "error")
                 return
 
             # 删除房间配置文件
@@ -2053,20 +2053,20 @@ class VirtualLanPage(BasePage):
                     else:
                         # 没有房间了，清空界面和配置文件
                         self.clear_all_config()
-                        self.log_message("📝 已清空所有配置，因为没有房间了", "info")
+                        self.log_message(t("virtual_lan_page.log.all_config_cleared_no_rooms"), "info")
 
             else:
                 self.log_message(t("virtual_lan_page.log.room_config_not_exist", room_name=room_name), "error")
 
         except Exception as e:
-            self.log_message(f"❌ 删除房间失败: {str(e)}", "error")
+            self.log_message(t("virtual_lan_page.log.room_delete_exception", error=str(e)), "error")
 
     def auto_load_first_room(self):
         """自动加载列表中的第一个房间"""
         try:
             # 安全检查：确保网络未运行
             if self.easytier_manager.is_running:
-                self.log_message("⚠️ 网络正在运行中，跳过自动加载房间", "warning")
+                self.log_message(t("virtual_lan_page.log.network_running_skip"), "warning")
                 return
 
             # 获取房间列表
@@ -2080,14 +2080,14 @@ class VirtualLanPage(BasePage):
 
                 # 加载第一个房间
                 self.load_room_from_list(first_room_name)
-                self.log_message(f"🔄 已自动加载房间: {first_room_name}", "info")
+                self.log_message(t("virtual_lan_page.log.room_auto_loaded", room_name=first_room_name), "info")
             else:
                 # 没有房间了，清空配置
                 self.clear_room_config()
-                self.log_message("📝 房间列表为空，已清空配置", "info")
+                self.log_message(t("virtual_lan_page.log.room_list_empty"), "info")
 
         except Exception as e:
-            self.log_message(f"⚠️ 自动加载房间失败: {str(e)}", "warning")
+            self.log_message(t("virtual_lan_page.log.auto_load_failed", error=str(e)), "warning")
 
     def clear_room_config(self):
         """清空房间配置"""
@@ -2146,15 +2146,15 @@ class VirtualLanPage(BasePage):
 
             # 验证必填字段
             if not network_name:
-                self.log_message("房间名称不能为空", "error")
+                self.log_message(t("virtual_lan_page.error.room_name_required"), "error")
                 return
 
             if not hostname:
-                self.log_message("玩家名称不能为空", "error")
+                self.log_message(t("virtual_lan_page.error.player_name_required"), "error")
                 return
 
             if not network_secret:
-                self.log_message("房间密码不能为空", "error")
+                self.log_message(t("virtual_lan_page.error.room_password_required"), "error")
                 return
 
             # 检查房间是否已存在
@@ -2217,7 +2217,7 @@ class VirtualLanPage(BasePage):
 
             # 自动加载刚创建的房间
             self.load_room_from_list(network_name)
-            self.log_message(f"🔄 已自动加载房间 '{network_name}'", "info")
+            self.log_message(t("virtual_lan_page.log.room_auto_loaded", room_name=network_name), "info")
             
             # 实时更新TOML配置文件
             self.update_toml_config_file()
@@ -2233,16 +2233,16 @@ class VirtualLanPage(BasePage):
 
             # 验证输入
             if not room_code:
-                self.log_message("请输入房间代码", "error")
+                self.log_message(t("virtual_lan_page.error.room_code_required"), "error")
                 return
 
             if not player_name:
-                self.log_message("请输入玩家名称", "error")
+                self.log_message(t("virtual_lan_page.error.player_name_input_required"), "error")
                 return
 
             # 验证房间代码格式
             if not room_code.startswith("ESR://"):
-                self.log_message("房间代码格式错误，应以 ESR:// 开头", "error")
+                self.log_message(t("virtual_lan_page.error.room_code_format"), "error")
                 return
 
             # 解码房间配置
@@ -3315,7 +3315,7 @@ class VirtualLanPage(BasePage):
                 # EasyTier安装状态已在左上角状态栏显示，不需要在日志中重复
 
             if result.get('error'):
-                self.log_message(f"⚠️ 安装状态检查出现问题: {result['error']}", "warning")
+                self.log_message(t("virtual_lan_page.log.installation_check_issue", error=result['error']), "warning")
 
         except Exception as e:
             print(f"更新安装状态UI失败: {e}")
@@ -3349,7 +3349,7 @@ class VirtualLanPage(BasePage):
                 self.log_message(t("virtual_lan_page.log.optimization_tools_ready"), "success")
             else:
                 print("❌ 网络优化工具检查失败")
-                error_msg = result.get('error', '工具缺失或损坏')
+                error_msg = result.get('error', t("virtual_lan_page.error.tools_missing_or_damaged"))
                 self.log_message(t("virtual_lan_page.log.optimization_tools_error", error=error_msg), "error")
         except Exception as e:
             print(f"更新工具状态UI失败: {e}")
@@ -3462,12 +3462,12 @@ class VirtualLanPage(BasePage):
 
         except Exception as e:
             print(f"初始化完成处理失败: {e}")
-            self.log_message(f"⚠️ 初始化完成处理出现问题: {e}", "warning")
+            self.log_message(t("virtual_lan_page.log.init_complete_issue", error=str(e)), "warning")
 
     def on_initialization_error(self, error_msg):
         """初始化错误处理"""
         try:
-            self.log_message(f"❌ 页面初始化失败: {error_msg}", "error")
+            self.log_message(t("virtual_lan_page.log.page_init_failed", error=error_msg), "error")
 
             # 设置错误状态
             if hasattr(self, 'status_label'):
@@ -3529,7 +3529,7 @@ class VirtualLanPage(BasePage):
                     checkbox.setChecked(self.server_list[i]['enabled'])
 
             if result.get('error'):
-                self.log_message(f"⚠️ 配置加载出现问题: {result['error']}", "warning")
+                self.log_message(t("virtual_lan_page.log.config_load_issue", error=result['error']), "warning")
             else:
                 self.log_message(t("virtual_lan_page.log.config_load_complete"), "success")
 
@@ -3550,10 +3550,10 @@ class VirtualLanPage(BasePage):
                     else:
                         self.log_message(t("virtual_lan_page.log.current_room_info", room_name=room_name), "success")
                 else:
-                    self.log_message("请先创建或加载房间", "warning")
+                    self.log_message(t("virtual_lan_page.log.create_or_load_room_first"), "warning")
             else:
-                error_msg = result.get('error', '未知错误')
-                self.log_message(f"⚠️ 房间状态检查出现问题: {error_msg}", "warning")
+                error_msg = result.get('error', t("virtual_lan_page.error.unknown_error"))
+                self.log_message(t("virtual_lan_page.log.room_status_check_issue", error=error_msg), "warning")
 
         except Exception as e:
             print(f"更新房间状态UI失败: {e}")
@@ -4379,7 +4379,7 @@ class VirtualLanPage(BasePage):
                 self.log_message(t("virtual_lan_page.log.config_gen_success"), "success")
                 return True
             else:
-                self.log_message("❌ 配置文件生成失败", "error")
+                self.log_message(t("virtual_lan_page.log.config_file_gen_failed_simple"), "error")
                 return False
         except Exception as e:
             self.log_message(t("virtual_lan_page.log.config_gen_exception", error=e), "error")
@@ -5369,7 +5369,7 @@ class VirtualLanPage(BasePage):
                 else:
                     print("❌ 异步清理失败")
                     # 🔧 使用线程安全的log_message方法
-                    self.log_message("⚠️ 后台进程清理遇到问题", "warning")
+                    self.log_message(t("virtual_lan_page.log.backend_cleanup_issue"), "warning")
 
                 # 关闭线程池
                 executor.shutdown(wait=False)

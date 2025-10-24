@@ -1,12 +1,8 @@
-name: 创建发行版2
+name: 创建发行版
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: '发行版本号 (例如: v1.0.0)'
-        required: true
-        default: 'v1.0.0'
       prerelease:
         description: '是否为预发布版本'
         required: false
@@ -29,6 +25,33 @@ jobs:
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
+
+    - name: 读取版本号
+      id: get_version
+      run: |
+        Write-Host "🔎 从 src/version.json 读取版本号"
+        if (-Not (Test-Path "src/version.json")) {
+          Write-Host "❌ 未找到 src/version.json，退出"
+          exit 1
+        }
+        $content = Get-Content -Raw -Path src/version.json
+        try {
+          $obj = ConvertFrom-Json $content
+        } catch {
+          Write-Host "❌ 解析 src/version.json 失败"
+          exit 1
+        }
+        $version = $obj.version
+        if (-not $version) {
+          Write-Host "❌ version 字段为空"
+          exit 1
+        }
+        # 移除可能存在的 v 前缀
+        $version = $version.TrimStart('v')
+        # 添加 v 前缀，确保统一格式
+        $versionWithV = "v$version"
+        Write-Host "✅ 读取版本: $versionWithV"
+        echo "version=$versionWithV" >> $env:GITHUB_OUTPUT
 
     - name: 设置 Python 环境
       uses: actions/setup-python@v4
@@ -84,7 +107,7 @@ jobs:
         # 查找 Nuitka 构建输出目录
         Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+        $version = "${{ steps.get_version.outputs.version }}".TrimStart('v')
 
         # 可能的目录名称
         $possibleDirs = @(
@@ -121,8 +144,8 @@ jobs:
           Get-ChildItem $nuitkaDir | Select-Object Name, Length, LastWriteTime | Format-Table
 
           # 创建压缩包
-          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm_v${{ github.event.inputs.version }}.zip" -Force
-          Write-Host "✅ 主发布包已创建: Nmodm_v${{ github.event.inputs.version }}.zip"
+          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm_v${{ steps.get_version.outputs.version }}.zip" -Force
+          Write-Host "✅ 主发布包已创建: Nmodm_v${{ steps.get_version.outputs.version }}.zip"
         } else {
           Write-Host "❌ 未找到 Nuitka 构建输出"
           Write-Host "📋 Builds 目录结构:"
@@ -135,7 +158,7 @@ jobs:
         }
 
         # 创建源代码包
-        $sourceFiles = @("src", "OnlineFix", "main.py", "requirements.txt", "README.md", "LICENSE", "build_manager.py", "install_dependencies.py")
+        $sourceFiles = @("src", "OnlineFix", "main.py", "requirements.txt", "README.md", "LICENSE")
         $existingFiles = @()
         foreach ($file in $sourceFiles) {
           if (Test-Path $file) {
@@ -143,8 +166,8 @@ jobs:
           }
         }
         if ($existingFiles.Count -gt 0) {
-          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm_Source_v${{ github.event.inputs.version }}.zip"
-          Write-Host "Source code package created: Nmodm_Source_v${{ github.event.inputs.version }}.zip"
+          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm_Source_v${{ steps.get_version.outputs.version }}.zip"
+          Write-Host "Source code package created: Nmodm_Source_v${{ steps.get_version.outputs.version }}.zip"
         }
 
     - name: 创建 Inno Setup 脚本
@@ -152,7 +175,7 @@ jobs:
         # 查找 Nuitka 构建输出目录 (与发布包创建步骤保持一致)
         Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        $version = "${{ github.event.inputs.version }}".TrimStart('v')
+        $version = "${{ steps.get_version.outputs.version }}".TrimStart('v')
 
         # 可能的目录名称
         $possibleDirs = @(
@@ -228,13 +251,15 @@ jobs:
           $setupSection += "`nSetupIconFile=zwnr.ico"
         }
 
-        # 添加中文语言支持
+        # 添加多语言支持
         $setupSection += "`n"
-        $setupSection += "`n; 中文语言支持"
-        $setupSection += "`nShowLanguageDialog=no"
+        $setupSection += "`n; 多语言支持"
+        $setupSection += "`nShowLanguageDialog=auto"
 
         $languagesSection = "`n`n[Languages]"
-        # 使用仓库根目录中的中文语言包
+        # 英文（默认）
+        $languagesSection += "`nName: `"en`"; MessagesFile: `"compiler:Default.isl`""
+        # 简体中文
         if (Test-Path "ChineseSimplified.isl") {
           $languagesSection += "`nName: `"chinesesimplified`"; MessagesFile: `"ChineseSimplified.isl`""
         } else {
@@ -249,17 +274,25 @@ jobs:
         $iconsSection += "`nName: `"{autodesktop}\Nmodm`"; Filename: `"{app}\Nmodm.exe`"; Tasks: desktopicon"
 
         $tasksSection = "`n`n[Tasks]"
-        $tasksSection += "`nName: `"desktopicon`"; Description: `"创建桌面快捷方式`"; GroupDescription: `"附加图标:`"; Flags: unchecked"
+        # 英文描述
+        $tasksSection += "`nName: `"desktopicon`"; Description: `"{cm:CreateDesktopIcon}`"; GroupDescription: `"{cm:AdditionalIcons}`"; Flags: unchecked"
 
         $runSection = "`n`n[Run]"
-        $runSection += "`nFilename: `"{app}\Nmodm.exe`"; Description: `"启动 Nmodm`"; Flags: nowait postinstall skipifsilent"
+        # 英文描述
+        $runSection += "`nName: `"en`"; Filename: `"{app}\Nmodm.exe`"; Description: `"Launch Nmodm`"; Flags: nowait postinstall skipifsilent"
+        # 中文描述
+        $runSection += "`nName: `"chinesesimplified`"; Filename: `"{app}\Nmodm.exe`"; Description: `"启动 Nmodm`"; Flags: nowait postinstall skipifsilent"
 
-        $messagesSection = "`n`n[Messages]"
-        $messagesSection += "`nWelcomeLabel1=欢迎使用 Nmodm 安装向导"
-        $messagesSection += "`nWelcomeLabel2=这将在您的计算机上安装 Nmodm v$version"
+        $customMessagesSection = "`n`n[CustomMessages]"
+        # 英文自定义消息
+        $customMessagesSection += "`nen.WelcomeLabel1=Welcome to Nmodm Setup Wizard"
+        $customMessagesSection += "`nen.WelcomeLabel2=This will install Nmodm v$version on your computer"
+        # 中文自定义消息
+        $customMessagesSection += "`nchinesesimplified.WelcomeLabel1=欢迎使用 Nmodm 安装向导"
+        $customMessagesSection += "`nchinesesimplified.WelcomeLabel2=这将在您的计算机上安装 Nmodm v$version"
 
         # 组合所有部分
-        $issContent = $setupSection + $languagesSection + $filesSection + $iconsSection + $tasksSection + $runSection + $messagesSection
+        $issContent = $setupSection + $languagesSection + $filesSection + $iconsSection + $tasksSection + $runSection + $customMessagesSection
 
         # 写入文件
         $issContent | Out-File -FilePath "setup.iss" -Encoding UTF8
@@ -385,75 +418,10 @@ jobs:
     - name: 创建发行版
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.event.inputs.version }}
-        name: Nmodm ${{ github.event.inputs.version }}
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: Nmodm ${{ steps.get_version.outputs.version }}
         body: |
-          # Nmodm ${{ github.event.inputs.version }} Release
-
-          ## New Version Release
-
-          This is Nmodm - Modern ME3 Mod Manager version ${{ github.event.inputs.version }}.
-
-          ## Download Options
-
-          ### Windows 安装包 (推荐)
-          - **Nmodm-v${{ github.event.inputs.version }}-Setup.exe** - Windows 安装程序，一键安装，自动创建快捷方式
-
-          ### 便携版
-          - **Nmodm-v${{ github.event.inputs.version }}.zip** - Nuitka 目录构建版，高性能，解压即用
-
-          ### 开发者版本
-          - **Nmodm-Source-v${{ github.event.inputs.version }}.zip** - 源代码包，需要 Python 环境
-
-          ## Main Features
-
-          - Modern frameless GUI interface
-          - Intelligent Mod management system
-          - Complete ME3 configuration and launch
-          - Multi-mirror download support
-          - Mod annotation and classification
-          - External Mod support
-          - Multi-theme interface
-
-          ## System Requirements
-
-          - Windows 10/11 (64-bit)
-          - Elden Ring Nightreign game
-
-          ## Usage Instructions
-
-          ### Windows 安装包 (推荐)
-          1. 下载 `Nmodm-v${{ github.event.inputs.version }}-Setup.exe`
-          2. 以管理员身份运行安装程序
-          3. 按照安装向导完成安装
-          4. 从开始菜单或桌面快捷方式启动 Nmodm
-          5. 按照应用内指南配置游戏路径和模组
-
-          ### 便携版
-          1. 下载 `Nmodm-v${{ github.event.inputs.version }}.zip`
-          2. 解压到任意目录
-          3. 运行 `Nmodm.exe`
-          4. 按照应用内指南配置游戏路径和模组
-
-          ### 源代码版本
-          1. 下载并解压源代码包
-          2. 安装 Python 3.11+
-          3. 运行 `python install_dependencies.py`
-          4. 运行 `python main.py`
-
-          ## Important Notes
-
-          - Please backup game saves before use
-          - Some antivirus software may report false positives, please add to trust list
-          - Ensure you own a legal copy of the game
-
-          ## Bug Reports
-
-          If you encounter issues, please report them on the [Issues](https://github.com/QykXczj/Nmodm/issues) page.
-
-          ## Acknowledgments
-
-          Thanks to all users for their support and feedback!
+          Nmodm ${{ steps.get_version.outputs.version }} — release assets include installer, portable zip and source archive. See release assets for downloads and installation instructions.
         draft: ${{ github.event.inputs.draft }}
         prerelease: ${{ github.event.inputs.prerelease }}
         files: |

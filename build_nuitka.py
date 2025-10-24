@@ -21,7 +21,8 @@ class NuitkaBuilder:
         self.src_dir = self.project_root / "src"
         self.builds_dir = self.project_root / "Builds"
         self.dist_dir = self.builds_dir / "Nuitka"
-        self.version = "3.1.1"  # 应用版本号
+        # 尝试从 src/version.json 读取版本号，若失败则回退到默认硬编码值
+        self.version = self._load_version_from_src() or "3.1.1"
         self.build_dir = self.project_root / "build"
 
         # 版本信息配置
@@ -33,6 +34,22 @@ class NuitkaBuilder:
             "copyright": "Copyright © 2025",
             "trademark": ""
         }
+
+    def _load_version_from_src(self) -> Optional[str]:
+        """从 src/version.json 读取版本号（只读，不导入包），返回纯数字点号格式，如 '3.1.1'"""
+        try:
+            import json
+            version_file = self.src_dir / "version.json"
+            if version_file.exists():
+                with open(version_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    v = data.get("version")
+                    if isinstance(v, str) and v.strip():
+                        return v.strip()
+        except Exception:
+            # 忽略所有读取错误，回退到默认值
+            pass
+        return None
         
     def check_environment(self) -> bool:
         """检查打包环境"""

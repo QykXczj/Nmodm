@@ -6,6 +6,7 @@ import sys
 from PySide6.QtWidgets import QApplication, QWidget, QHBoxLayout, QStackedWidget
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
+from src.utils.version_loader import get_version
 
 from .ui.main_window import MainWindow
 from .ui.sidebar import Sidebar
@@ -62,7 +63,7 @@ class NmodmApp:
     def setup_app(self):
         """设置应用程序"""
         self.app.setApplicationName("Nmodm")
-        self.app.setApplicationVersion("3.1.1")
+        self.app.setApplicationVersion(get_version())
         self.app.setOrganizationName("Nmodm Team")
 
         # 初始化局域网模式检测器

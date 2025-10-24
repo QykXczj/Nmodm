@@ -267,7 +267,21 @@
     "stopping_network_and_optimization": "🛑 Stopping network and optimization...",
     "stopping_network": "🛑 Stopping network...",
     "network_stopped_success": "✅ Network stopped",
-    "network_stopped_failed": "❌ Network stop failed"
+    "network_stopped_failed": "❌ Network stop failed",
+    "room_load_network_running": "❌ Load failed: Network is running, please stop network before switching to room '{room_name}'",
+    "room_reload_config": "🔄 Reloading config for current room '{room_name}'",
+    "room_config_format_updated": "🔄 Updated config format for room '{room_name}'",
+    "room_config_loaded": "✅ Loaded config for room '{room_name}'",
+    "room_delete_network_running": "❌ Delete failed: Room '{room_name}' is running, please stop network first",
+    "all_config_cleared_no_rooms": "📝 All config cleared because no rooms left",
+    "room_delete_exception": "❌ Delete room failed: {error}",
+    "installation_check_issue": "⚠️ Installation check issue: {error}",
+    "init_complete_issue": "⚠️ Initialization complete issue: {error}",
+    "config_load_issue": "⚠️ Config load issue: {error}",
+    "create_or_load_room_first": "Please create or load a room first",
+    "room_status_check_issue": "⚠️ Room status check issue: {error}",
+    "config_file_gen_failed_simple": "❌ Config file generation failed",
+    "backend_cleanup_issue": "⚠️ Background process cleanup issue"
   },
   
   "error": {
@@ -291,7 +305,9 @@
     "auto_load_room_failed": "⚠️ Auto-load room failed: {error}",
     "share_room_failed": "Share room failed: {error}",
     "general": "Error: {error}",
-    "cannot_get_network_interfaces": "Cannot get network interfaces"
+    "cannot_get_network_interfaces": "Cannot get network interfaces",
+    "tools_missing_or_damaged": "Tools missing or damaged",
+    "unknown_error": "Unknown error"
   },
 
   "table": {

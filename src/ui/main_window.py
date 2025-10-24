@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QPoint, QSize, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap
 
 from src.i18n import t, TLabel
+from src.utils.version_loader import get_version
 
 
 class TitleBar(QWidget):
@@ -175,7 +176,8 @@ class MainWindow(QMainWindow):
 
         # 局域网模式状态
         self.is_lan_mode = False
-        self.base_title = "Nmodm v3.1.1"
+        # 使用集中版本号
+        self.base_title = f"Nmodm v{get_version()}"
 
         self.setup_window()
         self.setup_ui()
@@ -193,9 +195,8 @@ class MainWindow(QMainWindow):
 
         # 居中显示
         self.center_window()
-
         # 确保窗口在任务栏中正确显示
-        self.setWindowTitle("Nmodm v3.1.1")
+        self.setWindowTitle(f"Nmodm v{get_version()}")
         
     def setup_ui(self):
         """设置UI"""

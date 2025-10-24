@@ -258,7 +258,21 @@
     "stopping_network_and_optimization": "🛑 正在停止网络和优化...",
     "stopping_network": "🛑 正在停止网络...",
     "network_stopped_success": "✅ 网络已停止",
-    "network_stopped_failed": "❌ 停止网络失败"
+    "network_stopped_failed": "❌ 停止网络失败",
+    "room_load_network_running": "❌ 加载失败：网络正在运行中，请先停止网络再切换到房间 '{room_name}'",
+    "room_reload_config": "🔄 重新加载当前房间 '{room_name}' 的配置",
+    "room_config_format_updated": "🔄 已更新房间 '{room_name}' 的配置格式",
+    "room_config_loaded": "✅ 已加载房间 '{room_name}' 的配置",
+    "room_delete_network_running": "❌ 删除失败：房间 '{room_name}' 正在运行中，请先停止网络",
+    "all_config_cleared_no_rooms": "📝 已清空所有配置，因为没有房间了",
+    "room_delete_exception": "❌ 删除房间失败: {error}",
+    "installation_check_issue": "⚠️ 安装状态检查出现问题: {error}",
+    "init_complete_issue": "⚠️ 初始化完成处理出现问题: {error}",
+    "config_load_issue": "⚠️ 配置加载出现问题: {error}",
+    "create_or_load_room_first": "请先创建或加载房间",
+    "room_status_check_issue": "⚠️ 房间状态检查出现问题: {error}",
+    "config_file_gen_failed_simple": "❌ 配置文件生成失败",
+    "backend_cleanup_issue": "⚠️ 后台进程清理遇到问题"
   },
   
   "error": {
@@ -282,7 +296,9 @@
     "auto_load_room_failed": "⚠️ 自动加载房间失败: {error}",
     "share_room_failed": "分享房间失败: {error}",
     "general": "错误: {error}",
-    "cannot_get_network_interfaces": "无法获取网络接口信息"
+    "cannot_get_network_interfaces": "无法获取网络接口信息",
+    "tools_missing_or_damaged": "工具缺失或损坏",
+    "unknown_error": "未知错误"
   },
 
   "hint": {
