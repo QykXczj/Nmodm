@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Nmodm Logo](zwnr.png)
+![Nmodm Logo](zwnr.ico)
 
 **A Modern Game Management Tool for Elden Ring: Nightreign**
 

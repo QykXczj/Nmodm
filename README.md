@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Nmodm Logo](zwnr.png)
+![Nmodm Logo](zwnr.ico)
 
 **专为《艾尔登法环：黑夜君临》设计的现代化游戏管理工具**
 
