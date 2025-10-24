@@ -256,7 +256,7 @@ jobs:
         # 添加多语言支持
         $setupSection += "`n"
         $setupSection += "`n; 多语言支持"
-        $setupSection += "`nShowLanguageDialog=auto"
+        $setupSection += "`nShowLanguageDialog=yes"
 
         $languagesSection = "`n`n[Languages]"
         # 英文（默认）
