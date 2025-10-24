@@ -177,6 +177,12 @@ class NuitkaBuilder:
             data_files.append(f"--include-data-dir={i18n_locales_dir}=src/i18n/locales")
             print(f"✅ 已添加i18n翻译文件: {i18n_locales_dir}")
 
+        # 添加version.json文件（关键！版本信息依赖此文件）
+        version_json = self.src_dir / "version.json"
+        if version_json.exists():
+            data_files.append(f"--include-data-file={version_json}=src/version.json")
+            print(f"✅ 已添加版本文件: {version_json}")
+
         # OnlineFix目录不再打包 - 现在通过网络下载获取
         # 注释：OnlineFix工具包现在支持智能网络下载，包含：
         # - OnlineFix.zip（破解文件）

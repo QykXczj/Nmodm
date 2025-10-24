@@ -46,12 +46,14 @@ jobs:
           Write-Host "❌ version 字段为空"
           exit 1
         }
-        # 移除可能存在的 v 前缀
-        $version = $version.TrimStart('v')
-        # 添加 v 前缀，确保统一格式
-        $versionWithV = "v$version"
-        Write-Host "✅ 读取版本: $versionWithV"
-        echo "version=$versionWithV" >> $env:GITHUB_OUTPUT
+        # 移除可能存在的 v 前缀，得到纯数字版本
+        $versionNumber = $version.TrimStart('v')
+        # 添加 v 前缀，用于标签
+        $versionTag = "v$versionNumber"
+        Write-Host "✅ 读取版本: $versionTag (标签), $versionNumber (文件名)"
+        # 输出两个变量
+        echo "version=$versionTag" >> $env:GITHUB_OUTPUT
+        echo "version_number=$versionNumber" >> $env:GITHUB_OUTPUT
 
     - name: 设置 Python 环境
       uses: actions/setup-python@v4
@@ -107,7 +109,7 @@ jobs:
         # 查找 Nuitka 构建输出目录
         Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        $version = "${{ steps.get_version.outputs.version }}".TrimStart('v')
+        $version = "${{ steps.get_version.outputs.version_number }}"
 
         # 可能的目录名称
         $possibleDirs = @(
@@ -144,8 +146,8 @@ jobs:
           Get-ChildItem $nuitkaDir | Select-Object Name, Length, LastWriteTime | Format-Table
 
           # 创建压缩包
-          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm_v${{ steps.get_version.outputs.version }}.zip" -Force
-          Write-Host "✅ 主发布包已创建: Nmodm_v${{ steps.get_version.outputs.version }}.zip"
+          Compress-Archive -Path "$nuitkaDir/*" -DestinationPath "release/Nmodm_v${{ steps.get_version.outputs.version_number }}.zip" -Force
+          Write-Host "✅ 主发布包已创建: Nmodm_v${{ steps.get_version.outputs.version_number }}.zip"
         } else {
           Write-Host "❌ 未找到 Nuitka 构建输出"
           Write-Host "📋 Builds 目录结构:"
@@ -166,8 +168,8 @@ jobs:
           }
         }
         if ($existingFiles.Count -gt 0) {
-          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm_Source_v${{ steps.get_version.outputs.version }}.zip"
-          Write-Host "Source code package created: Nmodm_Source_v${{ steps.get_version.outputs.version }}.zip"
+          Compress-Archive -Path $existingFiles -DestinationPath "release/Nmodm_Source_v${{ steps.get_version.outputs.version_number }}.zip"
+          Write-Host "Source code package created: Nmodm_Source_v${{ steps.get_version.outputs.version_number }}.zip"
         }
 
     - name: 创建 Inno Setup 脚本
@@ -175,7 +177,7 @@ jobs:
         # 查找 Nuitka 构建输出目录 (与发布包创建步骤保持一致)
         Write-Host "🔍 查找 Nuitka 构建输出目录..."
         $nuitkaDir = $null
-        $version = "${{ steps.get_version.outputs.version }}".TrimStart('v')
+        $version = "${{ steps.get_version.outputs.version_number }}"
 
         # 可能的目录名称
         $possibleDirs = @(
