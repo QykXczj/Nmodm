@@ -278,18 +278,14 @@ jobs:
         $tasksSection += "`nName: `"desktopicon`"; Description: `"{cm:CreateDesktopIcon}`"; GroupDescription: `"{cm:AdditionalIcons}`"; Flags: unchecked"
 
         $runSection = "`n`n[Run]"
-        # 英文描述
-        $runSection += "`nName: `"en`"; Filename: `"{app}\Nmodm.exe`"; Description: `"Launch Nmodm`"; Flags: nowait postinstall skipifsilent"
-        # 中文描述
-        $runSection += "`nName: `"chinesesimplified`"; Filename: `"{app}\Nmodm.exe`"; Description: `"启动 Nmodm`"; Flags: nowait postinstall skipifsilent"
+        # 使用 CustomMessages 中的消息
+        $runSection += "`nFilename: `"{app}\Nmodm.exe`"; Description: `"{cm:LaunchProgram,Nmodm}`"; Flags: nowait postinstall skipifsilent"
 
         $customMessagesSection = "`n`n[CustomMessages]"
         # 英文自定义消息
-        $customMessagesSection += "`nen.WelcomeLabel1=Welcome to Nmodm Setup Wizard"
-        $customMessagesSection += "`nen.WelcomeLabel2=This will install Nmodm v$version on your computer"
+        $customMessagesSection += "`nen.LaunchProgram=Launch %1"
         # 中文自定义消息
-        $customMessagesSection += "`nchinesesimplified.WelcomeLabel1=欢迎使用 Nmodm 安装向导"
-        $customMessagesSection += "`nchinesesimplified.WelcomeLabel2=这将在您的计算机上安装 Nmodm v$version"
+        $customMessagesSection += "`nchinesesimplified.LaunchProgram=启动 %1"
 
         # 组合所有部分
         $issContent = $setupSection + $languagesSection + $filesSection + $iconsSection + $tasksSection + $runSection + $customMessagesSection
