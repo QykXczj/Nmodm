@@ -232,7 +232,6 @@ jobs:
         $setupSection += "`nOutputBaseFilename=Nmodm_v$version-Setup"
         $setupSection += "`nCompression=lzma2"
         $setupSection += "`nSolidCompression=yes"
-        $setupSection += "`nUninstallDisplayName=Nmodm v$version"
         $setupSection += "`nUninstallDisplayIcon={app}\Nmodm.exe"
         $setupSection += "`nCreateUninstallRegKey=yes"
         $setupSection += "`nMinVersion=6.1sp1"
