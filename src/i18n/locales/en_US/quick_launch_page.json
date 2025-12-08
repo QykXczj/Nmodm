@@ -139,6 +139,7 @@
     "filename": "Filename:",
     "description": "Description:",
     "icon": "Icon:",
+    "mod_packages": "Mod Packages:",
     "dll_files": "DLL Files (Natives):",
     "preset_list": "📋 Preset Manager",
     "preview_title": "📄 Preset Preview",
@@ -204,9 +205,6 @@
     "save_failed": "❌ Save failed: {error}",
     "game_path_invalid": "❌ Please configure valid game path",
     "me3_not_found_error": "❌ ME3 executable not found"
-  },
-  "label": {
-    "mod_packages": "Mod Packages:"
   }
 }
 

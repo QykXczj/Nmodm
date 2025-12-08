@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.3] - 2025-01-20
+
+### Fixed
+- 🐛 Fixed missing text in "Edit Preset" dialog on Quick Launch page
+  - Fixed duplicate `label` key in translation files causing text loss
+  - Affected labels: preset name, filename, description, icon, mod packages, DLL files, etc.
+- 🐛 Fixed Chinese filename garbled text after extracting OnlineFix package
+  - Added ZIP file Chinese encoding fix (CP437 -> GBK)
+  - Fixed display issues for files like "无缝手柄问题解决方案.png"
+
+### Changed
+- 📝 Improved translation file structure to avoid duplicate keys
+- 🔧 Enhanced ZIP extraction encoding compatibility
+
+---
+
 ## [3.1.2] - 2025-01-20
 
 ### Added

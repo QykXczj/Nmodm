@@ -139,8 +139,9 @@
     "filename": "文件名:",
     "description": "方案描述:",
     "icon": "选择图标:",
+    "mod_packages": "Mod包 (Packages):",
     "dll_files": "DLL文件 (Natives):",
-    "preset_list": "📋 预设方案管理",
+    "preset_list": "� 预 设方案管理",
     "preview_title": "📄 预设配置预览",
     "preview_hint": "请从管理预设页面选择要预览的预设方案",
     "preview_empty": "# 暂无预览内容\n# 请从管理预设页面点击预览按钮"
@@ -204,9 +205,6 @@
     "save_failed": "❌ 保存失败: {error}",
     "game_path_invalid": "❌ 请先配置有效的游戏路径",
     "me3_not_found_error": "❌ 未找到ME3可执行文件"
-  },
-  "label": {
-    "mod_packages": "Mod包 (Packages):"
   }
 }
 

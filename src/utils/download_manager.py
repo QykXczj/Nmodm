@@ -1148,8 +1148,17 @@ class DownloadManager(QObject):
                     if file_info.is_dir():
                         continue
 
+                    # 修复中文文件名编码问题
+                    try:
+                        # ZIP 文件可能使用 CP437 编码存储中文文件名
+                        # 尝试使用 GBK 编码重新解码
+                        filename = file_info.filename.encode('cp437').decode('gbk')
+                    except (UnicodeDecodeError, UnicodeEncodeError):
+                        # 如果转码失败，使用原始文件名
+                        filename = file_info.filename
+                    
                     # 获取文件名（去除路径）
-                    filename = Path(file_info.filename).name
+                    filename = Path(filename).name
                     target_path = self.onlinefix_dir / filename
 
                     # 如果文件已存在，先删除
