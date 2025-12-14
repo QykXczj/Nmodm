@@ -58,7 +58,7 @@ jobs:
     - name: 设置 Python 环境
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.12.4'  # 锁定版本以确保与本地开发环境一致
 
     - name: 安装依赖
       run: |
