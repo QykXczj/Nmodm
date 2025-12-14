@@ -442,104 +442,107 @@ jobs:
           Write-Host "⚠️ 未找到英文更新日志"
         }
         
-        # 保存到文件（避免多行输出问题）
-        $zhContent | Out-File -FilePath "changelog_zh.txt" -Encoding UTF8
-        $enContent | Out-File -FilePath "changelog_en.txt" -Encoding UTF8
+        # 构建完整的发行说明
+        $releaseBody = @"
+## 🎮 Nmodm $version
+
+**Nmodm** - 艾尔登法环：夜之君临 模组管理工具 | Elden Ring: Nightreign Mod Manager
+
+---
+
+### ✨ 主要更新 | What's New
+
+#### 🇨🇳 中文 | Chinese
+
+$zhContent
+
+#### 🇬🇧 English
+
+$enContent
+
+---
+
+📖 **完整更新日志** | Full Changelog: [中文](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/CHANGELOG.md) | [English](https://github.com/QykXczj/Nmodm/blob/main/docs/en/CHANGELOG.md)
+
+---
+
+### 📦 下载说明 | Download Guide
+
+#### 🔹 推荐下载 | Recommended
+
+- **``Nmodm_v$versionNumber-Setup.exe``** - Windows 安装包 | Windows Installer
+  - ✅ 自动安装，创建桌面快捷方式 | Auto-install with desktop shortcut
+  - ✅ 支持卸载 | Supports uninstallation
+  - ✅ 适合长期使用 | Best for long-term use
+
+#### 🔹 便携版 | Portable Version
+
+- **``Nmodm_v$versionNumber.zip``** - 便携版压缩包 | Portable ZIP
+  - ✅ 解压即用，无需安装 | Extract and run, no installation needed
+  - ✅ 适合临时使用或U盘携带 | Good for temporary use or USB drive
+  - ⚠️ 需手动解压到非中文路径 | Extract to non-Chinese path
+
+---
+
+### 🚀 快速开始 | Quick Start
+
+#### 安装版 | Installer Version
+1. 下载 ``Nmodm_v$versionNumber-Setup.exe``
+2. 双击运行安装程序 | Double-click to run installer
+3. 选择安装路径（建议非中文路径）| Choose installation path (non-Chinese recommended)
+4. 完成安装，启动 Nmodm | Complete installation and launch Nmodm
+
+#### 便携版 | Portable Version
+1. 下载 ``Nmodm_v$versionNumber.zip``
+2. 解压到非中文路径 | Extract to non-Chinese path
+3. 运行 ``Nmodm.exe`` | Run ``Nmodm.exe``
+
+#### 首次使用 | First Time Use
+1. 在"配置"页面设置游戏路径 | Set game path in "Config" page
+2. 在"工具下载"页面下载 ME3 工具 | Download ME3 tools in "Tool Download" page
+3. 在"模组配置"页面管理模组 | Manage mods in "Mod Config" page
+4. 在"快速启动"页面启动游戏 | Launch game in "Quick Launch" page
+
+---
+
+### 📚 文档 | Documentation
+
+- 📖 [用户指南 | User Guide](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/USER_GUIDE.md) ([EN](https://github.com/QykXczj/Nmodm/blob/main/docs/en/USER_GUIDE.md))
+- 👨‍💻 [开发指南 | Developer Guide](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/DEVELOPER_GUIDE.md) ([EN](https://github.com/QykXczj/Nmodm/blob/main/docs/en/DEVELOPER_GUIDE.md))
+- 🤝 [贡献指南 | Contributing](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/CONTRIBUTING.md) ([EN](https://github.com/QykXczj/Nmodm/blob/main/docs/en/CONTRIBUTING.md))
+
+---
+
+### ⚠️ 系统要求 | System Requirements
+
+- Windows 10/11 (64-bit)
+- .NET Framework 4.7.2+ (安装版会自动检测 | Installer auto-detects)
+- 500MB 可用磁盘空间 | 500MB free disk space
+
+---
+
+### 💬 反馈与支持 | Feedback & Support
+
+- 🐛 [报告问题 | Report Issues](https://github.com/QykXczj/Nmodm/issues)
+- 💡 [功能建议 | Feature Requests](https://github.com/QykXczj/Nmodm/issues)
+- 📧 联系作者 | Contact: QykXczj
+
+---
+
+**感谢使用 Nmodm！| Thanks for using Nmodm!** 🎉
+"@
         
-        Write-Host "📝 更新日志已保存到文件"
+        # 保存到文件
+        $releaseBody | Out-File -FilePath "release_body.txt" -Encoding UTF8 -NoNewline
+        
+        Write-Host "📝 发行说明已生成"
         
     - name: 创建发行版
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.get_version.outputs.version }}
         name: Nmodm ${{ steps.get_version.outputs.version }}
-        body: |
-          ## 🎮 Nmodm ${{ steps.get_version.outputs.version }}
-          
-          **Nmodm** - 艾尔登法环：夜之君临 模组管理工具 | Elden Ring: Nightreign Mod Manager
-          
-          ---
-          
-          ### ✨ 主要更新 | What's New
-          
-          #### �🇳 中化文 | Chinese
-          
-          $(Get-Content "changelog_zh.txt" -Raw -Encoding UTF8)
-          
-          #### 🇬🇧 English
-          
-          $(Get-Content "changelog_en.txt" -Raw -Encoding UTF8)
-          
-          ---
-          
-          📖 **完整更新日志** | Full Changelog: [中文](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/CHANGELOG.md) | [English](https://github.com/QykXczj/Nmodm/blob/main/docs/en/CHANGELOG.md)
-          
-          ---
-          
-          ### 📦 下载说明 | Download Guide
-          
-          #### 🔹 推荐下载 | Recommended
-          
-          - **`Nmodm_v${{ steps.get_version.outputs.version_number }}-Setup.exe`** - Windows 安装包 | Windows Installer
-            - ✅ 自动安装，创建桌面快捷方式 | Auto-install with desktop shortcut
-            - ✅ 支持卸载 | Supports uninstallation
-            - ✅ 适合长期使用 | Best for long-term use
-          
-          #### 🔹 便携版 | Portable Version
-          
-          - **`Nmodm_v${{ steps.get_version.outputs.version_number }}.zip`** - 便携版压缩包 | Portable ZIP
-            - ✅ 解压即用，无需安装 | Extract and run, no installation needed
-            - ✅ 适合临时使用或U盘携带 | Good for temporary use or USB drive
-            - ⚠️ 需手动解压到非中文路径 | Extract to non-Chinese path
-          
-          ---
-          
-          ### 🚀 快速开始 | Quick Start
-          
-          #### 安装版 | Installer Version
-          1. 下载 `Nmodm_v${{ steps.get_version.outputs.version_number }}-Setup.exe`
-          2. 双击运行安装程序 | Double-click to run installer
-          3. 选择安装路径（建议非中文路径）| Choose installation path (non-Chinese recommended)
-          4. 完成安装，启动 Nmodm | Complete installation and launch Nmodm
-          
-          #### 便携版 | Portable Version
-          1. 下载 `Nmodm_v${{ steps.get_version.outputs.version_number }}.zip`
-          2. 解压到非中文路径 | Extract to non-Chinese path
-          3. 运行 `Nmodm.exe` | Run `Nmodm.exe`
-          
-          #### 首次使用 | First Time Use
-          1. 在"配置"页面设置游戏路径 | Set game path in "Config" page
-          2. 在"工具下载"页面下载 ME3 工具 | Download ME3 tools in "Tool Download" page
-          3. 在"模组配置"页面管理模组 | Manage mods in "Mod Config" page
-          4. 在"快速启动"页面启动游戏 | Launch game in "Quick Launch" page
-          
-          ---
-          
-          ### 📚 文档 | Documentation
-          
-          - 📖 [用户指南 | User Guide](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/USER_GUIDE.md) ([EN](https://github.com/QykXczj/Nmodm/blob/main/docs/en/USER_GUIDE.md))
-          - 👨‍💻 [开发指南 | Developer Guide](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/DEVELOPER_GUIDE.md) ([EN](https://github.com/QykXczj/Nmodm/blob/main/docs/en/DEVELOPER_GUIDE.md))
-          - 🤝 [贡献指南 | Contributing](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/CONTRIBUTING.md) ([EN](https://github.com/QykXczj/Nmodm/blob/main/docs/en/CONTRIBUTING.md))
-          
-          ---
-          
-          ### ⚠️ 系统要求 | System Requirements
-          
-          - Windows 10/11 (64-bit)
-          - .NET Framework 4.7.2+ (安装版会自动检测 | Installer auto-detects)
-          - 500MB 可用磁盘空间 | 500MB free disk space
-          
-          ---
-          
-          ### 💬 反馈与支持 | Feedback & Support
-          
-          - 🐛 [报告问题 | Report Issues](https://github.com/QykXczj/Nmodm/issues)
-          - 💡 [功能建议 | Feature Requests](https://github.com/QykXczj/Nmodm/issues)
-          - 📧 联系作者 | Contact: QykXczj
-          
-          ---
-          
-          **感谢使用 Nmodm！| Thanks for using Nmodm!** 🎉
+        body_path: release_body.txt
         draft: ${{ github.event.inputs.draft }}
         prerelease: ${{ github.event.inputs.prerelease }}
         files: |
