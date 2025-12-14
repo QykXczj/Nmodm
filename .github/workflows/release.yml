@@ -411,6 +411,42 @@ jobs:
         } else {
           Write-Host "❌ release 目录不存在"
         }
+
+    - name: 提取更新日志
+      id: extract_changelog
+      run: |
+        Write-Host "📋 提取更新日志..."
+        
+        $version = "${{ steps.get_version.outputs.version }}"
+        $versionNumber = $version.TrimStart('v')
+        
+        # 提取中文更新日志
+        $changelogZh = Get-Content "docs/zh/CHANGELOG.md" -Raw -Encoding UTF8
+        $patternZh = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
+        if ($changelogZh -match $patternZh) {
+          $zhContent = $matches[1].Trim()
+          Write-Host "✅ 成功提取中文更新日志"
+        } else {
+          $zhContent = "未找到版本 $versionNumber 的中文更新日志"
+          Write-Host "⚠️ 未找到中文更新日志"
+        }
+        
+        # 提取英文更新日志
+        $changelogEn = Get-Content "docs/en/CHANGELOG.md" -Raw -Encoding UTF8
+        $patternEn = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
+        if ($changelogEn -match $patternEn) {
+          $enContent = $matches[1].Trim()
+          Write-Host "✅ 成功提取英文更新日志"
+        } else {
+          $enContent = "Changelog for version $versionNumber not found"
+          Write-Host "⚠️ 未找到英文更新日志"
+        }
+        
+        # 保存到文件（避免多行输出问题）
+        $zhContent | Out-File -FilePath "changelog_zh.txt" -Encoding UTF8
+        $enContent | Out-File -FilePath "changelog_en.txt" -Encoding UTF8
+        
+        Write-Host "📝 更新日志已保存到文件"
         
     - name: 创建发行版
       uses: softprops/action-gh-release@v1
@@ -426,21 +462,15 @@ jobs:
           
           ### ✨ 主要更新 | What's New
           
-          - 🌍 **完整国际化支持** | Full internationalization support
-            - 虚拟局域网页面完全翻译 | Virtual LAN page fully translated
-            - 所有界面支持中英文切换 | All UI supports Chinese/English switching
+          #### �🇳 中化文 | Chinese
           
-          - 📦 **多语言安装包** | Multi-language installer
-            - 安装程序自动检测系统语言 | Auto-detect system language
-            - 支持中文和英文界面 | Supports Chinese and English UI
+          $(Get-Content "changelog_zh.txt" -Raw -Encoding UTF8)
           
-          - 📚 **完整文档系统** | Complete documentation
-            - 中英文用户指南和开发指南 | Chinese & English user/developer guides
-            - 详细的更新日志 | Detailed changelog
+          #### 🇬🇧 English
           
-          - 🔧 **版本管理优化** | Version management improvements
-            - 统一版本号管理 | Unified version management
-            - 自动化发布流程 | Automated release workflow
+          $(Get-Content "changelog_en.txt" -Raw -Encoding UTF8)
+          
+          ---
           
           📖 **完整更新日志** | Full Changelog: [中文](https://github.com/QykXczj/Nmodm/blob/main/docs/zh/CHANGELOG.md) | [English](https://github.com/QykXczj/Nmodm/blob/main/docs/en/CHANGELOG.md)
           
