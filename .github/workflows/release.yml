@@ -420,26 +420,63 @@ jobs:
         $version = "${{ steps.get_version.outputs.version }}"
         $versionNumber = $version.TrimStart('v')
         
-        # 提取中文更新日志
-        $changelogZh = Get-Content "docs/zh/CHANGELOG.md" -Raw -Encoding UTF8
-        $patternZh = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
-        if ($changelogZh -match $patternZh) {
-          $zhContent = $matches[1].Trim()
-          Write-Host "✅ 成功提取中文更新日志"
+        # 方案1: 从版本总结文档提取（优先）
+        $summaryFile = "docs/当前版本总结_v$versionNumber.md"
+        if (Test-Path $summaryFile) {
+          Write-Host "✅ 找到版本总结文档: $summaryFile"
+          
+          $summaryContent = Get-Content $summaryFile -Raw -Encoding UTF8
+          
+          # 提取"Bug 修复"部分作为中文内容
+          $patternZh = "(?s)## 🐛 Bug 修复(.*?)(?=\n## |$)"
+          if ($summaryContent -match $patternZh) {
+            $zhContent = $matches[1].Trim()
+            Write-Host "✅ 成功从版本总结提取中文内容"
+          } else {
+            # 如果没有找到，提取整个"版本概述"到第一个二级标题
+            $patternZh = "(?s)## 📋 版本概述(.*?)(?=\n## |$)"
+            if ($summaryContent -match $patternZh) {
+              $zhContent = $matches[1].Trim()
+              Write-Host "✅ 成功提取版本概述作为中文内容"
+            } else {
+              $zhContent = "v$versionNumber 版本更新，详见完整更新日志"
+              Write-Host "⚠️ 使用默认中文内容"
+            }
+          }
+          
+          # 英文内容从 CHANGELOG 提取
+          $changelogEn = Get-Content "docs/en/CHANGELOG.md" -Raw -Encoding UTF8
+          $patternEn = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
+          if ($changelogEn -match $patternEn) {
+            $enContent = $matches[1].Trim()
+            Write-Host "✅ 成功提取英文更新日志"
+          } else {
+            $enContent = "See full changelog for version $versionNumber updates"
+            Write-Host "⚠️ 使用默认英文内容"
+          }
         } else {
-          $zhContent = "未找到版本 $versionNumber 的中文更新日志"
-          Write-Host "⚠️ 未找到中文更新日志"
-        }
-        
-        # 提取英文更新日志
-        $changelogEn = Get-Content "docs/en/CHANGELOG.md" -Raw -Encoding UTF8
-        $patternEn = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
-        if ($changelogEn -match $patternEn) {
-          $enContent = $matches[1].Trim()
-          Write-Host "✅ 成功提取英文更新日志"
-        } else {
-          $enContent = "Changelog for version $versionNumber not found"
-          Write-Host "⚠️ 未找到英文更新日志"
+          Write-Host "⚠️ 未找到版本总结文档，从 CHANGELOG 提取"
+          
+          # 方案2: 从 CHANGELOG 提取（备用）
+          $changelogZh = Get-Content "docs/zh/CHANGELOG.md" -Raw -Encoding UTF8
+          $patternZh = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
+          if ($changelogZh -match $patternZh) {
+            $zhContent = $matches[1].Trim()
+            Write-Host "✅ 成功提取中文更新日志"
+          } else {
+            $zhContent = "v$versionNumber 版本更新，详见完整更新日志"
+            Write-Host "⚠️ 使用默认中文内容"
+          }
+          
+          $changelogEn = Get-Content "docs/en/CHANGELOG.md" -Raw -Encoding UTF8
+          $patternEn = "(?s)## \[$versionNumber\].*?\n\n(.*?)(?=\n---|\n## \[|$)"
+          if ($changelogEn -match $patternEn) {
+            $enContent = $matches[1].Trim()
+            Write-Host "✅ 成功提取英文更新日志"
+          } else {
+            $enContent = "See full changelog for version $versionNumber updates"
+            Write-Host "⚠️ 使用默认英文内容"
+          }
         }
         
         # 构建完整的发行说明
