@@ -74,7 +74,7 @@ python main.py
 
 ## 🤝 贡献
 
-欢迎提交 Issue 和 Pull Request！详见 [贡献指南](docs/CONTRIBUTING.md)
+欢迎提交 Issue 和 Pull Request！详见 [贡献指南](docs/zh/CONTRIBUTING.md)
 
 ## 📄 许可证
 
