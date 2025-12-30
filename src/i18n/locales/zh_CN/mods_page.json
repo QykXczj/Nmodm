@@ -8,7 +8,8 @@
     "config_file_preview": "📄 配置文件预览"
   },
   "label": {
-    "config_summary_empty": "配置摘要：无mod配置"
+    "config_summary_empty": "配置摘要：无mod配置",
+    "preload": "预加载"
   },
   "button": {
     "scan_mods": "🔄 扫描Mods",
@@ -74,7 +75,10 @@
     "nighter_save_failed": "保存设置失败: {error}",
     "auto_cleaned_internal_mods": "自动清理了 {count} 个错误的内部mod条目",
     "auto_cleaned_external_mods": "自动清理了 {count} 个缺失的外部mod",
-    "detected_missing_mods_clean_failed": "检测到 {count} 个缺失的外部mod，但清理失败"
+    "detected_missing_mods_clean_failed": "检测到 {count} 个缺失的外部mod，但清理失败",
+    "nrsc_preload_enabled": "已启用 {dll_name} 预加载",
+    "nrsc_preload_disabled": "已禁用 {dll_name} 预加载",
+    "nrsc_preload_failed": "设置 {dll_name} 预加载失败"
   },
   "dialog": {
     "seamlesscoop_title": "⚙️ SeamlessCoop 缩放设置",
@@ -102,7 +106,9 @@
     "force_priority_load": "⬆️ 强制优先加载",
     "config_seamlesscoop": "⚙️ 配置 SeamlessCoop",
     "nighter_settings": "🌙 深夜模式设置",
-    "remove_external_dll": "🗑️ 移除外部DLL"
+    "remove_external_dll": "🗑️ 移除外部DLL",
+    "preload": "🚀 预加载",
+    "cancel_preload": "🔓 取消预加载"
   },
   "config_preview": {
     "header_title": "# ME3 Mod配置文件",

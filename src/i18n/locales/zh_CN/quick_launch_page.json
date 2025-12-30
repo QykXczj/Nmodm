@@ -10,7 +10,10 @@
     "configured": "✅ 已配置",
     "not_configured": "❌ 未配置",
     "installed": "✅ 已安装",
-    "not_installed": "❌ 未安装"
+    "not_installed": "❌ 未安装",
+    "nrsc_preload_enabled": "已启用 {dll_name} 预加载",
+    "nrsc_preload_disabled": "已禁用 {dll_name} 预加载",
+    "nrsc_preload_failed": "设置 {dll_name} 预加载失败"
   },
   "launch": {
     "preparing": "[1/3] 💾 正在准备启动（备份存档、创建脚本）...",
@@ -131,6 +134,7 @@
   },
   "tab": {
     "create": "📝 创建预设",
+    "edit": "✏️ 编辑预设",
     "manage": "🗂️ 管理预设",
     "preview": "👁️ 预览配置"
   },
@@ -141,16 +145,19 @@
     "icon": "选择图标:",
     "mod_packages": "Mod包 (Packages):",
     "dll_files": "DLL文件 (Natives):",
-    "preset_list": "� 预 设方案管理",
+    "preset_list": "📋 预设方案管理",
     "preview_title": "📄 预设配置预览",
     "preview_hint": "请从管理预设页面选择要预览的预设方案",
-    "preview_empty": "# 暂无预览内容\n# 请从管理预设页面点击预览按钮"
+    "preview_empty": "# 暂无预览内容\n# 请从管理预设页面点击预览按钮",
+    "preload": "预加载"
   },
   "menu": {
-    "force_last": "🔒 强制最后加载",
-    "cancel_force_last": "🔓 取消强制最后加载",
-    "force_first": "⬆️ 强制优先加载",
-    "cancel_force_first": "🔓 清除强制优先加载"
+    "force_load_last": "强制最后加载",
+    "cancel_force_load_last": "取消强制最后加载",
+    "force_load_first": "强制优先加载",
+    "clear_force_load_first": "清除强制优先加载",
+    "preload": "预加载",
+    "cancel_preload": "取消预加载"
   },
   "message": {
     "load_failed": "加载mod列表失败: {error}",

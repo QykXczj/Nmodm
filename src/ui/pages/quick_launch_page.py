@@ -1945,6 +1945,21 @@ class PresetEditorDialog(QDialog):
         # 强制加载状态（临时存储）
         self.force_load_last_mods = set()
         self.force_load_first_dlls = set()
+        
+        # 预加载状态（临时存储，仅用于预设编辑）
+        self.preload_dlls = set()
+        
+        # 状态标签和定时器
+        self.status_label = None
+        self.status_timer = None
+        
+        # 添加 mod_manager 实例（用于读取当前配置的预加载状态）
+        from ...config.mod_config_manager import ModConfigManager
+        self.mod_manager = ModConfigManager()
+        
+        # 创建 ModConfigManager 实例以支持预加载功能
+        from ...config.mod_config_manager import ModConfigManager
+        self.mod_manager = ModConfigManager()
 
         # 设置样式
         self.setStyleSheet("""
@@ -2079,7 +2094,7 @@ class PresetEditorDialog(QDialog):
         # 创建新预设选项卡
         create_tab = QWidget()
         self.init_create_tab(create_tab)
-        self.tab_widget.addTab(create_tab, t("quick_launch_page.tab.create"))
+        self.create_tab_index = self.tab_widget.addTab(create_tab, t("quick_launch_page.tab.create"))
 
         # 管理预设选项卡
         manage_tab = QWidget()
@@ -2130,10 +2145,10 @@ class PresetEditorDialog(QDialog):
         close_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
-                color: #cdd6f4;
+                color: #f38ba8;
                 border: none;
                 border-radius: 15px;
-                font-size: 14px;
+                font-size: 20px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -2153,20 +2168,13 @@ class PresetEditorDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # 标题
-        title_label = QLabel(t("quick_launch_page.label.preview_title"))
-        title_label.setStyleSheet("""
-            QLabel {
-                font-size: 18px;
-                font-weight: bold;
-                color: #cdd6f4;
-                margin-bottom: 10px;
-            }
-        """)
-        layout.addWidget(title_label)
+        # 创建水平布局
+        h_layout = QHBoxLayout()
+        h_layout.setSpacing(15)
 
-        # 预设信息区域
+        # 左侧：预设信息区域
         info_group = QGroupBox(t("quick_launch_page.group.preset_info"))
+        info_group.setFixedWidth(320)
         info_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -2186,11 +2194,13 @@ class PresetEditorDialog(QDialog):
 
         self.preview_info_label = QLabel(t("quick_launch_page.label.preview_hint"))
         self.preview_info_label.setStyleSheet("color: #a6adc8; font-size: 12px; padding: 10px;")
+        self.preview_info_label.setWordWrap(True)
         info_layout.addWidget(self.preview_info_label)
+        info_layout.addStretch()
 
-        layout.addWidget(info_group)
+        h_layout.addWidget(info_group)
 
-        # 配置内容预览区域
+        # 右侧：配置内容预览区域
         content_group = QGroupBox(t("quick_launch_page.group.config_content"))
         content_group.setStyleSheet("""
             QGroupBox {
@@ -2226,7 +2236,9 @@ class PresetEditorDialog(QDialog):
         self.preview_content.setReadOnly(True)
         content_layout.addWidget(self.preview_content)
 
-        layout.addWidget(content_group)
+        h_layout.addWidget(content_group)
+
+        layout.addLayout(h_layout)
 
     def init_create_tab(self, tab_widget):
         """初始化创建预设选项卡"""
@@ -2340,6 +2352,20 @@ class PresetEditorDialog(QDialog):
 
         # 按钮区域
         button_layout = QHBoxLayout()
+        
+        # 状态标签（左侧）
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #a6e3a1;
+                font-size: 11px;
+                padding: 4px 8px;
+                background-color: transparent;
+            }
+        """)
+        self.status_label.setVisible(False)
+        button_layout.addWidget(self.status_label)
+        
         button_layout.addStretch()
 
         cancel_btn = QPushButton(t("quick_launch_page.button.cancel"))
@@ -2462,6 +2488,18 @@ class PresetEditorDialog(QDialog):
             mod_manager = ModConfigManager()
             available_mods = mod_manager.scan_mods_directory()
 
+            # 保存当前勾选状态
+            checked_packages = set()
+            checked_natives = set()
+            
+            for checkbox in self.packages_checkboxes:
+                if checkbox.isChecked():
+                    checked_packages.add(checkbox.objectName())
+            
+            for checkbox in self.natives_checkboxes:
+                if checkbox.isChecked():
+                    checked_natives.add(checkbox.objectName())
+
             # 清空现有复选框
             for checkbox in self.packages_checkboxes:
                 checkbox.setParent(None)
@@ -2495,6 +2533,9 @@ class PresetEditorDialog(QDialog):
                 checkbox.customContextMenuRequested.connect(
                     lambda pos, cb=checkbox: self.show_package_context_menu(pos, cb)
                 )
+                # 恢复勾选状态
+                if package in checked_packages:
+                    checkbox.setChecked(True)
                 # 添加悬停效果
                 checkbox.setStyleSheet("""
                     QCheckBox {
@@ -2522,6 +2563,10 @@ class PresetEditorDialog(QDialog):
                     QCheckBox::indicator:hover {
                         border-color: #f5f5f5;
                         background-color: rgba(255, 255, 255, 0.2);
+                    }
+                    QCheckBox::indicator:checked:hover {
+                        background-color: #94e2d5;
+                        border-color: #94e2d5;
                     }
                 """)
                 self.packages_checkboxes.append(checkbox)
@@ -2547,6 +2592,20 @@ class PresetEditorDialog(QDialog):
 
                 # 构建显示文本
                 display_text = f"🔧 {display_dll_name}"
+                
+                # 检查是否启用了预加载（仅对nrsc.dll）
+                if clean_name.endswith("nrsc.dll") or "nrsc.dll" in clean_name:
+                    # 提取文件名（去除路径）
+                    clean_filename = clean_name.split("/")[-1] if "/" in clean_name else clean_name
+                    
+                    # 优先使用临时状态（PresetEditorDialog），否则使用 ModConfigManager（QuickLaunchPage）
+                    if hasattr(self, 'preload_dlls'):
+                        is_preload = clean_filename in self.preload_dlls
+                    else:
+                        is_preload = mod_manager.get_native_load_early(clean_name)
+                    
+                    if is_preload:
+                        display_text = f"🚀 {display_dll_name} [{t('quick_launch_page.label.preload')}]"
 
                 if comment:
                     display_text += f" - {comment}"
@@ -2557,6 +2616,9 @@ class PresetEditorDialog(QDialog):
                 checkbox.customContextMenuRequested.connect(
                     lambda pos, cb=checkbox: self.show_native_context_menu(pos, cb)
                 )
+                # 恢复勾选状态
+                if native in checked_natives:
+                    checkbox.setChecked(True)
                 # 添加悬停效果
                 checkbox.setStyleSheet("""
                     QCheckBox {
@@ -2584,6 +2646,10 @@ class PresetEditorDialog(QDialog):
                     QCheckBox::indicator:hover {
                         border-color: #f5f5f5;
                         background-color: rgba(255, 255, 255, 0.2);
+                    }
+                    QCheckBox::indicator:checked:hover {
+                        background-color: #94e2d5;
+                        border-color: #94e2d5;
                     }
                 """)
                 self.natives_checkboxes.append(checkbox)
@@ -2632,10 +2698,10 @@ class PresetEditorDialog(QDialog):
         # 检查临时状态
         is_force_last = hasattr(self, 'force_load_last_mods') and clean_name in self.force_load_last_mods
         if is_force_last:
-            force_last_action = menu.addAction("🔓 取消强制最后加载")
+            force_last_action = menu.addAction(f"🔓 {t('quick_launch_page.menu.cancel_force_load_last')}")
             force_last_action.triggered.connect(lambda: self.clear_force_load_last(clean_name))
         else:
-            force_last_action = menu.addAction("🔒 强制最后加载")
+            force_last_action = menu.addAction(f"🔒 {t('quick_launch_page.menu.force_load_last')}")
             force_last_action.triggered.connect(lambda: self.set_force_load_last(clean_name))
 
         menu.exec(checkbox.mapToGlobal(position))
@@ -2646,13 +2712,16 @@ class PresetEditorDialog(QDialog):
             return
 
         # 获取DLL名称（去除emoji前缀和备注）
-        full_text = checkbox.text().replace("🔧 ", "")
+        full_text = checkbox.text().replace("🔧 ", "").replace("🚀 ", "")
 
         # 如果包含备注（格式：DLLName - Comment），提取DLLName部分
         if " - " in full_text:
             dll_name = full_text.split(" - ")[0]
         else:
             dll_name = full_text
+        
+        # 移除 [预加载] 标记
+        dll_name = dll_name.replace(f" [{t('quick_launch_page.label.preload')}]", "")
 
         is_external = dll_name.endswith(" (外部)")
         clean_name = dll_name.replace(" (外部)", "") if is_external else dll_name
@@ -2681,32 +2750,213 @@ class PresetEditorDialog(QDialog):
         is_force_load_first = hasattr(self, 'force_load_first_dlls') and clean_name in self.force_load_first_dlls
 
         if is_force_load_first:
-            clear_load_first_action = menu.addAction("🔓 清除强制优先加载")
+            clear_load_first_action = menu.addAction(f"🔓 {t('quick_launch_page.menu.clear_force_load_first')}")
             clear_load_first_action.triggered.connect(lambda: self.clear_force_load_first_native(clean_name))
         else:
-            load_first_action = menu.addAction("⬆️ 强制优先加载")
+            load_first_action = menu.addAction(f"⬆️ {t('quick_launch_page.menu.force_load_first')}")
             load_first_action.triggered.connect(lambda: self.set_force_load_first_native(clean_name))
+        
+        # 为 nrsc.dll 添加预加载选项
+        if clean_name.endswith("nrsc.dll") or "nrsc.dll" in clean_name:
+            menu.addSeparator()
+            
+            # 检查预加载状态：优先使用临时状态（PresetEditorDialog），否则使用 ModConfigManager（QuickLaunchPage）
+            if hasattr(self, 'preload_dlls'):
+                # PresetEditorDialog - 从临时状态读取
+                is_preload = clean_name in self.preload_dlls
+            elif hasattr(self, 'mod_manager'):
+                # QuickLaunchPage - 从 ModConfigManager 读取
+                is_preload = self.mod_manager.get_native_load_early(clean_name)
+            else:
+                is_preload = False
+            
+            if is_preload:
+                cancel_preload_action = menu.addAction(f"🔓 {t('quick_launch_page.menu.cancel_preload')}")
+                cancel_preload_action.triggered.connect(lambda: self.toggle_nrsc_preload(clean_name, False))
+            else:
+                preload_action = menu.addAction(f"🚀 {t('quick_launch_page.menu.preload')}")
+                preload_action.triggered.connect(lambda: self.toggle_nrsc_preload(clean_name, True))
 
         menu.exec(checkbox.mapToGlobal(position))
 
 
     def set_force_load_last(self, mod_name: str):
         """设置mod强制最后加载（临时状态）"""
+        # 检查 mod 是否已勾选
+        is_checked = False
+        for checkbox in self.packages_checkboxes:
+            checkbox_name = checkbox.objectName().replace(" (外部)", "")
+            if checkbox_name == mod_name and checkbox.isChecked():
+                is_checked = True
+                break
+        
+        if not is_checked:
+            self.show_status(
+                t("mods_page.status.force_last_load_set_failed").format(mod_name=mod_name),
+                "error"
+            )
+            return
+        
         # 添加到强制最后加载集合
         self.force_load_last_mods.add(mod_name)
+        self.show_status(
+            t("mods_page.status.force_last_load_set").format(mod_name=mod_name),
+            "success"
+        )
 
     def clear_force_load_last(self, mod_name: str):
         """清除mod的强制最后加载设置（临时状态）"""
         self.force_load_last_mods.discard(mod_name)
+        self.show_status(
+            t("mods_page.status.force_last_load_cancelled").format(mod_name=mod_name),
+            "success"
+        )
 
     def set_force_load_first_native(self, dll_name: str):
         """设置DLL强制优先加载（临时状态）"""
+        # 检查 DLL 是否已勾选
+        is_checked = False
+        for checkbox in self.natives_checkboxes:
+            checkbox_name = checkbox.objectName().replace(" (外部)", "")
+            # 提取文件名进行比较
+            checkbox_filename = checkbox_name.split("/")[-1] if "/" in checkbox_name else checkbox_name
+            dll_filename = dll_name.split("/")[-1] if "/" in dll_name else dll_name
+            
+            if checkbox_filename == dll_filename and checkbox.isChecked():
+                is_checked = True
+                break
+        
+        if not is_checked:
+            self.show_status(
+                t("mods_page.status.force_priority_load_set_failed").format(dll_name=dll_name),
+                "error"
+            )
+            return
+        
         # 添加到强制优先加载集合
         self.force_load_first_dlls.add(dll_name)
+        self.show_status(
+            t("mods_page.status.force_priority_load_set").format(dll_name=dll_name),
+            "success"
+        )
 
     def clear_force_load_first_native(self, dll_name: str):
         """清除DLL强制优先加载（临时状态）"""
         self.force_load_first_dlls.discard(dll_name)
+        self.show_status(
+            t("mods_page.status.force_priority_load_cleared").format(dll_name=dll_name),
+            "success"
+        )
+    
+    def show_status(self, message: str, status_type: str = "info"):
+        """显示状态消息（带自动消失）
+        
+        Args:
+            message: 消息内容
+            status_type: 消息类型 ("success", "error", "info")
+        """
+        if not hasattr(self, 'status_label') or self.status_label is None:
+            return
+        
+        # 设置颜色
+        colors = {
+            "success": "#a6e3a1",
+            "error": "#f38ba8",
+            "info": "#89b4fa"
+        }
+        color = colors.get(status_type, colors["info"])
+        
+        self.status_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-size: 11px;
+                padding: 4px 8px;
+                background-color: transparent;
+            }}
+        """)
+        self.status_label.setText(message)
+        self.status_label.setVisible(True)
+        
+        # 停止之前的定时器
+        if self.status_timer is not None:
+            self.status_timer.stop()
+        
+        # 创建新定时器，3秒后隐藏消息
+        from PySide6.QtCore import QTimer
+        self.status_timer = QTimer()
+        self.status_timer.setSingleShot(True)
+        self.status_timer.timeout.connect(lambda: self.status_label.setVisible(False))
+        self.status_timer.start(3000)
+    
+    def toggle_nrsc_preload(self, dll_name: str, enable: bool):
+        """切换nrsc.dll预加载状态"""
+        # 检查是否在 PresetEditorDialog 环境中
+        if hasattr(self, 'preload_dlls'):
+            # PresetEditorDialog - 使用临时状态
+            
+            # 检查DLL是否已勾选
+            if enable:
+                is_checked = False
+                for checkbox in self.natives_checkboxes:
+                    checkbox_name = checkbox.objectName().replace(" (外部)", "")
+                    # 提取文件名进行比较
+                    checkbox_filename = checkbox_name.split("/")[-1] if "/" in checkbox_name else checkbox_name
+                    dll_filename = dll_name.split("/")[-1] if "/" in dll_name else dll_name
+                    
+                    if checkbox_filename == dll_filename and checkbox.isChecked():
+                        is_checked = True
+                        break
+                
+                if not is_checked:
+                    self.show_status(
+                        t("quick_launch_page.status.nrsc_preload_failed").format(dll_name=dll_name),
+                        "error"
+                    )
+                    return
+            
+            if enable:
+                self.preload_dlls.add(dll_name)
+            else:
+                self.preload_dlls.discard(dll_name)
+            
+            # 显示状态消息
+            if enable:
+                self.show_status(
+                    t("quick_launch_page.status.nrsc_preload_enabled").format(dll_name=dll_name),
+                    "success"
+                )
+            else:
+                self.show_status(
+                    t("quick_launch_page.status.nrsc_preload_disabled").format(dll_name=dll_name),
+                    "success"
+                )
+            
+            # 重新加载mod列表以更新显示
+            self.load_available_mods()
+        else:
+            # QuickLaunchPage - 使用 ModConfigManager
+            success = self.mod_manager.set_native_load_early(dll_name, enable)
+            if success:
+                # 保存配置
+                self.mod_manager.save_config()
+                
+                if enable:
+                    self.status_bar.show_temp_message(
+                        t("quick_launch_page.status.nrsc_preload_enabled").format(dll_name=dll_name),
+                        "success"
+                    )
+                else:
+                    self.status_bar.show_temp_message(
+                        t("quick_launch_page.status.nrsc_preload_disabled").format(dll_name=dll_name),
+                        "success"
+                    )
+                # 重新加载mod列表以更新显示
+                self.load_available_mods()
+            else:
+                self.status_bar.show_temp_message(
+                    t("quick_launch_page.status.nrsc_preload_failed").format(dll_name=dll_name),
+                    "error"
+                )
 
     def save_preset(self):
         """保存预设方案"""
@@ -2777,6 +3027,16 @@ class PresetEditorDialog(QDialog):
                 # 重置编辑状态
                 self.editing_file = None
                 self.save_btn.setText(t("quick_launch_page.button.save_preset"))
+                # 恢复选项卡标题为"创建预设"
+                self.tab_widget.setTabText(self.create_tab_index, t("quick_launch_page.tab.create"))
+                # 清空文件名输入框
+                self.filename_edit.clear()
+                # 清空所有临时状态
+                self.preload_dlls.clear()
+                self.force_load_last_mods.clear()
+                self.force_load_first_dlls.clear()
+                # 刷新mod列表以清除预加载等状态显示
+                self.load_available_mods()
                 # 刷新管理列表
                 self.load_existing_presets()
                 # 发出信号通知主页面刷新
@@ -2796,7 +3056,9 @@ class PresetEditorDialog(QDialog):
         """生成配置文件内容"""
         lines = []
         lines.append(f"# 方案名称: {icon} {name}")
-        lines.append(f"# 描述: {description}")
+        # 只有当描述不为空时才写入描述行
+        if description and description.strip():
+            lines.append(f"# 描述: {description}")
         lines.append(f"# 图标: {icon}")
         lines.append('profileVersion = "v1"')
         lines.append("")
@@ -2860,12 +3122,50 @@ class PresetEditorDialog(QDialog):
                     # 根目录下的DLL
                     lines.append(f'path = "../{clean_native}"')
 
+                # 检查是否启用了预加载（仅对nrsc.dll）
+                if clean_native.endswith("nrsc.dll") or "nrsc.dll" in clean_native:
+                    # 提取文件名（去除路径）
+                    native_filename = clean_native.split("/")[-1] if "/" in clean_native else clean_native
+                    
+                    # 优先使用临时状态（PresetEditorDialog），否则使用 ModConfigManager（QuickLaunchPage）
+                    if hasattr(self, 'preload_dlls'):
+                        is_preload = native_filename in self.preload_dlls
+                        # print(f"[DEBUG] generate_config_content: checking preload for {clean_native}")
+                        # print(f"[DEBUG] native_filename = {native_filename}")
+                        # print(f"[DEBUG] self.preload_dlls = {self.preload_dlls}")
+                        # print(f"[DEBUG] is_preload = {is_preload}")
+                    else:
+                        is_preload = self.mod_manager.get_native_load_early(clean_native)
+                    
+                    if is_preload:
+                        lines.append('load_early = true')
+                        # 如果启用预加载，跳过添加 nighter.dll 的依赖
+                        lines.append("")
+                        continue
+
                 # 添加特定的DLL依赖关系（确保nighter.dll在nrsc.dll之前）
                 if clean_native.endswith("nighter.dll") or "nighter.dll" in clean_native:
                     # 检查是否有nrsc.dll
                     has_nrsc = any("nrsc.dll" in n.replace(" (外部)", "") for n in sorted_natives)
                     if has_nrsc:
-                        lines.append('load_before = [{id = "nrsc.dll", optional = false}]')
+                        # 检查nrsc.dll是否启用了预加载
+                        nrsc_preload = False
+                        for n in sorted_natives:
+                            clean_n = n.replace(" (外部)", "")
+                            if "nrsc.dll" in clean_n:
+                                # 提取文件名（去除路径）
+                                n_filename = clean_n.split("/")[-1] if "/" in clean_n else clean_n
+                                
+                                # 优先使用临时状态（PresetEditorDialog），否则使用 ModConfigManager（QuickLaunchPage）
+                                if hasattr(self, 'preload_dlls'):
+                                    nrsc_preload = n_filename in self.preload_dlls
+                                else:
+                                    nrsc_preload = self.mod_manager.get_native_load_early(clean_n)
+                                break
+                        
+                        # 只有在nrsc.dll没有启用预加载时才添加依赖
+                        if not nrsc_preload:
+                            lines.append('load_before = [{id = "nrsc.dll", optional = false}]')
 
                 # 如果是强制优先加载的DLL，添加load_before依赖
                 elif clean_native in force_first_dlls:
@@ -3205,12 +3505,22 @@ class PresetEditorDialog(QDialog):
             # 恢复强制加载状态
             self.force_load_last_mods = preset_data.get('force_load_last_mods', set())
             self.force_load_first_dlls = preset_data.get('force_load_first_dlls', set())
+            
+            # 恢复预加载状态
+            self.preload_dlls = preset_data.get('preload_dlls', set())
+            # print(f"[DEBUG] edit_preset: restored preload_dlls = {self.preload_dlls}")
+            
+            # 刷新mod列表以显示预加载状态
+            self.load_available_mods()
 
             # 保存当前编辑的文件路径
             self.editing_file = preset_file
 
             # 更新保存按钮文本
             self.save_btn.setText(t("quick_launch_page.button.update_preset"))
+            
+            # 更新选项卡标题为"编辑预设"
+            self.tab_widget.setTabText(self.create_tab_index, t("quick_launch_page.tab.edit"))
 
             self.show_message(t("quick_launch_page.message.info_title"), t("quick_launch_page.message.preset_loaded").format(name=preset_data['name']))
 
@@ -3235,6 +3545,7 @@ class PresetEditorDialog(QDialog):
 🔧 DLL数量: {len(preset_data['natives'])}
 ⚡ 强制最后加载: {len(preset_data.get('force_load_last_mods', set()))} 个
 🚀 强制优先加载: {len(preset_data.get('force_load_first_dlls', set()))} 个
+💫 预加载DLL: {len(preset_data.get('preload_dlls', set()))} 个
             """.strip()
             self.preview_info_label.setText(info_text)
 
@@ -3259,7 +3570,8 @@ class PresetEditorDialog(QDialog):
                 'packages': [],
                 'natives': [],
                 'force_load_last_mods': set(),
-                'force_load_first_dlls': set()
+                'force_load_first_dlls': set(),
+                'preload_dlls': set()
             }
 
             lines = content.split('\n')
@@ -3288,6 +3600,12 @@ class PresetEditorDialog(QDialog):
                         path = line.split('=', 1)[1].strip().strip('"').replace('../', '')
                         data[current_section].append(path)
                         current_item_path = path
+                elif line.startswith('load_early = ') and current_section == 'natives' and current_item_path:
+                    # 检查是否启用了预加载
+                    if 'true' in line.lower():
+                        # 提取文件名（去除路径）
+                        dll_filename = current_item_path.split('/')[-1] if '/' in current_item_path else current_item_path
+                        data['preload_dlls'].add(dll_filename)
                 elif line.startswith('load_after = ') and current_section == 'packages' and current_item_path:
                     # 检查是否是强制最后加载（包含多个其他mod的依赖）
                     if '[' in line and '{' in line:
@@ -3310,7 +3628,8 @@ class PresetEditorDialog(QDialog):
                 'packages': [],
                 'natives': [],
                 'force_load_last_mods': set(),
-                'force_load_first_dlls': set()
+                'force_load_first_dlls': set(),
+                'preload_dlls': set()
             }
 
     def set_mod_selections(self, packages, natives):
@@ -3442,38 +3761,13 @@ class PresetEditorDialog(QDialog):
             event.accept()
 
     def show_message(self, title, message):
-        """显示消息对话框"""
-        from PySide6.QtWidgets import QMessageBox
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(message)
-
-        # 设置无边框
-        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-
-        # 设置样式
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-                border: 2px solid #89b4fa;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            QMessageBox QPushButton {
-                background-color: #89b4fa;
-                color: #1e1e2e;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-                min-width: 60px;
-            }
-            QMessageBox QPushButton:hover {
-                background-color: #74c7ec;
-            }
-            QMessageBox QPushButton:pressed {
-                background-color: #7287fd;
-            }
-        """)
-        msg_box.exec()
+        """显示消息（使用状态标签而不是对话框）"""
+        # 判断消息类型
+        if "成功" in title or "Success" in title or "成功" in message:
+            status_type = "success"
+        elif "错误" in title or "Error" in title or "失败" in message:
+            status_type = "error"
+        else:
+            status_type = "info"
+        
+        self.show_status(message, status_type)

@@ -8,7 +8,8 @@
     "config_file_preview": "📄 Config File Preview"
   },
   "label": {
-    "config_summary_empty": "Config Summary: No mods"
+    "config_summary_empty": "Config Summary: No mods",
+    "preload": "Preload"
   },
   "button": {
     "scan_mods": "🔄 Scan",
@@ -74,7 +75,10 @@
     "nighter_save_failed": "Failed to save: {error}",
     "auto_cleaned_internal_mods": "Auto cleaned {count} invalid internal mods",
     "auto_cleaned_external_mods": "Auto cleaned {count} missing external mods",
-    "detected_missing_mods_clean_failed": "Detected {count} missing external mods, but clean failed"
+    "detected_missing_mods_clean_failed": "Detected {count} missing external mods, but clean failed",
+    "nrsc_preload_enabled": "Enabled {dll_name} preload",
+    "nrsc_preload_disabled": "Disabled {dll_name} preload",
+    "nrsc_preload_failed": "Failed to set {dll_name} preload"
   },
   "dialog": {
     "seamlesscoop_title": "⚙️ SeamlessCoop Scaling",
@@ -102,7 +106,9 @@
     "force_priority_load": "⬆️ Force Priority Load",
     "config_seamlesscoop": "⚙️ Config SeamlessCoop",
     "nighter_settings": "🌙 Nighter Settings",
-    "remove_external_dll": "🗑️ Remove External DLL"
+    "remove_external_dll": "🗑️ Remove External DLL",
+    "preload": "🚀 Preload",
+    "cancel_preload": "🔓 Cancel Preload"
   },
   "config_preview": {
     "header_title": "# ME3 Mod Config File",

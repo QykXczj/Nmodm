@@ -18,6 +18,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.4] - 2025-12-31
+
+### Added
+- ✨ nrsc.dll preload feature
+  - Support early loading for SeamlessCoop's nrsc.dll
+  - When preload is enabled, no longer enforces nighter.dll → nrsc.dll load order
+  - Persisted in config file as `load_early = true`
+  - Right-click menu support in both Mod Config and Quick Launch pages
+  - Display preload status in list: 🚀 nrsc.dll [Preload]
+- 🎨 Preset editor dialog status label
+  - Added status notification label at bottom-left (auto-dismiss after 3 seconds)
+  - Replaced popup dialogs for better user experience
+- 📝 Dynamic tab title updates
+  - Shows "✏️ Edit Preset" when editing
+  - Shows "Create Preset" when creating
+
+### Changed
+- 🎨 Preview config layout optimization
+  - Preview info and config content now displayed horizontally (side-by-side)
+  - Improved readability and space utilization
+- 🔧 Close button visibility optimization
+  - Font size adjusted to 20px
+  - Color changed to pink (#FF69B4) for better visibility
+- 🌐 Complete internationalization for context menus
+  - "Preload", "Force Load Last", "Force Load First" support Chinese/English switching
+  - Real-time response to language changes
+
+### Fixed
+- 🐛 Fixed checkbox hover effect issue (2 places)
+  - Added `QCheckBox::indicator:checked:hover` style
+  - Ensures checked state remains visible when hovering
+- 🐛 Fixed empty description display issue
+  - When description is empty, skip writing description line or use default
+  - Ensures proper parsing of empty descriptions
+- 🐛 Fixed filename retention issue
+  - Auto-clear filename input after updating preset
+  - Prevents confusion from residual filenames
+- 🐛 Fixed preload status display issue
+  - Fixed filename matching logic (extract pure filename for comparison)
+  - Correctly displays preload status indicator
+- 🐛 Fixed preload status restoration issue
+  - Clear temporary state (`self.preload_dlls`) after saving preset
+  - Correctly restore preload status when editing preset
+- 🐛 Fixed DLL name matching issue
+  - Handle DLL filenames with paths (e.g., `SeamlessCoop/nrsc.dll`)
+  - Extract pure filename for comparison
+- 🐛 Fixed unchecked mod setting issue
+  - "Preload", "Force Load Last", "Force Load First" show "Setting Error" when mod is unchecked
+  - Unified error handling logic
+
+---
+
 ## [3.1.3] - 2025-01-20
 
 ### Fixed

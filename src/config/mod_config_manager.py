@@ -34,6 +34,7 @@ class ModNative:
     load_before: Optional[List[Dict[str, Any]]] = None
     is_external: bool = False  # 标记是否为外部DLL
     comment: str = ""  # 用户备注
+    load_early: bool = False  # 预加载标记（仅用于nrsc.dll）
 
 
 class ModConfigManager:
@@ -300,7 +301,8 @@ class ModConfigManager:
                     finalizer=native_data.get('finalizer'),
                     load_after=native_data.get('load_after'),
                     load_before=native_data.get('load_before'),
-                    is_external=is_external
+                    is_external=is_external,
+                    load_early=native_data.get('load_early', False)
                 )
                 self.natives.append(native)
             
@@ -355,6 +357,8 @@ class ModConfigManager:
                             native_dict['load_after'] = native.load_after
                         if native.load_before:
                             native_dict['load_before'] = native.load_before
+                        if native.load_early:
+                            native_dict['load_early'] = native.load_early
                         config_data['natives'].append(native_dict)
             
             # 保存到文件 - 使用自定义格式化以确保正确的TOML格式
@@ -1259,6 +1263,7 @@ class ModConfigManager:
             # 检查两个DLL是否都启用
             first_enabled = False
             second_enabled = False
+            second_load_early = False
 
             for native in self.natives:
                 dll_name = Path(native.path).name
@@ -1266,9 +1271,10 @@ class ModConfigManager:
                     first_enabled = True
                 elif dll_name == second_dll and native.enabled:
                     second_enabled = True
+                    second_load_early = native.load_early
 
-            # 如果两个DLL都启用，确保顺序正确
-            if first_enabled and second_enabled:
+            # 如果两个DLL都启用，且第二个DLL没有启用预加载，确保顺序正确
+            if first_enabled and second_enabled and not second_load_early:
                 self.set_specific_dll_order(first_dll, second_dll)
 
     def update_load_dependencies(self):
@@ -1576,6 +1582,10 @@ class ModConfigManager:
                     load_before_str = self._format_load_after(native['load_before'])
                     file_handle.write(f'load_before = {load_before_str}\n')
 
+                # 处理load_early字段
+                if 'load_early' in native and native['load_early']:
+                    file_handle.write(f'load_early = true\n')
+
                 file_handle.write('\n')
 
     def _format_load_after(self, dependencies: List[Dict[str, Any]]) -> str:
@@ -1723,4 +1733,79 @@ class ModConfigManager:
 
         return cleaned
 
+    def set_native_load_early(self, dll_name: str, load_early: bool = True) -> bool:
+        """设置DLL预加载状态（仅适用于nrsc.dll）
+        
+        Args:
+            dll_name: DLL名称
+            load_early: 是否启用预加载
+            
+        Returns:
+            bool: 设置是否成功
+        """
+        clean_name = dll_name.replace(" (外部)", "")
+        
+        # 检查是否为nrsc.dll
+        if not (clean_name.endswith("nrsc.dll") or "nrsc.dll" in clean_name):
+            return False
+        
+        # 找到目标DLL
+        for native in self.natives:
+            dll_path_name = Path(native.path).name
+            if (dll_path_name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                
+                # 检查DLL是否已启用
+                if not native.enabled:
+                    return False
+                
+                native.load_early = load_early
+                
+                # 如果启用预加载，需要更新加载顺序逻辑
+                if load_early:
+                    # 清除nighter.dll对nrsc.dll的依赖（如果存在）
+                    self._remove_nighter_nrsc_dependency()
+                else:
+                    # 恢复nighter.dll对nrsc.dll的依赖（如果两者都启用）
+                    self.ensure_specific_dll_orders()
+                
+                return True
+        
+        # DLL不在natives列表中
+        return False
+    
+    def get_native_load_early(self, dll_name: str) -> bool:
+        """获取DLL预加载状态
+        
+        Args:
+            dll_name: DLL名称
+            
+        Returns:
+            bool: 是否启用预加载
+        """
+        clean_name = dll_name.replace(" (外部)", "")
+        
+        for native in self.natives:
+            dll_path_name = Path(native.path).name
+            if (dll_path_name == clean_name or
+                native.path == clean_name or
+                native.path.endswith(clean_name)):
+                return native.load_early
+        
+        return False
+    
+    def _remove_nighter_nrsc_dependency(self):
+        """移除nighter.dll对nrsc.dll的依赖"""
+        for native in self.natives:
+            dll_name = Path(native.path).name
+            if dll_name == "nighter.dll" and native.load_before:
+                # 移除对nrsc.dll的依赖
+                native.load_before = [
+                    dep for dep in native.load_before
+                    if dep.get('id') != 'nrsc.dll'
+                ]
+                # 如果load_before为空，设置为None
+                if not native.load_before:
+                    native.load_before = None
 

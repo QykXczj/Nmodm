@@ -10,7 +10,10 @@
     "configured": "✅ Configured",
     "not_configured": "❌ Not Configured",
     "installed": "✅ Installed",
-    "not_installed": "❌ Not Installed"
+    "not_installed": "❌ Not Installed",
+    "nrsc_preload_enabled": "Enabled {dll_name} preload",
+    "nrsc_preload_disabled": "Disabled {dll_name} preload",
+    "nrsc_preload_failed": "Failed to set {dll_name} preload"
   },
   "launch": {
     "preparing": "[1/3] 💾 Preparing...",
@@ -131,6 +134,7 @@
   },
   "tab": {
     "create": "📝 Create",
+    "edit": "✏️ Edit",
     "manage": "🗂️ Manage",
     "preview": "👁️ Preview"
   },
@@ -144,13 +148,16 @@
     "preset_list": "📋 Preset Manager",
     "preview_title": "📄 Preset Preview",
     "preview_hint": "Select a preset from Manage tab to preview",
-    "preview_empty": "# No preview\n# Click preview button in Manage tab"
+    "preview_empty": "# No preview\n# Click preview button in Manage tab",
+    "preload": "Preload"
   },
   "menu": {
-    "force_last": "🔒 Force load last",
-    "cancel_force_last": "🔓 Cancel force last",
-    "force_first": "⬆️ Force load first",
-    "cancel_force_first": "🔓 Cancel force first"
+    "force_load_last": "Force load last",
+    "cancel_force_load_last": "Cancel force last",
+    "force_load_first": "Force load first",
+    "clear_force_load_first": "Clear force first",
+    "preload": "Preload",
+    "cancel_preload": "Cancel Preload"
   },
   "message": {
     "load_failed": "Load mod list failed: {error}",

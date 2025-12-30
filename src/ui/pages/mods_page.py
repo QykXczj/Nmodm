@@ -751,6 +751,12 @@ class ModsPage(BasePage):
                 display_text = f"❌ {display_dll_name} [缺失]"
             else:
                 display_text = f"🔧 {display_dll_name}"
+                
+                # 检查是否启用了预加载（仅对nrsc.dll）
+                if clean_name.endswith("nrsc.dll") or "nrsc.dll" in clean_name:
+                    is_preload = self.mod_manager.get_native_load_early(clean_name)
+                    if is_preload:
+                        display_text = f"🚀 {display_dll_name} [{t('mods_page.label.preload')}]"
 
             if comment:
                 display_text += f" - {comment}"
@@ -850,10 +856,17 @@ class ModsPage(BasePage):
             self.mod_manager.remove_native(dll_name)
             # 禁用的DLL，从所有依赖中移除
             self.mod_manager.update_load_dependencies()
+            
+            # 如果是 nrsc.dll，清除预加载状态
+            clean_name = dll_name.replace(" (外部)", "")
+            if clean_name.endswith("nrsc.dll") or "nrsc.dll" in clean_name:
+                self.mod_manager.set_native_load_early(clean_name, False)
 
         # 保存配置
         self.mod_manager.save_config()
         self.update_config_preview()
+        # 重新扫描以更新显示
+        self.scan_mods()
         # 发出配置变化信号
         self.config_changed.emit()
 
@@ -924,6 +937,8 @@ class ModsPage(BasePage):
                 if native.load_before:
                     load_before_str = self._format_dependencies(native.load_before)
                     lines.append(f"load_before = {load_before_str}")
+                if native.load_early:
+                    lines.append("load_early = true")
                 lines.append("")
 
         return "\n".join(lines)
@@ -1281,6 +1296,16 @@ start "Nmodm-ME3" {' '.join(cmd_parts)}
             print(f"✅ 添加 nrsc.dll 配置菜单")
             config_action = menu.addAction(t("mods_page.context_menu.config_seamlesscoop"))
             config_action.triggered.connect(lambda: self.configure_nrsc_settings())
+            
+            # 添加预加载选项
+            is_preload = self.mod_manager.get_native_load_early(clean_name)
+            if is_preload:
+                cancel_preload_action = menu.addAction(t("mods_page.context_menu.cancel_preload"))
+                cancel_preload_action.triggered.connect(lambda: self.toggle_nrsc_preload(clean_name, False))
+            else:
+                preload_action = menu.addAction(t("mods_page.context_menu.preload"))
+                preload_action.triggered.connect(lambda: self.toggle_nrsc_preload(clean_name, True))
+                
         elif clean_name.endswith("nighter.dll") or "nighter" in clean_name:
             print(f"✅ 添加 nighter.dll 配置菜单")
             difficulty_action = menu.addAction(t("mods_page.context_menu.nighter_settings"))
@@ -2117,6 +2142,25 @@ start "Nmodm-ME3" {' '.join(cmd_parts)}
         # 显示对话框
         dialog.exec()
 
+    def toggle_nrsc_preload(self, dll_name: str, enable: bool):
+        """切换nrsc.dll预加载状态"""
+        success = self.mod_manager.set_native_load_early(dll_name, enable)
+        if success:
+            if enable:
+                self.show_status(t("mods_page.status.nrsc_preload_enabled").format(dll_name=dll_name), "success")
+            else:
+                self.show_status(t("mods_page.status.nrsc_preload_disabled").format(dll_name=dll_name), "success")
+            
+            # 保存配置并更新预览
+            self.mod_manager.save_config()
+            self.update_config_preview()
+            # 重新扫描以更新显示
+            self.scan_mods()
+            # 发出配置变化信号
+            self.config_changed.emit()
+        else:
+            self.show_status(t("mods_page.status.nrsc_preload_failed").format(dll_name=dll_name), "error")
+
     def _format_dependencies(self, dependencies):
         """格式化依赖列表为正确的TOML格式"""
         if not dependencies:
@@ -2175,3 +2219,6 @@ start "Nmodm-ME3" {' '.join(cmd_parts)}
         # 重新生成配置预览
         config_content = self.generate_config_content()
         self.config_preview.setPlainText(config_content)
+        
+        # 重新扫描mods以更新列表中的翻译文本（如"[预加载]"）
+        self.scan_mods()
